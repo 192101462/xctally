@@ -87,6 +87,32 @@ Write-Host "Target project: $dst" -ForegroundColor Cyan
 Write-Host "Package       : $pkg" -ForegroundColor Cyan
 Write-Host ""
 
+# ---------------------------------------------------------------- backup policy
+# NEVER leave *.bak inside res/ : the Android resource merger walks that tree and
+# fails on any file that is not a recognised resource type
+# ("The file name must end with .xml"). Keep backups in a dot-folder at the
+# project root instead, and clean up anything older versions left behind.
+$backupDir = Join-Path $dst '.xctally-backup'
+function Backup-File([string]$path) {
+    if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Force -Path $backupDir | Out-Null }
+    Copy-Item $path (Join-Path $backupDir (Split-Path $path -Leaf)) -Force
+}
+$resRoot = Join-Path $mainDir 'res'
+if (Test-Path $resRoot) {
+    Get-ChildItem $resRoot -Recurse -File -Filter '*.bak' -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host ("  [clean]   " + $_.FullName.Replace($dst, '.') + "  (would break the resource merger)") -ForegroundColor Yellow
+        Remove-Item $_.FullName -Force
+    }
+}
+# legacy: older versions also dropped build.gradle.kts.bak next to the real file
+foreach ($legacy in @("$dst\app\build.gradle.kts.bak", "$dst\app\build.gradle.bak")) {
+    if (Test-Path $legacy) {
+        if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Force -Path $backupDir | Out-Null }
+        Move-Item $legacy (Join-Path $backupDir (Split-Path $legacy -Leaf)) -Force
+        Write-Host ("  [clean]   " + $legacy.Replace($dst, '.') + "  (moved into .xctally-backup)") -ForegroundColor Yellow
+    }
+}
+
 # ---------------------------------------------------------------- 1. web app
 $webFiles = @(
     'index.html', 'styles.css', 'platform.js', 'data.js',
@@ -163,16 +189,16 @@ if (Test-Path $stringsPath) {
         if ($sx -eq $before) {
             Write-Host "  [strings] app_name already correct" -ForegroundColor Green
         } else {
-            Copy-Item $stringsPath "$stringsPath.bak" -Force
+            Backup-File $stringsPath
             Write-Text $stringsPath $sx
-            Write-Host "  [strings] app_name value updated (backup: strings.xml.bak)" -ForegroundColor Green
+            Write-Host "  [strings] app_name value updated (backup in .xctally-backup)" -ForegroundColor Green
         }
     } else {
-        Copy-Item $stringsPath "$stringsPath.bak" -Force
+        Backup-File $stringsPath
         $sx = $sx -replace '(?s)</resources>',
             ('    <string name="app_name">' + $appName + '</string>' + "`r`n</resources>")
         Write-Text $stringsPath $sx
-        Write-Host "  [strings] added app_name (backup: strings.xml.bak)" -ForegroundColor Green
+        Write-Host "  [strings] added app_name (backup in .xctally-backup)" -ForegroundColor Green
     }
 } else {
     Copy-Item $stringsFallback $stringsPath -Force
@@ -208,12 +234,12 @@ if ($gradle -eq $null) {
             Write-Host "  [gradle]  no dependencies block found, add manually:" -ForegroundColor Yellow
             foreach ($d in $missing) { Write-Host "              $d" }
         } else {
-            Copy-Item $gradle "$gradle.bak" -Force
+            Backup-File $gradle
             $block = "`r`n" + (($missing | ForEach-Object { "    $_" }) -join "`r`n")
             $gx = $gx.Insert($m.Index + $m.Length, $block)
             Write-Text $gradle $gx
-            Write-Host ("  [gradle]  added {0} dependency line(s) (backup: {1}.bak)" -f `
-                $missing.Count, (Split-Path $gradle -Leaf)) -ForegroundColor Green
+            Write-Host ("  [gradle]  added {0} dependency line(s) (backup in .xctally-backup)" -f `
+                $missing.Count) -ForegroundColor Green
         }
     }
 

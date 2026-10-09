@@ -39,6 +39,23 @@ if (-not (Test-Path $entryMain)) {
 Write-Host "Target project: $dst" -ForegroundColor Cyan
 Write-Host ""
 
+# ---------------------------------------------------------------- backup policy
+# Same rule as the Android side: never leave *.bak inside the resource tree
+# (entry/src/main/resources), because the resource compiler walks it and chokes on
+# unknown files. Keep backups in a dot-folder at the project root instead.
+$backupDir = Join-Path $dst '.xctally-backup'
+function Backup-File([string]$path) {
+    if (-not (Test-Path $backupDir)) { New-Item -ItemType Directory -Force -Path $backupDir | Out-Null }
+    Copy-Item $path (Join-Path $backupDir (Split-Path $path -Leaf)) -Force
+}
+$resRoot = Join-Path $entryMain 'resources'
+if (Test-Path $resRoot) {
+    Get-ChildItem $resRoot -Recurse -File -Filter '*.bak' -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host ("  [clean]   " + $_.FullName.Replace($dst, '.') + "  (would break the resource compiler)") -ForegroundColor Yellow
+        Remove-Item $_.FullName -Force
+    }
+}
+
 # ---------------------------------------------------------------- 1. web app
 $webFiles = @(
     'index.html', 'styles.css', 'platform.js', 'data.js',
@@ -113,7 +130,7 @@ if (-not (Test-Path $stringJson)) {
         if (-not $changed) {
             Write-Host "  [strings] already up to date" -ForegroundColor Green
         } else {
-            Copy-Item $stringJson "$stringJson.bak" -Force
+            Backup-File $stringJson
             $json = $obj | ConvertTo-Json -Depth 10
             # Windows PowerShell escapes non-ASCII as \uXXXX; turn it back into real
             # characters so the file stays readable. Valid JSON either way.
@@ -124,7 +141,7 @@ if (-not (Test-Path $stringJson)) {
             } catch { }
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText($stringJson, $json, $utf8NoBom)
-            Write-Host "  [strings] label + reason_reminder set (backup: string.json.bak)" -ForegroundColor Green
+            Write-Host "  [strings] label + reason_reminder set (backup in .xctally-backup)" -ForegroundColor Green
         }
     } catch {
         Write-Host ("  [strings] could not edit string.json ({0})" -f $_.Exception.Message) -ForegroundColor Yellow
