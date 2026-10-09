@@ -11,13 +11,15 @@
 #   -Mode      install (default) = build + install to the connected phone
 #              apk              = build a debug APK only, no phone needed
 #   -SkipSync  do not copy the web app, only build
+#   -JavaHome  JDK root to use (optional; overrides a broken JAVA_HOME)
 #
 # ASCII-only and no BOM on purpose (see copy-into-android-project.ps1).
 
 param(
     [Parameter(Mandatory = $true)][string]$Project,
     [ValidateSet('install', 'apk')][string]$Mode = 'install',
-    [switch]$SkipSync
+    [switch]$SkipSync,
+    [string]$JavaHome = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,23 +44,69 @@ if ($SkipSync) {
 }
 
 # ---------------------------------------------------------------- 2. gradle
-# gradlew.bat needs JAVA_HOME. When you run it from Android Studio it inherits
-# the IDE's JDK, but from a plain shell it does not - so point it at the JDK that
-# ships with Android Studio.
-if (-not $env:JAVA_HOME) {
-    $cands = @(
-        (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'),
-        (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr'),
-        "$env:ProgramFiles\Android\Android Studio\jbr"
-    )
-    foreach ($c in $cands) {
-        if ($c -and (Test-Path (Join-Path $c 'bin\java.exe'))) {
-            $env:JAVA_HOME = $c
-            Write-Host "[2/2] JAVA_HOME -> $c" -ForegroundColor DarkGray
-            break
-        }
+# gradlew.bat needs JAVA_HOME pointing at a JDK *root* (not its bin folder).
+# A machine can have JAVA_HOME set to something broken - a leftover from another
+# user profile or an uninstalled JDK - so never trust it without checking that
+# <JAVA_HOME>\bin\java.exe actually exists. Fall back to the JDK that ships with
+# Android Studio (JBR), which is always a modern JDK 17/21.
+function Test-Jdk([string]$dir) {
+    if (-not $dir) { return $false }
+    return (Test-Path (Join-Path $dir 'bin\java.exe'))
+}
+
+# NOTE: do NOT name the local variable $javaHome - PowerShell variable names are
+# case-insensitive, so it would silently clobber the -JavaHome parameter.
+$jdkRoot = ''
+
+if ($JavaHome) {
+    if (Test-Jdk $JavaHome) { $jdkRoot = $JavaHome }
+    else { throw "-JavaHome does not look like a JDK root (no bin\java.exe): $JavaHome" }
+} elseif ($env:JAVA_HOME) {
+    if (Test-Jdk $env:JAVA_HOME) {
+        $jdkRoot = $env:JAVA_HOME
+        Write-Host "[2/2] using JAVA_HOME = $jdkRoot" -ForegroundColor DarkGray
+    } else {
+        Write-Host "[2/2] JAVA_HOME is invalid, ignoring it: $env:JAVA_HOME" -ForegroundColor Yellow
+        Write-Host "      (it must point at a JDK root, e.g. ...\Android Studio\jbr - not its bin folder)" -ForegroundColor Yellow
     }
 }
+
+if (-not $jdkRoot) {
+    $cands = @(
+        (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Android\Android Studio\jbr'),
+        (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr'),
+        (Join-Path $env:LOCALAPPDATA 'Android\Android Studio\jbr'),
+        "$env:ProgramFiles\Android\Android Studio\jbr"
+    )
+    # also look for standalone JDKs under the usual vendors
+    foreach ($base in @((Join-Path $env:ProgramFiles 'Java'), (Join-Path $env:ProgramFiles 'Eclipse Adoptium'), (Join-Path $env:ProgramFiles 'Microsoft'))) {
+        if (Test-Path $base) {
+            Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                $cands += $_.FullName
+                $cands += (Join-Path $_.FullName 'jbr')
+            }
+        }
+    }
+    foreach ($c in $cands) {
+        if (Test-Jdk $c) { $jdkRoot = $c; break }
+    }
+    if ($jdkRoot) { Write-Host "[2/2] JAVA_HOME -> $jdkRoot" -ForegroundColor DarkGray }
+}
+
+if (-not $jdkRoot) {
+    throw @"
+No usable JDK found.
+Fix one of these, then run again:
+  1. pass it explicitly:   -JavaHome "C:\Program Files\Android\Android Studio\jbr"
+  2. set the env var:      setx JAVA_HOME "C:\Program Files\Android\Android Studio\jbr"
+                           (then open a NEW terminal - the old one keeps the old value)
+  3. or just open the project in Android Studio and press Run.
+Note: JAVA_HOME must be a JDK root (contains bin\java.exe), NOT the bin folder,
+and it must be JDK 17 or newer for current Android Gradle Plugin versions.
+"@
+}
+$env:JAVA_HOME = $jdkRoot
 
 $gradlew = Join-Path $dst 'gradlew.bat'
 if (-not (Test-Path $gradlew)) { throw "gradlew.bat not found in $dst" }

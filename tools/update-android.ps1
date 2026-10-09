@@ -15,7 +15,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Project,
     [ValidateSet('install', 'apk')][string]$Mode = 'install',
-    [switch]$SkipPull
+    [switch]$SkipPull,
+    [switch]$SkipSync,
+    [string]$JavaHome = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,6 +51,9 @@ if ($SkipPull) {
 }
 
 # ---------------------------------------------------------------- 2. sync + build
-& (Join-Path $PSScriptRoot 'push-to-android.ps1') -Project $Project -Mode $Mode
+$pushArgs = @{ Project = $Project; Mode = $Mode }
+if ($JavaHome) { $pushArgs['JavaHome'] = $JavaHome }
+if ($SkipSync) { $pushArgs['SkipSync'] = $true }
+& (Join-Path $PSScriptRoot 'push-to-android.ps1') @pushArgs
 
 exit $LASTEXITCODE
