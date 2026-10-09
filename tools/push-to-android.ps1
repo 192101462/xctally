@@ -163,26 +163,59 @@ try {
 } finally {
     Pop-Location
 }
+
+# If installDebug failed it is almost always "No connected devices" - the build and
+# packaging already succeeded by then. Produce the APK anyway so the run is not wasted.
+if ($rc -ne 0 -and $Mode -eq 'install') {
+    Write-Host ""
+    Write-Host "installDebug failed - building the APK instead so you still get something usable" -ForegroundColor Yellow
+    Push-Location $dst
+    try {
+        & $gradlew assembleDebug
+        $rc2 = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    $apk = Join-Path $dst 'app\build\outputs\apk\debug\app-debug.apk'
+    if ($rc2 -eq 0) {
+        $rc = 0
+        $script:apkOnly = $true
+        # look for whatever was actually produced (the path can differ, e.g. with flavors)
+        if (Test-Path $apk) {
+            $script:apkFound = $apk
+        } else {
+            $found = Get-ChildItem (Join-Path $dst 'app\build\outputs\apk') -Recurse -Filter '*.apk' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($found) { $script:apkFound = $found.FullName }
+        }
+    }
+}
 $sw.Stop()
 
 Write-Host ""
+$apkPath = Join-Path $dst 'app\build\outputs\apk\debug\app-debug.apk'
 if ($rc -eq 0) {
-    Write-Host ("BUILD OK in {0:N0}s" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
-    if ($Mode -eq 'apk') {
-        $apk = Join-Path $dst 'app\build\outputs\apk\debug\app-debug.apk'
-        if (Test-Path $apk) {
-            Write-Host "APK: $apk" -ForegroundColor Cyan
+    if ($Mode -eq 'apk' -or $script:apkOnly) {
+        Write-Host ("BUILD OK in {0:N0}s" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
+        if ($script:apkOnly) {
+            Write-Host "Nothing was installed - adb saw no device." -ForegroundColor Yellow
+        }
+        $shown = if ($script:apkFound) { $script:apkFound } elseif (Test-Path $apkPath) { $apkPath } else { '' }
+        if ($shown) {
+            Write-Host "APK ready - copy it to the phone and tap to install:" -ForegroundColor Cyan
+            Write-Host "  $shown" -ForegroundColor Cyan
         } else {
-            Write-Host "APK expected at: $apk" -ForegroundColor Yellow
+            Write-Host "Look for the .apk under: app\build\outputs\apk\" -ForegroundColor Yellow
         }
     } else {
+        Write-Host ("BUILD OK in {0:N0}s" -f $sw.Elapsed.TotalSeconds) -ForegroundColor Green
         Write-Host "Installed on the connected device." -ForegroundColor Cyan
     }
 } else {
     Write-Host ("BUILD FAILED (exit {0}) - see the Gradle output above." -f $rc) -ForegroundColor Red
     if ($Mode -eq 'install') {
-        Write-Host "If it says 'no connected devices', plug the phone in and enable USB debugging," -ForegroundColor Yellow
-        Write-Host "or use -Mode apk to just produce the APK file." -ForegroundColor Yellow
+        Write-Host "If it says 'no connected devices', plug the phone into THIS machine and enable" -ForegroundColor Yellow
+        Write-Host "USB debugging, or run with -Mode apk to just produce the APK file." -ForegroundColor Yellow
     }
 }
 

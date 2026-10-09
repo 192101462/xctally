@@ -75,7 +75,6 @@ class MainActivity : AppCompatActivity() {
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true          // localStorage：数据就存在这里
-            settings.databaseEnabled = true
             settings.allowFileAccess = true
             settings.allowContentAccess = true
             settings.mediaPlaybackRequiresUserGesture = false
