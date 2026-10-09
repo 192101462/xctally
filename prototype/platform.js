@@ -1,9 +1,9 @@
-/* xcnote · 平台适配层
+/* xctally · 平台适配层
  * ---------------------------------------------------------------
  * 同一份网页应用跑在三处：
  *   1. 浏览器         → 直接打开 index.html（开发/预览用）
- *   2. 安卓壳         → WebView + addJavascriptInterface（window.XCAndroid）
- *   3. 鸿蒙壳         → ArkWeb + javaScriptProxy（window.XCHarmony）
+ *   2. 安卓壳         → WebView + addJavascriptInterface（window.QYAndroid）
+ *   3. 鸿蒙壳         → ArkWeb + javaScriptProxy（window.QYHarmony）
  *
  * 这里把"只有原生才能做"的两件事抽象出来：
  *   saveFile   导出备份（安卓/鸿蒙里写文件并可分享，浏览器里走下载）
@@ -16,8 +16,8 @@
 (function () {
   'use strict';
 
-  const android = window.XCAndroid || null;   // 安卓注入
-  const harmony = window.XCHarmony || null;   // 鸿蒙注入
+  const android = window.QYAndroid || null;   // 安卓注入
+  const harmony = window.QYHarmony || null;   // 鸿蒙注入
   const native = android || harmony;
 
   // 原生壳里不应该显示"手机外框 + 左侧说明栏"，用 ?app=1 也能在浏览器里预览这个模式
@@ -33,7 +33,7 @@
 
   const pending = {};   // pickFile 的待回调：id → callback
 
-  window.XCPlatform = {
+  window.QYPlatform = {
     native: !!native,
     kind: android ? 'android' : (harmony ? 'harmony' : 'web'),
     appMode: appMode,

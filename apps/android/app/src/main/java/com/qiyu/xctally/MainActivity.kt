@@ -1,4 +1,4 @@
-package com.xcnote.app
+package com.qiyu.xctally
 
 import android.Manifest
 import android.content.Intent
@@ -22,7 +22,7 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * xcnote 安卓壳
+ * xctally 安卓壳
  *
  * 职责只有四件事：
  *   1. 用 WebView 装下 www/ 里的网页应用（UI 与业务逻辑都在那边）
@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
                     request: WebResourceRequest
                 ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
             }
-            addJavascriptInterface(Bridge(), "XCAndroid")
+            addJavascriptInterface(Bridge(), "QYAndroid")
             loadUrl("https://appassets.androidplatform.net/assets/www/index.html")
         }
         setContentView(webView)
@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 把选到的文件内容回传给网页里的 await 回调 */
     private fun deliver(id: String, text: String?) {
-        val js = "window.XCPlatform && window.XCPlatform._deliver(" +
+        val js = "window.QYPlatform && window.QYPlatform._deliver(" +
             JSONObject.quote(id) + "," +
             (if (text == null) "null" else JSONObject.quote(text)) + ")"
         runOnUiThread { webView.evaluateJavascript(js, null) }
@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 暴露给网页的原生能力（网页里是 window.XCAndroid）
+     * 暴露给网页的原生能力（网页里是 window.QYAndroid）
      * 注意：@JavascriptInterface 的方法参数只允许基本类型与字符串。
      */
     inner class Bridge {

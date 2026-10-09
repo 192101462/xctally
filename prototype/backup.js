@@ -1,20 +1,20 @@
-/* xcnote · 备份与恢复（纯本地，不联网）
+/* xctally · 备份与恢复（纯本地，不联网）
  * ---------------------------------------------------------------
  * 用途只有一个：**换手机时把记录搬过去**。
  *   - 导出：把物品 / 收藏 / 能源打包成一个文件
  *   - 恢复：先对比再合并，冲突默认保留"你现在的版本"
  *
- * 这里刻意不做上传、不做账号、不做分享 —— xcnote 是单机本地工具。
+ * 这里刻意不做上传、不做账号、不做分享 —— xctally 是单机本地工具。
  * ---------------------------------------------------------------
  */
 (function () {
   'use strict';
 
-  const XC = window.XC;
-  const FORMAT = 'xcnote.backup';
+  const QY = window.QY;
+  const FORMAT = 'xctally.backup';
   const VERSION = 2;
 
-  function UI() { return window.XCUI; }
+  function UI() { return window.QYUI; }
   function appData() { return UI().data(); }
   function esc(s) { return UI().esc(s); }
 
@@ -24,11 +24,11 @@
 
   function buildBackup() {
     const d = appData();
-    const snap = window.XCV ? XCV.snapshot() : { entries: [], cats: [] };
+    const snap = window.QYV ? QYV.snapshot() : { entries: [], cats: [] };
     return {
       format: FORMAT,
       version: VERSION,
-      exportedAt: XC.iso(XC.today()),
+      exportedAt: QY.iso(QY.today()),
       app: {
         items: d.items.slice(),
         events: d.events.slice(),
@@ -44,12 +44,12 @@
   function doExport() {
     const pkg = buildBackup();
     const total = pkg.app.items.length + pkg.collect.entries.length + pkg.app.meters.length;
-    const name = 'xcnote-backup-' + pkg.exportedAt + '.json';
+    const name = 'xctally-backup-' + pkg.exportedAt + '.json';
 
-    if (window.XCPlatform && XCPlatform.native) {
+    if (window.QYPlatform && QYPlatform.native) {
       // 原生壳：写文件 + 唤起系统分享（发给新手机 / 存网盘）
-      XCPlatform.saveFile(name, JSON.stringify(pkg, null, 2));
-      XCPlatform.shareLastFile();
+      QYPlatform.saveFile(name, JSON.stringify(pkg, null, 2));
+      QYPlatform.shareLastFile();
     } else {
       const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -78,15 +78,15 @@
       try { pkg = JSON.parse(text); }
       catch (err) { UI().toast('这个文件不是有效的备份'); return; }
       if (!pkg || (pkg.format !== FORMAT && !pkg.items)) {
-        UI().toast('文件格式不对，需要 xcnote 导出的备份');
+        UI().toast('文件格式不对，需要 xctally 导出的备份');
         return;
       }
       openImportSheet(pkg);
     };
 
     // 原生壳走系统文件选择器，浏览器走 input[type=file]
-    if (window.XCPlatform) {
-      XCPlatform.pickFile(handle);
+    if (window.QYPlatform) {
+      QYPlatform.pickFile(handle);
       return;
     }
     const input = document.createElement('input');
@@ -120,7 +120,7 @@
 
   function computeDiff(pkg) {
     const d = appData();
-    const snap = window.XCV ? XCV.snapshot() : { entries: [] };
+    const snap = window.QYV ? QYV.snapshot() : { entries: [] };
     const app = pkg.app || pkg;          // 兼容早期只导出物品的备份
     const collect = pkg.collect || { entries: pkg.collects || [] };
     return {
@@ -232,8 +232,8 @@
     r = mergeMeters(d.meters, app.meters, preferRemote);
     added += r.added; conflict += r.conflict;
 
-    if (window.XCV && collect.entries) {
-      r = XCV.merge(collect, preferRemote);
+    if (window.QYV && collect.entries) {
+      r = QYV.merge(collect, preferRemote);
       added += r.added; conflict += r.conflict;
     }
 
@@ -249,26 +249,26 @@
 
   function demoImport() {
     const d = appData();
-    const snap = window.XCV ? XCV.snapshot() : { entries: [], cats: [] };
+    const snap = window.QYV ? QYV.snapshot() : { entries: [], cats: [] };
     const pkg = buildBackup();
-    pkg.exportedAt = XC.iso(XC.today());
+    pkg.exportedAt = QY.iso(QY.today());
 
     // 备份里多两件物品、多一条随笔
     pkg.app.items = pkg.app.items.concat([
       {
         id: 'it_backup1', name: '保温杯', icon: '🥤', category: '日用', sub: '杯具',
-        acquiredAt: XC.addDays(-45), source: '网购', cost: 89, qty: 1, unit: '个',
+        acquiredAt: QY.addDays(-45), source: '网购', cost: 89, qty: 1, unit: '个',
         status: '在用', location: '办公室', expiresAt: null, openedAt: null, warrantyUntil: null, note: ''
       },
       {
         id: 'it_backup2', name: '机械键盘', icon: '⌨️', category: '电子', sub: '外设',
-        acquiredAt: XC.addDays(-120), source: '网购', cost: 599, qty: 1, unit: '把',
+        acquiredAt: QY.addDays(-120), source: '网购', cost: 599, qty: 1, unit: '把',
         status: '在用', location: '书房', expiresAt: null, openedAt: null, warrantyUntil: null, note: ''
       }
     ]);
     pkg.collect.entries = pkg.collect.entries.concat([
       {
-        id: 'c_backup1', title: '新手机的第一次记录', cat: '灵感', date: XC.iso(XC.today()),
+        id: 'c_backup1', title: '新手机的第一次记录', cat: '灵感', date: QY.iso(QY.today()),
         tags: ['迁移'], plugins: [{ k: 'mood', v: '兴奋' }],
         bodyHtml: '<p>从备份里恢复出来的内容。</p>'
       }
@@ -298,7 +298,7 @@
     return true;
   }
 
-  window.XCB = {
+  window.QYB = {
     handleAction: handleAction,
     buildBackup: buildBackup,
     doExport: doExport,

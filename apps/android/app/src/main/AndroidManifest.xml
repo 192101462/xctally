@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  xcnote 安卓壳
+  xctally 安卓壳
   注意：这里**没有申请 INTERNET 权限** —— 应用完全离线，只读本地资源。
   分享备份用的是系统 FileProvider，不需要网络。
 -->

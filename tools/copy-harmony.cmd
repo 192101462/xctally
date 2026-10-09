@@ -1,9 +1,9 @@
 @echo off
 rem ---------------------------------------------------------------
-rem  xcnote - copy the HarmonyOS shell into a DevEco Studio project
+rem  xctally - copy the HarmonyOS shell into a DevEco Studio project
 rem
 rem  Usage (from the repo root, cmd or PowerShell):
-rem      tools\copy-harmony.cmd -Project "D:\DevEcoProjects\XCNote"
+rem      tools\copy-harmony.cmd -Project "D:\DevEcoProjects\xctally"
 rem
 rem  Why this wrapper exists:
 rem    - the .ps1 needs an execution policy that allows scripts

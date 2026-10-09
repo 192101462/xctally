@@ -1,4 +1,4 @@
-# xcnote · 鸿蒙壳
+# xctally · 鸿蒙壳
 
 纯血鸿蒙（HarmonyOS NEXT）**不能安装 APK**，所以这个 HAP 是鸿蒙手机上唯一的途径。
 它和安卓壳共用**同一份网页应用**，只是把 WebView 换成 ArkWeb、把原生能力换成鸿蒙的 API。
@@ -8,7 +8,7 @@ apps/harmony/entry/src/main/
 ├─ module.json5                              ← 覆盖（多了一条代理提醒权限）
 ├─ ets/
 │  ├─ pages/Index.ets                        ← 承载 ArkWeb + 挂载原生桥
-│  └─ bridge/XCBridge.ets                    ← 导出/导入备份、到期提醒
+│  └─ bridge/QYBridge.ets                    ← 导出/导入备份、到期提醒
 └─ resources/rawfile/www/                    ← 脚本同步进来（网页应用本体）
 ```
 
@@ -26,8 +26,8 @@ apps/harmony/entry/src/main/
 
 | 项 | 值 |
 |---|---|
-| Project name | `XCNote` |
-| Bundle name | `com.xcnote.app` |
+| Project name | `xctally` |
+| Bundle name | `com.qiyu.xctally` |
 | Compatible SDK | **API 12** 或更高 |
 | Module name | `entry` |
 | Device type | Phone + Tablet |
@@ -47,7 +47,7 @@ python tools/sync-app-assets.py
 在仓库根目录执行（cmd 或 PowerShell 都行）：
 
 ```bat
-tools\copy-harmony.cmd -Project "D:\DevEcoProjects\XCNote"
+tools\copy-harmony.cmd -Project "D:\DevEcoProjects\xctally"
 ```
 
 > **不要用 `pwsh` 开头**——那是 PowerShell 7 的命令；Windows 自带的是 PowerShell 5.1，
@@ -56,13 +56,13 @@ tools\copy-harmony.cmd -Project "D:\DevEcoProjects\XCNote"
 >
 > 等价的手写命令：
 > ```powershell
-> powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\copy-into-harmony-project.ps1 -Project "D:\DevEcoProjects\XCNote"
+> powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\copy-into-harmony-project.ps1 -Project "D:\DevEcoProjects\xctally"
 > ```
 
 脚本会先**校验目标确实是鸿蒙项目**（找不到 `entry\src\main` 就报错退出），然后：
 
 1. 把 `prototype/` 的 8 个网页文件复制到 `entry/src/main/resources/rawfile/www/`
-2. 复制 `Index.ets` 与 `bridge/XCBridge.ets`
+2. 复制 `Index.ets` 与 `bridge/QYBridge.ets`
 3. **往 `string.json` 里补一条 `reason_reminder`**（走 JSON 解析再写回，保证格式合法，并留 `.bak`）
 4. 打印出唯一还需要手动改的一处（`module.json5` 的权限块）
 
@@ -78,7 +78,7 @@ tools\copy-harmony.cmd -Project "D:\DevEcoProjects\XCNote"
 | 本仓库文件 | 复制到鸿蒙项目里的位置 |
 |---|---|
 | `apps/harmony/entry/src/main/ets/pages/Index.ets` | `entry/src/main/ets/pages/Index.ets`（覆盖模板的） |
-| `apps/harmony/entry/src/main/ets/bridge/XCBridge.ets` | 同路径新建 `bridge` 目录 |
+| `apps/harmony/entry/src/main/ets/bridge/QYBridge.ets` | 同路径新建 `bridge` 目录 |
 | `prototype/{index.html,styles.css,platform.js,data.js,collect.js,backup.js,selftest.js,app.js}` | `entry/src/main/resources/rawfile/www/` |
 
 `EntryAbility.ets` 和 `main_pages.json` **不用改**，用模板生成的即可。

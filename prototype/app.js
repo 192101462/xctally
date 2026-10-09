@@ -1,11 +1,11 @@
-/* xcnote · 交互层（原型）
+/* xctally · 交互层（原型）
  * 纯原生 JS，无构建、无依赖，双击 index.html 即可运行。
  * 数据存 localStorage，刷新不丢。
  */
 (function () {
   'use strict';
 
-  const XC = window.XC;
+  const QY = window.QY;
   const $ = function (s, r) { return (r || document).querySelector(s); };
   const esc = function (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -13,10 +13,10 @@
     });
   };
 
-  let data = XC.load();
+  let data = QY.load();
   const state = { tab: 'home', detailId: null, category: '全部', query: '' };
 
-  function save() { XC.save(data); }
+  function save() { QY.save(data); }
   function itemById(id) {
     for (let i = 0; i < data.items.length; i++) if (data.items[i].id === id) return data.items[i];
     return null;
@@ -54,15 +54,15 @@
   /* ---------------- 通用组件 ---------------- */
 
   function tile(item, small) {
-    const g = XC.colorOf(item);
+    const g = QY.colorOf(item);
     return '<div class="tile ' + (small ? 'sm' : '') + '" style="background:linear-gradient(150deg,' +
-      g[0] + ',' + g[1] + ')">' + XC.iconOf(item) + '</div>';
+      g[0] + ',' + g[1] + ')">' + QY.iconOf(item) + '</div>';
   }
 
   function expiryPill(item) {
-    const lv = XC.expiryLevel(item);
+    const lv = QY.expiryLevel(item);
     if (lv == null) return '';
-    const d = XC.daysLeft(item);
+    const d = QY.daysLeft(item);
     if (lv === 0) return '<span class="pill red">已过期 ' + Math.abs(d) + ' 天</span>';
     if (lv === 1) return '<span class="pill red">剩 ' + d + ' 天</span>';
     if (lv === 2) return '<span class="pill orange">剩 ' + d + ' 天</span>';
@@ -70,18 +70,18 @@
   }
 
   function rowItem(item) {
-    const p = XC.perDay(item, data);
+    const p = QY.perDay(item, data);
     return '' +
       '<div class="row" data-action="detail" data-id="' + item.id + '">' +
         tile(item) +
         '<div class="row-main">' +
           '<div class="row-title">' + esc(item.name) + '</div>' +
-          '<div class="row-sub">' + esc(XC.titleOf(item)) + ' · ' + XC.fmtDate(item.acquiredAt) + ' 获得' +
+          '<div class="row-sub">' + esc(QY.titleOf(item)) + ' · ' + QY.fmtDate(item.acquiredAt) + ' 获得' +
             (item.status !== '在用' ? ' · ' + esc(item.status) : '') + '</div>' +
         '</div>' +
         '<div class="row-side">' +
-          '<div class="row-value">' + (p != null ? XC.fmtRate(p) + '<span class="per">/天</span>' : '—') + '</div>' +
-          '<div class="row-note">' + (item.cost != null ? XC.fmtMoney(item.cost) : '价格未知') + '</div>' +
+          '<div class="row-value">' + (p != null ? QY.fmtRate(p) + '<span class="per">/天</span>' : '—') + '</div>' +
+          '<div class="row-note">' + (item.cost != null ? QY.fmtMoney(item.cost) : '价格未知') + '</div>' +
         '</div>' +
       '</div>';
   }
@@ -94,8 +94,8 @@
   function localBytes() {
     let n = 0;
     try {
-      n = (localStorage.getItem('xcnote.prototype.v1') || '').length +
-          (localStorage.getItem('xcnote.collect.v1') || '').length;
+      n = (localStorage.getItem('xctally.prototype.v1') || '').length +
+          (localStorage.getItem('xctally.collect.v1') || '').length;
     } catch (err) { n = 0; }
     return n;
   }
@@ -122,8 +122,8 @@
   /* ---------------- 首页 ---------------- */
 
   function viewHome() {
-    const s = XC.summaries(data);
-    const d = XC.today();
+    const s = QY.summaries(data);
+    const d = QY.today();
     const weekday = '日一二三四五六'[d.getDay()];
     const dateLabel = (d.getMonth() + 1) + '月' + d.getDate() + '日 · 星期' + weekday;
 
@@ -133,30 +133,30 @@
           tile(it) +
           '<div class="row-main">' +
             '<div class="row-title">' + esc(it.name) + '</div>' +
-            '<div class="row-sub">' + esc(XC.titleOf(it)) + ' · ' + XC.fmtDate(it.expiresAt) + ' 到期</div>' +
+            '<div class="row-sub">' + esc(QY.titleOf(it)) + ' · ' + QY.fmtDate(it.expiresAt) + ' 到期</div>' +
           '</div>' +
           '<div class="row-side">' + expiryPill(it) + '</div>' +
         '</div>';
     }).join('');
 
     const recent = s.recent.map(function (it) {
-      const p = XC.perDay(it, data);
+      const p = QY.perDay(it, data);
       return '' +
         '<div class="row" data-action="detail" data-id="' + it.id + '">' +
           tile(it, true) +
           '<div class="row-main">' +
             '<div class="row-title">' + esc(it.name) + '</div>' +
-            '<div class="row-sub">' + XC.fmtDate(it.acquiredAt) + ' · ' + esc(it.source || '—') + '</div>' +
+            '<div class="row-sub">' + QY.fmtDate(it.acquiredAt) + ' · ' + esc(it.source || '—') + '</div>' +
           '</div>' +
-          '<div class="row-side"><div class="row-value">' + XC.fmtMoney(it.cost) + '</div>' +
-            '<div class="row-note">' + (p != null ? XC.fmtRate(p) + '/天' : '—') + '</div></div>' +
+          '<div class="row-side"><div class="row-value">' + QY.fmtMoney(it.cost) + '</div>' +
+            '<div class="row-note">' + (p != null ? QY.fmtRate(p) + '/天' : '—') + '</div></div>' +
         '</div>';
     }).join('');
 
     const trendCls = s.energyTrend >= 0 ? 'trend-up' : 'trend-down';
 
     // 最近随笔：让首页同时反映"两本账"
-    const notes = (window.XCV ? XCV.recent(3) : []).map(function (nt) {
+    const notes = (window.QYV ? QYV.recent(3) : []).map(function (nt) {
       const tile = nt.img
         ? '<div class="tile" style="background-image:url(' + nt.img + ');background-size:cover;background-position:center"></div>'
         : '<div class="tile">' + nt.emoji + '</div>';
@@ -166,7 +166,7 @@
           '<div class="row-sub">' + esc(nt.sub) + '</div>' +
         '</div>' +
         '<div class="row-side"><div class="row-value" style="font-size:13px;color:var(--label-3)">' +
-          XC.fmtDate(nt.date).slice(5) + '</div></div>' +
+          QY.fmtDate(nt.date).slice(5) + '</div></div>' +
       '</div>';
     }).join('');
 
@@ -175,7 +175,7 @@
 
       '<div class="card hero">' +
         '<div class="hero-label">已经浪费掉的钱</div>' +
-        '<div class="hero-value">' + XC.fmtMoney(s.wasted) + '</div>' +
+        '<div class="hero-value">' + QY.fmtMoney(s.wasted) + '</div>' +
         '<div class="hero-foot">' + s.wastedCount + ' 样东西过期未处置 · 累计投入的 ' +
           (s.totalSpend ? (s.wasted / s.totalSpend * 100).toFixed(1) : '0') + '%</div>' +
       '</div>' +
@@ -183,12 +183,12 @@
       '<div class="grid-2">' +
         '<div class="card">' +
           '<div class="mini-label">持有成本</div>' +
-          '<div class="mini-value">' + XC.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
+          '<div class="mini-value">' + QY.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
           '<div class="mini-foot">全部在用物品合计</div>' +
         '</div>' +
         '<div class="card">' +
           '<div class="mini-label">本月能源</div>' +
-          '<div class="mini-value">' + XC.fmtMoney(s.energy) + '</div>' +
+          '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
           '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
             (s.energyTrend * 100).toFixed(0) + '%</div>' +
         '</div>' +
@@ -206,7 +206,7 @@
 
       (notes ? '<div class="section">' +
         '<div class="section-head"><h2>最近随笔</h2><span>共 ' +
-          (window.XCV ? XCV.count() : 0) + ' 篇</span></div>' +
+          (window.QYV ? QYV.count() : 0) + ' 篇</span></div>' +
         '<div class="group">' + notes + '</div>' +
       '</div>' : '');
   }
@@ -232,15 +232,15 @@
   }
 
   function viewItems() {
-    const active = data.items.filter(XC.isActive).length;
+    const active = data.items.filter(QY.isActive).length;
     const spend = data.items.reduce(function (s, it) { return s + (it.cost || 0); }, 0);
-    const chips = ['全部'].concat(XC.CATEGORY_NAMES).map(function (c) {
+    const chips = ['全部'].concat(QY.CATEGORY_NAMES).map(function (c) {
       return '<button class="chip ' + (state.category === c ? 'active' : '') +
         '" data-action="chip" data-cat="' + c + '">' + c + '</button>';
     }).join('');
 
     return '' +
-      pageHead('物品', active + ' 件在用 · 累计投入 ' + XC.fmtMoney(spend), iconBtn('add', '新增记录')) +
+      pageHead('物品', active + ' 件在用 · 累计投入 ' + QY.fmtMoney(spend), iconBtn('add', '新增记录')) +
       '<div class="search">' + I.search +
         '<input id="search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
       '</div>' +
@@ -252,7 +252,7 @@
 
   // 日均成本衰减曲线：横轴按几何级数采样（1,2,3,5,8,13…），让 1/t 的衰减看得清
   function sparkline(item, held) {
-    const cost = XC.costOf(item, data);
+    const cost = QY.costOf(item, data);
     if (!cost || cost <= 0) return '';
     const ts = [];
     let t = 1;
@@ -282,39 +282,39 @@
 
   function viewDetail(item) {
     if (!item) return viewItems();
-    const held = XC.heldDays(item);
-    const per = XC.perDay(item, data);
-    const total = XC.costOf(item, data);
+    const held = QY.heldDays(item);
+    const per = QY.perDay(item, data);
+    const total = QY.costOf(item, data);
     const extra = total - (item.cost || 0);
 
-    const dl = XC.daysLeft(item);
+    const dl = QY.daysLeft(item);
     const detailRows = [
-      kv('获得日期', XC.fmtDate(item.acquiredAt)),
+      kv('获得日期', QY.fmtDate(item.acquiredAt)),
       kv('来源', esc(item.source || '—')),
-      kv('价格', item.cost != null ? XC.fmtMoney(item.cost) : '未知（获赠/无价）'),
+      kv('价格', item.cost != null ? QY.fmtMoney(item.cost) : '未知（获赠/无价）'),
       kv('数量', (item.qty || 1) + ' ' + (item.unit || '个') +
-        (item.cost != null && (item.qty || 1) > 1 ? ' · 单价 ' + XC.fmtMoney(item.cost / item.qty) : '')),
-      kv('日均成本', per != null ? XC.fmtRate(per) + ' / 天' : '—'),
-      item.cost != null && (item.qty || 1) > 1 ? kv('单件日均', XC.fmtRate(per / item.qty) + ' / 天') : '',
+        (item.cost != null && (item.qty || 1) > 1 ? ' · 单价 ' + QY.fmtMoney(item.cost / item.qty) : '')),
+      kv('日均成本', per != null ? QY.fmtRate(per) + ' / 天' : '—'),
+      item.cost != null && (item.qty || 1) > 1 ? kv('单件日均', QY.fmtRate(per / item.qty) + ' / 天') : '',
       kv('状态', esc(item.status || '在用')),
       kv('存放位置', esc(item.location || '—')),
-      item.expiresAt ? kv('到期日', XC.fmtDate(item.expiresAt) +
+      item.expiresAt ? kv('到期日', QY.fmtDate(item.expiresAt) +
         (dl != null ? ' <span class="pill ' + (dl < 0 ? 'red' : dl <= 7 ? 'orange' : 'green') + '">' +
           (dl < 0 ? '已过期 ' + Math.abs(dl) + ' 天' : '剩 ' + dl + ' 天') + '</span>' : '')) : '',
-      item.openedAt ? kv('开封日期', XC.fmtDate(item.openedAt)) : '',
-      item.warrantyUntil ? kv('保修至', XC.fmtDate(item.warrantyUntil)) : ''
+      item.openedAt ? kv('开封日期', QY.fmtDate(item.openedAt)) : '',
+      item.warrantyUntil ? kv('保修至', QY.fmtDate(item.warrantyUntil)) : ''
     ].join('');
 
-    const events = XC.eventsOf(data, item.id);
+    const events = QY.eventsOf(data, item.id);
     const timeline = events.map(function (e) {
-      const t = XC.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
+      const t = QY.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
       return '' +
         '<div class="tl-item">' +
           '<div class="tl-dot">' + t.emoji + '</div>' +
           '<div class="tl-body">' +
             '<div class="tl-title">' + t.label +
-              (e.amount ? ' <span class="amount">' + XC.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
-            '<div class="tl-sub">' + XC.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div>' +
+              (e.amount ? ' <span class="amount">' + QY.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
+            '<div class="tl-sub">' + QY.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div>' +
           '</div>' +
         '</div>';
     }).join('');
@@ -325,7 +325,7 @@
         tile(item) +
         '<div>' +
           '<h1>' + esc(item.name) + '</h1>' +
-          '<p>' + esc(XC.titleOf(item)) + (item.location ? ' · ' + esc(item.location) : '') + '</p>' +
+          '<p>' + esc(QY.titleOf(item)) + (item.location ? ' · ' + esc(item.location) : '') + '</p>' +
         '</div>' +
       '</div>' +
 
@@ -334,13 +334,13 @@
           '<div class="metric"><div class="m-label">持有</div>' +
             '<div class="m-value">' + held + '<small>天</small></div></div>' +
           '<div class="metric"><div class="m-label">日均成本</div>' +
-            '<div class="m-value">' + (per != null ? XC.fmtRate(per) : '—') + '</div></div>' +
+            '<div class="m-value">' + (per != null ? QY.fmtRate(per) : '—') + '</div></div>' +
           '<div class="metric"><div class="m-label">累计投入</div>' +
-            '<div class="m-value">' + XC.fmtMoney(total) + '</div></div>' +
+            '<div class="m-value">' + QY.fmtMoney(total) + '</div></div>' +
         '</div>' +
         sparkline(item, held) +
         '<div class="mini-foot" style="text-align:center;margin-top:6px">' +
-          (extra > 0 ? '含维修/更换 ' + XC.fmtMoney(extra) + ' · ' : '') + '用得越久，每天越便宜</div>' +
+          (extra > 0 ? '含维修/更换 ' + QY.fmtMoney(extra) + ' · ' : '') + '用得越久，每天越便宜</div>' +
       '</div>' +
 
       '<div class="section">' +
@@ -375,7 +375,7 @@
     const bars = hist.map(function (h) {
       return '<div class="bar-col">' +
         '<div class="bar ' + (h.now ? 'now' : '') + '" style="height:' + (h.usage / max * 100).toFixed(1) + '%"></div>' +
-        '<div class="bar-label">' + XC.fmtMonth(h.m) + '</div>' +
+        '<div class="bar-label">' + QY.fmtMonth(h.m) + '</div>' +
       '</div>';
     }).join('');
 
@@ -393,15 +393,15 @@
 
         '<div class="metrics" style="grid-template-columns:1fr 1fr">' +
           '<div class="metric"><div class="m-label">本月已用</div>' +
-            '<div class="m-value">' + XC.fmtNum(m.current.usage) + '<small>' + m.unit + '</small></div></div>' +
+            '<div class="m-value">' + QY.fmtNum(m.current.usage) + '<small>' + m.unit + '</small></div></div>' +
           '<div class="metric"><div class="m-label">本月费用</div>' +
-            '<div class="m-value">' + XC.fmtMoney(m.current.cost) + '</div></div>' +
+            '<div class="m-value">' + QY.fmtMoney(m.current.cost) + '</div></div>' +
         '</div>' +
 
         '<div class="mini-foot" style="margin-top:14px">已进入 ' + m.tier.name + ' · ' + m.tier.range +
           ' · 单价 ¥' + m.tier.price + '/' + m.unit + '</div>' +
         '<div class="track ' + cls + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
-        '<div class="mini-foot">阶梯进度 ' + XC.fmtNum(m.tier.used, 0) + ' / ' + m.tier.cap + ' ' + m.unit + '</div>' +
+        '<div class="mini-foot">阶梯进度 ' + QY.fmtNum(m.tier.used, 0) + ' / ' + m.tier.cap + ' ' + m.unit + '</div>' +
 
         '<div class="bars">' + bars + '</div>' +
         '<div class="mini-foot" style="text-align:center">近 12 个月用量（' + m.unit + '）· 最后一根为本月预测</div>' +
@@ -413,7 +413,7 @@
 
   function viewEnergy() {
     const total = data.meters.reduce(function (s, m) { return s + m.current.cost; }, 0);
-    const head = pageHead('能源', '本月合计 ' + XC.fmtMoney(total) + ' · ' + data.meters.length + ' 只表具',
+    const head = pageHead('能源', '本月合计 ' + QY.fmtMoney(total) + ' · ' + data.meters.length + ' 只表具',
       iconBtn('reading', '抄表'));
     if (!data.meters.length) {
       return head + '<div class="empty"><div class="emoji">⚡️</div><p>还没有表具，点右下角添加</p></div>';
@@ -424,9 +424,9 @@
   /* ---------------- 我的 ---------------- */
 
   function viewMe() {
-    const s = XC.summaries(data);
-    const backupHint = data.lastBackup ? '上次备份 ' + XC.fmtDate(data.lastBackup) : '数据只在这台设备上';
-    const imgBytes = window.XCV ? XCV.imageBytes() : 0;
+    const s = QY.summaries(data);
+    const backupHint = data.lastBackup ? '上次备份 ' + QY.fmtDate(data.lastBackup) : '数据只在这台设备上';
+    const imgBytes = window.QYV ? QYV.imageBytes() : 0;
     const totalBytes = localBytes();
     const heavy = totalBytes > 4.5 * 1024 * 1024;
     const byCat = {};
@@ -437,17 +437,17 @@
     const max = cats.length ? byCat[cats[0]] : 1;
 
     const catRows = cats.map(function (c) {
-      const g = XC.CATEGORIES[c] ? XC.CATEGORIES[c].g : ['#ECECF1', '#CFCFD8'];
+      const g = QY.CATEGORIES[c] ? QY.CATEGORIES[c].g : ['#ECECF1', '#CFCFD8'];
       const pct = (byCat[c] / max * 100).toFixed(1);
       return '' +
         '<div class="row static">' +
           '<div class="tile sm" style="background:linear-gradient(150deg,' + g[0] + ',' + g[1] + ')">' +
-            (XC.CATEGORIES[c] ? XC.CATEGORIES[c].emoji : '📦') + '</div>' +
+            (QY.CATEGORIES[c] ? QY.CATEGORIES[c].emoji : '📦') + '</div>' +
           '<div class="row-main">' +
             '<div class="row-title">' + c + '</div>' +
             '<div class="track" style="margin-top:8px"><i style="width:' + pct + '%"></i></div>' +
           '</div>' +
-          '<div class="row-side"><div class="row-value">' + XC.fmtMoney(byCat[c]) + '</div></div>' +
+          '<div class="row-side"><div class="row-value">' + QY.fmtMoney(byCat[c]) + '</div></div>' +
         '</div>';
     }).join('');
 
@@ -456,9 +456,9 @@
 
       '<div class="group">' +
         kv('在用物品', s.count + ' 件') +
-        kv('累计投入', XC.fmtMoney(s.totalSpend)) +
-        kv('当前持有成本', XC.fmtRate(s.daily) + ' / 天') +
-        kv('已浪费', XC.fmtMoney(s.wasted)) +
+        kv('累计投入', QY.fmtMoney(s.totalSpend)) +
+        kv('当前持有成本', QY.fmtRate(s.daily) + ' / 天') +
+        kv('已浪费', QY.fmtMoney(s.wasted)) +
       '</div>' +
 
       '<div class="section">' +
@@ -521,11 +521,11 @@
   }
 
   function itemFormHTML() {
-    const cats = XC.CATEGORY_NAMES.map(function (c) {
+    const cats = QY.CATEGORY_NAMES.map(function (c) {
       return '<option>' + c + '</option>';
     }).join('');
-    const srcs = XC.SOURCES.map(function (s) { return '<option>' + s + '</option>'; }).join('');
-    const units = XC.UNITS.map(function (u) { return '<option>' + u + '</option>'; }).join('');
+    const srcs = QY.SOURCES.map(function (s) { return '<option>' + s + '</option>'; }).join('');
+    const units = QY.UNITS.map(function (u) { return '<option>' + u + '</option>'; }).join('');
     return '' +
       '<div class="sheet">' +
         '<div class="grabber"></div>' +
@@ -542,7 +542,7 @@
             '<input id="f-qty" class="input" type="number" step="1" value="1" /></div>' +
         '</div>' +
         '<div class="field"><label>获得日期</label>' +
-          '<input id="f-date" class="input" type="date" value="' + XC.iso(XC.today()) + '" /></div>' +
+          '<input id="f-date" class="input" type="date" value="' + QY.iso(QY.today()) + '" /></div>' +
 
         '<button class="more-toggle" data-action="toggle-more">更多选项 ' + I.plus + '</button>' +
 
@@ -593,12 +593,12 @@
     if (!name) { toast('请先填写名称'); return; }
     const costRaw = $('#f-cost').value;
     const item = {
-      id: XC.uid('it'),
+      id: QY.uid('it'),
       name: name,
       icon: '',
       category: $('#f-cat').value,
       sub: ($('#f-sub').value || '').trim(),
-      acquiredAt: $('#f-date').value || XC.iso(XC.today()),
+      acquiredAt: $('#f-date').value || QY.iso(QY.today()),
       source: $('#f-source').value,
       cost: costRaw === '' ? null : Number(costRaw),
       qty: Number($('#f-qty').value) || 1,
@@ -612,7 +612,7 @@
     };
     data.items.push(item);
     data.events.push({
-      id: XC.uid('ev'), itemId: item.id, type: 'acquired',
+      id: QY.uid('ev'), itemId: item.id, type: 'acquired',
       at: item.acquiredAt, amount: item.cost, note: item.source
     });
     save();
@@ -648,8 +648,8 @@
     if (!item) return;
     item.status = '已处置';
     data.events.push({
-      id: XC.uid('ev'), itemId: id, type: 'disposed',
-      at: XC.iso(XC.today()), amount: null, note: '标记为已处置'
+      id: QY.uid('ev'), itemId: id, type: 'disposed',
+      at: QY.iso(QY.today()), amount: null, note: '标记为已处置'
     });
     save();
     mount();
@@ -664,12 +664,12 @@
     const amount = Number(input);
     if (!amount) { toast('金额无效'); return; }
     data.events.push({
-      id: XC.uid('ev'), itemId: id, type: 'repaired',
-      at: XC.iso(XC.today()), amount: amount, note: '手动记录'
+      id: QY.uid('ev'), itemId: id, type: 'repaired',
+      at: QY.iso(QY.today()), amount: amount, note: '手动记录'
     });
     save();
     mount();
-    toast('已记入 ' + XC.fmtMoney(amount) + '，日均成本已更新');
+    toast('已记入 ' + QY.fmtMoney(amount) + '，日均成本已更新');
   }
 
   /* ---------------- 渲染 ---------------- */
@@ -690,7 +690,7 @@
     } else if (h.indexOf('cdetail=') === 0) {
       state.tab = 'collect';
       state.detailId = null;
-      if (window.XCV) XCV.openDetail(h.slice(8));
+      if (window.QYV) QYV.openDetail(h.slice(8));
     } else if (['home', 'items', 'collect', 'energy', 'me'].indexOf(h) >= 0) {
       state.tab = h;
       state.detailId = null;
@@ -699,10 +699,10 @@
 
   function mount() {
     const view = $('#view');
-    const XCV = window.XCV;
+    const QYV = window.QYV;
     let html;
-    if (state.tab === 'collect' && XCV) {
-      html = XCV.renderDetailIfAny() || XCV.renderList();
+    if (state.tab === 'collect' && QYV) {
+      html = QYV.renderDetailIfAny() || QYV.renderList();
     } else if (state.detailId) {
       html = viewDetail(itemById(state.detailId));
     } else if (state.tab === 'home') {
@@ -716,7 +716,7 @@
     }
     view.innerHTML = html;
 
-    const collectDetail = !!(window.XCV && XCV.hasDetail());
+    const collectDetail = !!(window.QYV && QYV.hasDetail());
     $('#tabbar').innerHTML = TABS.map(function (t) {
       return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail ? 'active' : '') +
         '" data-action="tab" data-tab="' + t.id + '">' + t.icon + '<span>' + t.label + '</span></button>';
@@ -736,26 +736,26 @@
 
   // 把到期清单交给原生壳去发系统通知（浏览器里是空操作）
   function pushReminders() {
-    if (!window.XCPlatform || !window.XCPlatform.native) return;
+    if (!window.QYPlatform || !window.QYPlatform.native) return;
     const list = [];
     data.items.forEach(function (it) {
-      if (!XC.isActive(it)) return;
+      if (!QY.isActive(it)) return;
       const targets = [];
       if (it.expiresAt) targets.push({ date: it.expiresAt, kind: '到期' });
       if (it.warrantyUntil) targets.push({ date: it.warrantyUntil, kind: '保修到期' });
       targets.forEach(function (t) {
-        const days = XC.dayDiff(XC.today(), XC.parseDate(t.date));
+        const days = QY.dayDiff(QY.today(), QY.parseDate(t.date));
         if (days == null || days < 0) return;
         list.push({
           id: it.id + '_' + t.kind,
           title: it.name + ' · ' + t.kind,
-          body: XC.fmtDate(t.date) + (days > 0 ? '（还有 ' + days + ' 天）' : '（就是今天）'),
+          body: QY.fmtDate(t.date) + (days > 0 ? '（还有 ' + days + ' 天）' : '（就是今天）'),
           // 提前 3 天提醒；已经进入 3 天以内的，明天早上提醒一次
-          remindAt: days > 3 ? XC.addDays(days - 3) : XC.addDays(1)
+          remindAt: days > 3 ? QY.addDays(days - 3) : QY.addDays(1)
         });
       });
     });
-    XCPlatform.scheduleReminders(list);
+    QYPlatform.scheduleReminders(list);
   }
 
   /* ---------------- 事件委托 ---------------- */
@@ -767,14 +767,14 @@
     const id = el.getAttribute('data-id');
 
     // 收藏模块自己处理 c- 开头的动作
-    if (window.XCV && XCV.handleAction(action, el)) return;
+    if (window.QYV && QYV.handleAction(action, el)) return;
     // 备份模块处理 b- 开头的动作
-    if (window.XCB && XCB.handleAction(action, el)) return;
+    if (window.QYB && QYB.handleAction(action, el)) return;
 
     if (action === 'tab') {
       state.tab = el.getAttribute('data-tab');
       state.detailId = null;
-      if (window.XCV) XCV.clearDetail();
+      if (window.QYV) QYV.clearDetail();
       mount();
     } else if (action === 'detail') {
       state.detailId = id;
@@ -805,7 +805,7 @@
     } else if (action === 'goto-collect') {
       state.tab = 'collect';
       state.detailId = null;
-      if (window.XCV) XCV.openDetail(id);
+      if (window.QYV) QYV.openDetail(id);
       mount();
     } else if (action === 'selftest') {
       // 真机上没有地址栏，用这一行进入自检报告
@@ -815,8 +815,8 @@
       const cur = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
     } else if (action === 'reset') {
-      data = XC.reset();
-      if (window.XCV) XCV.reset();
+      data = QY.reset();
+      if (window.QYV) QYV.reset();
       state.detailId = null;
       mount();
       toast('已恢复示例数据');
@@ -828,7 +828,7 @@
   });
 
   document.addEventListener('input', function (e) {
-    if (window.XCV && XCV.handleInput(e)) return;
+    if (window.QYV && QYV.handleInput(e)) return;
     if (e.target.id === 'search') {
       state.query = e.target.value;
       const list = $('#item-list');
@@ -837,7 +837,7 @@
   });
 
   document.addEventListener('change', function (e) {
-    if (window.XCV && XCV.handleChange(e)) return;
+    if (window.QYV && QYV.handleChange(e)) return;
   });
 
   document.addEventListener('keydown', function (e) {
@@ -846,7 +846,7 @@
 
   /* ---------------- 给收藏模块的桥接接口 ---------------- */
 
-  window.XCUI = {
+  window.QYUI = {
     I: I,
     pageHead: pageHead,
     iconBtn: iconBtn,
@@ -884,5 +884,5 @@
     const imgBtn = document.querySelector('[data-action="c-long"]');
     if (imgBtn) imgBtn.click();
   }
-  if (bootHash.indexOf('bimport') >= 0 && window.XCB) XCB.demoImport();
+  if (bootHash.indexOf('bimport') >= 0 && window.QYB) QYB.demoImport();
 })();

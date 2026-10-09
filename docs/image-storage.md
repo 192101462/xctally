@@ -1,4 +1,4 @@
-# xcnote 随笔图片的存储方案
+# xctally 随笔图片的存储方案
 
 > 原型里图片是 **base64 直接塞进正文 HTML** 的。这只适合演示，正式版必须换掉。
 > 这份文档给出目标架构、压缩参数、跨平台坑和迁移步骤。
@@ -25,7 +25,7 @@
 
 ```
 Documents/                      ← App 私有目录（iOS: Application Support 更合适）
-├─ xcnote.db                    ← SQLite：物品 / 随笔 / 能源
+├─ xctally.db                    ← SQLite：物品 / 随笔 / 能源
 └─ media/
    └─ 2026/
       └─ 10/
@@ -63,14 +63,14 @@ CREATE INDEX idx_media_entry ON media(entry_id);
 
 ```html
 <p>第二杯把水温降到 90 度。</p>
-<img src="xcnote://media/01H8XQ...">
+<img src="xctally://media/01H8XQ...">
 ```
 
 ### ⚠️ 绝对不能存绝对路径
 
 ```
 ❌ file:///var/mobile/Containers/Data/Application/8F3A.../Documents/media/a.jpg
-✅ media/2026/10/01H8XQ..._a1b2c3.jpg   （或 xcnote://media/<id>）
+✅ media/2026/10/01H8XQ..._a1b2c3.jpg   （或 xctally://media/<id>）
 ```
 
 **iOS 每次安装、升级、恢复备份，沙盒容器 UUID 都会变。** 存绝对路径的结果是
@@ -105,7 +105,7 @@ CREATE INDEX idx_media_entry ON media(entry_id);
 1. 遍历 entries
 2. 解析 body_html，找出所有 src 以 data:image/ 开头的 img
 3. 逐张：base64 解码 → 写文件到 media/yyyy/mm/ → 插入 media 表
-4. 把该 img 的 src 换成 xcnote://media/<id>
+4. 把该 img 的 src 换成 xctally://media/<id>
 5. 写回 body_html
 6. 每处理完一条随笔就提交一次事务（可中断续跑，别指望一次跑完）
 7. 全部完成后 VACUUM 数据库回收空间
@@ -121,7 +121,7 @@ CREATE INDEX idx_media_entry ON media(entry_id);
 | 版本 | 格式 | 适用 |
 |---|---|---|
 | 原型 | 单个 JSON（图片 base64 内嵌） | 数据量小、演示 |
-| 正式版 | **ZIP**：`xcnote.db` + `media/` 目录 | 真实使用 |
+| 正式版 | **ZIP**：`xctally.db` + `media/` 目录 | 真实使用 |
 
 - 导出：打包成 zip，仍然保留"先对比再合并"的恢复流程
 - 恢复：解压到沙盒新目录 → 校验 sha256 → 重写路径前缀 → 合并数据库

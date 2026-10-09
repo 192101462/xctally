@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-xcnote 预览图生成脚本
+xctally 预览图生成脚本
 ---------------------------------------------------------------
 用无头 Chrome 渲染 prototype/index.html，并裁成手机比例，
 输出到 design/preview-*.png。改完 UI 后重新跑一次即可。
@@ -76,7 +76,7 @@ def shoot(chrome, profile, url, png, width, height, dsf, budget=2500):
 
 def main():
     chrome = find_chrome()
-    profile = tempfile.mkdtemp(prefix="xcnote-shots-")
+    profile = tempfile.mkdtemp(prefix="xctally-shots-")
     if not os.path.isdir(OUT):
         os.makedirs(OUT)
 

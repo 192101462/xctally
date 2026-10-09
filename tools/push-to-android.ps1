@@ -3,8 +3,8 @@
 # Run this ON THE MACHINE THAT HAS ANDROID STUDIO (the remote desktop box).
 #
 # Usage:
-#   tools\push-to-android.cmd -Project "D:\AndroidStudioProjects\XCNote"
-#   tools\push-to-android.cmd -Project "D:\AndroidStudioProjects\XCNote" -Mode apk
+#   tools\push-to-android.cmd -Project "D:\AndroidStudioProjects\xctally"
+#   tools\push-to-android.cmd -Project "D:\AndroidStudioProjects\xctally" -Mode apk
 #
 # Params:
 #   -Project   path to the Android Studio project (required)
@@ -26,7 +26,7 @@ $root = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path $Project)) { throw "Project folder not found: $Project" }
 $dst = (Resolve-Path $Project).Path
 
-Write-Host "=== xcnote push ===" -ForegroundColor Cyan
+Write-Host "=== xctally push ===" -ForegroundColor Cyan
 Write-Host "repo   : $root"
 Write-Host "project: $dst"
 Write-Host "mode   : $Mode"

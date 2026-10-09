@@ -1,4 +1,4 @@
-# xcnote · 安卓壳
+# xctally · 安卓壳
 
 把 `prototype/` 里那套已经跑通 54 项自检的网页应用，装进一个**极薄的安卓壳**里。
 
@@ -7,7 +7,7 @@ apps/android/
 └─ app/src/main/
    ├─ AndroidManifest.xml                  ← 覆盖
    ├─ assets/www/                          ← 脚本同步进来（网页应用本体）
-   ├─ java/com/xcnote/app/
+   ├─ java/com/qiyu/xctally/
    │  ├─ MainActivity.kt                   ← 承载 WebView + 原生能力桥
    │  └─ ReminderWorker.kt                 ← 每天检查到期并发系统通知
    └─ res/xml/file_paths.xml               ← 分享备份文件用
@@ -40,8 +40,8 @@ apps/android/
 
 | 项 | 值 |
 |---|---|
-| Name | `XCNote` |
-| Package name | `com.xcnote.app` |
+| Name | `xctally` |
+| Package name | `com.qiyu.xctally` |
 | Language | **Kotlin** |
 | Minimum SDK | **API 26**（Android 8.0，通知渠道需要） |
 | Build configuration language | Kotlin DSL |
@@ -62,7 +62,7 @@ python tools/sync-app-assets.py
 在仓库根目录执行（cmd 或 PowerShell 都行）：
 
 ```bat
-tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\XCNote"
+tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\xctally"
 ```
 
 > **不要用 `pwsh` 开头**——那是 PowerShell 7 的命令，Windows 自带的是 PowerShell 5.1，
@@ -71,14 +71,14 @@ tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\XCNote"
 >
 > 如果 `.cmd` 也被安全策略拦住，等价的手写命令是：
 > ```powershell
-> powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\copy-into-android-project.ps1 -Project "C:\Users\你\AndroidStudioProjects\XCNote"
+> powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\copy-into-android-project.ps1 -Project "C:\Users\你\AndroidStudioProjects\xctally"
 > ```
 
 脚本会先**校验目标确实是安卓项目**（找不到 `app\src\main\AndroidManifest.xml` 就报错退出），然后自动做完这些：
 
 1. 把 `prototype/` 的 8 个网页文件复制到 `app/src/main/assets/www/`
 2. 复制 `AndroidManifest.xml` / `MainActivity.kt` / `ReminderWorker.kt` / `file_paths.xml`
-3. 删掉模板生成的示例 `.kt`（只保留 `com\xcnote\app\` 下的，避免两份 MainActivity）
+3. 删掉模板生成的示例 `.kt`（只保留 `com\qiyu\xctally\` 下的，避免两份 MainActivity）
 4. **往 `app/build.gradle.kts` 里加那三行依赖**（会先存一份 `.bak` 备份）
 5. **检查 `strings.xml`**：已有 `app_name` 就不动；没有就补一条；文件不存在就创建一个
 6. **检查 `minSdk`**：低于 23 会提示你改（模板默认 24，一般不用管）
@@ -96,8 +96,8 @@ tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\XCNote"
 | 本仓库文件 | 复制到 Android 项目里的位置 |
 |---|---|
 | `apps/android/app/src/main/AndroidManifest.xml` | `app/src/main/AndroidManifest.xml`（**覆盖**） |
-| `apps/android/app/src/main/java/com/xcnote/app/MainActivity.kt` | `app/src/main/java/com/xcnote/app/MainActivity.kt`（覆盖模板的，并删掉模板原来那个） |
-| `apps/android/app/src/main/java/com/xcnote/app/ReminderWorker.kt` | 同目录 |
+| `apps/android/app/src/main/java/com/qiyu/xctally/MainActivity.kt` | `app/src/main/java/com/qiyu/xctally/MainActivity.kt`（覆盖模板的，并删掉模板原来那个） |
+| `apps/android/app/src/main/java/com/qiyu/xctally/ReminderWorker.kt` | 同目录 |
 | `apps/android/app/src/main/res/xml/file_paths.xml` | `app/src/main/res/xml/file_paths.xml`（新建 `xml` 目录） |
 | `prototype/{index.html,styles.css,platform.js,data.js,collect.js,backup.js,selftest.js,app.js}` | `app/src/main/assets/www/` |
 
@@ -184,7 +184,7 @@ dependencies {
 1. **第一次编译**：Gradle 依赖版本可能需要 Studio 自动调整
 2. **通知**：需要真机等到提醒日期，或临时把 `remindAt` 改成今天来验证
 3. **分享备份**：`FileProvider` 的 authority 用的是 `${applicationId}.fileprovider`，
-   如果你的包名不是 `com.xcnote.app`，`MainActivity` 里那行会自动跟随 `packageName`，无需改
+   如果你的包名不是 `com.qiyu.xctally`，`MainActivity` 里那行会自动跟随 `packageName`，无需改
 4. **大备份传输**：`evaluateJavascript` 回传超大字符串（几 MB）可能有上限。
    原型阶段数据量小没问题；将来图片改成文件存储后，备份会变成 zip，这条就绕开了
 

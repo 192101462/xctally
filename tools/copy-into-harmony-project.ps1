@@ -1,12 +1,12 @@
-# Copy xcnote's HarmonyOS shell files into a DevEco Studio project.
+# Copy xctally's HarmonyOS shell files into a DevEco Studio project.
 #
 # Usage (run from anywhere):
-#   pwsh tools/copy-into-harmony-project.ps1 -Project "D:\DevEcoProjects\XCNote"
+#   pwsh tools/copy-into-harmony-project.ps1 -Project "D:\DevEcoProjects\xctally"
 #
 # What it does:
 #   1. verifies the target really is a HarmonyOS project
 #   2. copies the web app (prototype/*) into entry/src/main/resources/rawfile/www
-#   3. copies Index.ets and XCBridge.ets
+#   3. copies Index.ets and QYBridge.ets
 # It does NOT overwrite module.json5 (template field names may differ); it prints
 # the snippet to paste instead.
 #
@@ -60,7 +60,7 @@ Write-Host ("  [web]  entry\src\main\resources\rawfile\www  ({0} files)" -f $cop
 # ---------------------------------------------------------------- 2. ArkTS sources
 $pairs = @(
     @{ From = "$shell\entry\src\main\ets\pages\Index.ets";     To = "$entryMain\ets\pages\Index.ets" },
-    @{ From = "$shell\entry\src\main\ets\bridge\XCBridge.ets"; To = "$entryMain\ets\bridge\XCBridge.ets" }
+    @{ From = "$shell\entry\src\main\ets\bridge\QYBridge.ets"; To = "$entryMain\ets\bridge\QYBridge.ets" }
 )
 foreach ($p in $pairs) {
     if (-not (Test-Path $p.From)) { throw "Missing in repo: $($p.From)" }
@@ -71,12 +71,19 @@ foreach ($p in $pairs) {
 }
 
 # ---------------------------------------------------------------- 3. string.json
-# module.json5 will reference $string:reason_reminder, so the resource must exist
-# or the build fails. Edit it through ConvertFrom-Json so the result is always
-# valid JSON, and fall back to a printed instruction if anything goes wrong.
+# module.json5 references $string:reason_reminder, so the resource must exist or the
+# build fails. Also set the launcher label from tools/app-name.txt (this script is
+# ASCII-only, so the Chinese name lives in that file).
+$appNameFile = Join-Path $PSScriptRoot 'app-name.txt'
+$appName = 'xctally'
+if (Test-Path $appNameFile) {
+    $v = ([System.IO.File]::ReadAllText($appNameFile, [System.Text.Encoding]::UTF8)).Trim()
+    if ($v) { $appName = $v }
+}
+
 $stringJson = Join-Path $entryMain 'resources\base\element\string.json'
 if (-not (Test-Path $stringJson)) {
-    Write-Host "  [strings] string.json not found - add this entry yourself:" -ForegroundColor Yellow
+    Write-Host "  [strings] string.json not found - add these entries yourself:" -ForegroundColor Yellow
     Write-Host '            { "name": "reason_reminder", "value": "Reminder for item expiry dates" }'
 } else {
     try {
@@ -84,20 +91,44 @@ if (-not (Test-Path $stringJson)) {
         $obj = $raw | ConvertFrom-Json
         $names = @()
         foreach ($s in @($obj.string)) { $names += $s.name }
-        if ($names -contains 'reason_reminder') {
-            Write-Host "  [strings] reason_reminder already present" -ForegroundColor Green
+
+        $changed = $false
+
+        # launcher label -> product name
+        foreach ($s in @($obj.string)) {
+            if ($s.name -eq 'EntryAbility_label' -and $s.value -ne $appName) {
+                $s.value = $appName
+                $changed = $true
+            }
+        }
+
+        if ($names -notcontains 'reason_reminder') {
+            $obj.string = @($obj.string) + [pscustomobject]@{
+                name = 'reason_reminder'
+                value = 'Reminder for item expiry dates'
+            }
+            $changed = $true
+        }
+
+        if (-not $changed) {
+            Write-Host "  [strings] already up to date" -ForegroundColor Green
         } else {
             Copy-Item $stringJson "$stringJson.bak" -Force
-            $entry = [pscustomobject]@{ name = 'reason_reminder'; value = 'Reminder for item expiry dates' }
-            $obj.string = @($obj.string) + $entry
             $json = $obj | ConvertTo-Json -Depth 10
+            # Windows PowerShell escapes non-ASCII as \uXXXX; turn it back into real
+            # characters so the file stays readable. Valid JSON either way.
+            try {
+                $json = [regex]::Replace($json, '\\u([0-9a-fA-F]{4})', {
+                    param($m) [char][int]("0x" + $m.Groups[1].Value)
+                })
+            } catch { }
             $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
             [System.IO.File]::WriteAllText($stringJson, $json, $utf8NoBom)
-            Write-Host "  [strings] added reason_reminder (backup: string.json.bak)" -ForegroundColor Green
+            Write-Host "  [strings] label + reason_reminder set (backup: string.json.bak)" -ForegroundColor Green
         }
     } catch {
         Write-Host ("  [strings] could not edit string.json ({0})" -f $_.Exception.Message) -ForegroundColor Yellow
-        Write-Host '            add this entry yourself:' -ForegroundColor Yellow
+        Write-Host '            add these entries yourself:' -ForegroundColor Yellow
         Write-Host '            { "name": "reason_reminder", "value": "Reminder for item expiry dates" }'
     }
 }

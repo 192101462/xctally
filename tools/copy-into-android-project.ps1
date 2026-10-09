@@ -1,13 +1,13 @@
-# Copy xcnote's Android shell files into an Android Studio project.
+# Copy xctally's Android shell files into an Android Studio project.
 #
 # Usage (from the repo root, cmd or PowerShell):
-#     tools\copy-android.cmd -Project "C:\Users\you\AndroidStudioProjects\XCNote"
+#     tools\copy-android.cmd -Project "C:\Users\you\AndroidStudioProjects\xctally"
 #
 # What it does automatically:
 #   1. verifies the target really is an Android project
 #   2. copies the web app (prototype/*) into app/src/main/assets/www
 #   3. copies the shell files (manifest / MainActivity / ReminderWorker / file_paths)
-#   4. removes every .kt that is NOT under com\xcnote\app
+#   4. removes every .kt that is NOT under com\qiyu\xctally
 #   5. adds the three Gradle dependencies (keeps a .bak of the build file)
 #   6. makes sure strings.xml contains app_name (merges, never clobbers)
 #   7. checks minSdk
@@ -48,7 +48,43 @@ if (-not (Test-Path $manifest)) {
     throw "This does not look like an Android project (no app\src\main\AndroidManifest.xml): $dst"
 }
 
+# ---------------------------------------------------------------- 0. detect package + app name
+# Read the package name from the project itself instead of hardcoding it, so this
+# script keeps working if the package is ever renamed. It also rewrites the
+# `package` line of the Kotlin files to match, so the two can never drift apart.
+$gradlePath = $null
+foreach ($name in @('build.gradle.kts', 'build.gradle')) {
+    $p = Join-Path $dst "app\$name"
+    if (Test-Path $p) { $gradlePath = $p; break }
+}
+if ($gradlePath -eq $null) { throw "Cannot find app/build.gradle(.kts) in $dst" }
+
+$gx = Read-Text $gradlePath
+$pkg = ''
+foreach ($re in @(
+    'namespace\s*=\s*"([^"]+)"',
+    'applicationId\s*=\s*"([^"]+)"',
+    "namespace\s+['""]([^'""]+)",
+    "applicationId\s+['""]([^'""]+)"
+)) {
+    $m = [regex]::Match($gx, $re)
+    if ($m.Success) { $pkg = $m.Groups[1].Value; break }
+}
+if (-not $pkg) { $pkg = 'com.qiyu.xctally' }
+$pkgPath = $pkg -replace '\.', '\'
+$ktDir = Join-Path $mainDir "java\$pkgPath"
+
+# Display name lives in tools/app-name.txt so this ASCII-only script can still
+# write Chinese into the project.
+$appNameFile = Join-Path $PSScriptRoot 'app-name.txt'
+$appName = 'xctally'
+if (Test-Path $appNameFile) {
+    $v = (Read-Text $appNameFile).Trim()
+    if ($v) { $appName = $v }
+}
+
 Write-Host "Target project: $dst" -ForegroundColor Cyan
+Write-Host "Package       : $pkg" -ForegroundColor Cyan
 Write-Host ""
 
 # ---------------------------------------------------------------- 1. web app
@@ -71,10 +107,8 @@ Write-Host ("  [web]     assets\www  ({0} files)" -f $copied) -ForegroundColor G
 
 # ---------------------------------------------------------------- 2. shell sources
 $pairs = @(
-    @{ From = "$shell\app\src\main\AndroidManifest.xml";                   To = "$manifest" },
-    @{ From = "$shell\app\src\main\java\com\xcnote\app\MainActivity.kt";   To = "$mainDir\java\com\xcnote\app\MainActivity.kt" },
-    @{ From = "$shell\app\src\main\java\com\xcnote\app\ReminderWorker.kt"; To = "$mainDir\java\com\xcnote\app\ReminderWorker.kt" },
-    @{ From = "$shell\app\src\main\res\xml\file_paths.xml";                To = "$mainDir\res\xml\file_paths.xml" }
+    @{ From = "$shell\app\src\main\AndroidManifest.xml";    To = "$manifest" },
+    @{ From = "$shell\app\src\main\res\xml\file_paths.xml"; To = "$mainDir\res\xml\file_paths.xml" }
 )
 foreach ($p in $pairs) {
     if (-not (Test-Path $p.From)) { throw "Missing in repo: $($p.From)" }
@@ -84,11 +118,25 @@ foreach ($p in $pairs) {
     Write-Host ("  [src]     " + $p.To.Replace($dst, '.')) -ForegroundColor Green
 }
 
+# Kotlin sources: land them in the package folder the project actually uses,
+# and pin the `package` line to the detected name.
+foreach ($kt in @('MainActivity.kt', 'ReminderWorker.kt')) {
+    $from = "$shell\app\src\main\java\com\qiyu\xctally\$kt"
+    if (-not (Test-Path $from)) { throw "Missing in repo: $from" }
+    if (-not (Test-Path $ktDir)) { New-Item -ItemType Directory -Force -Path $ktDir | Out-Null }
+    $to = Join-Path $ktDir $kt
+    Copy-Item $from $to -Force
+    $body = Read-Text $to
+    $body = [regex]::Replace($body, '(?m)^package\s+[\w.]+', "package $pkg")
+    Write-Text $to $body
+    Write-Host ("  [src]     " + $to.Replace($dst, '.')) -ForegroundColor Green
+}
+
 # ---------------------------------------------------------------- 3. drop template samples
 # The template's own MainActivity.kt has the same file name as ours, so filter by folder.
 $javaRoot = Join-Path $mainDir 'java'
 if (Test-Path $javaRoot) {
-    $ourPkg = Join-Path $javaRoot 'com\xcnote\app'
+    $ourPkg = $ktDir
     $junk = Get-ChildItem $javaRoot -Recurse -Filter '*.kt' | Where-Object {
         -not $_.FullName.StartsWith($ourPkg, [System.StringComparison]::OrdinalIgnoreCase)
     }
@@ -109,24 +157,34 @@ if (-not (Test-Path (Split-Path -Parent $stringsPath))) {
 if (Test-Path $stringsPath) {
     $sx = Read-Text $stringsPath
     if ($sx -match 'name\s*=\s*"app_name"') {
-        Write-Host "  [strings] app_name already present, left untouched" -ForegroundColor Green
+        $before = $sx
+        $sx = [regex]::Replace($sx, '(name\s*=\s*"app_name"\s*>\s*)([^<]*)(\s*</string>)',
+            ('${1}' + $appName + '${3}'))
+        if ($sx -eq $before) {
+            Write-Host "  [strings] app_name already correct" -ForegroundColor Green
+        } else {
+            Copy-Item $stringsPath "$stringsPath.bak" -Force
+            Write-Text $stringsPath $sx
+            Write-Host "  [strings] app_name value updated (backup: strings.xml.bak)" -ForegroundColor Green
+        }
     } else {
         Copy-Item $stringsPath "$stringsPath.bak" -Force
-        $sx = $sx -replace '(?s)</resources>', '    <string name="app_name">xcnote</string>' + "`r`n</resources>"
+        $sx = $sx -replace '(?s)</resources>',
+            ('    <string name="app_name">' + $appName + '</string>' + "`r`n</resources>")
         Write-Text $stringsPath $sx
         Write-Host "  [strings] added app_name (backup: strings.xml.bak)" -ForegroundColor Green
     }
 } else {
     Copy-Item $stringsFallback $stringsPath -Force
+    $sx = Read-Text $stringsPath
+    $sx = [regex]::Replace($sx, '(name\s*=\s*"app_name"\s*>\s*)([^<]*)(\s*</string>)',
+        ('${1}' + $appName + '${3}'))
+    Write-Text $stringsPath $sx
     Write-Host "  [strings] no strings.xml found, created one from the repo copy" -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------- 5. Gradle dependencies
-$gradle = $null
-foreach ($name in @('build.gradle.kts', 'build.gradle')) {
-    $p = Join-Path $dst "app\$name"
-    if (Test-Path $p) { $gradle = $p; break }
-}
+$gradle = $gradlePath
 if ($gradle -eq $null) {
     Write-Host "  [gradle]  no app/build.gradle(.kts) found, add dependencies manually" -ForegroundColor Yellow
 } else {

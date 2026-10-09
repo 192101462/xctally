@@ -5,5 +5,5 @@
   app_name entry into it instead of overwriting the file.
 -->
 <resources>
-    <string name="app_name">xcnote</string>
+    <string name="app_name">xctally</string>
 </resources>

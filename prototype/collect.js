@@ -1,4 +1,4 @@
-/* xcnote · 收藏模块（统一条目 + 插件 + 图文混排正文）
+/* xctally · 收藏模块（统一条目 + 插件 + 图文混排正文）
  * ---------------------------------------------------------------
  * 设计：
  *   1. 收藏只有一种条目，不再分"日记/零食/影视/游玩"
@@ -6,17 +6,17 @@
  *   2. 正文叫「随笔正文」，支持在文字中间穿插图片与动图（知乎式）
  *      内容以受限 HTML 存储：只允许 p / br / strong / em / img
  *   3. 分类完全自定义，类型不再决定字段
- *   4. 数据独立存储（xcnote.collect.v1），备份时由 backup.js 统一打包
+ *   4. 数据独立存储（xctally.collect.v1），备份时由 backup.js 统一打包
  * ---------------------------------------------------------------
  */
 (function () {
   'use strict';
 
-  const XC = window.XC;
-  const KEY = 'xcnote.collect.v1';
+  const QY = window.QY;
+  const KEY = 'xctally.collect.v1';
   const FONT = '"PingFang SC","Microsoft YaHei","Hiragino Sans GB",sans-serif';
 
-  function UI() { return window.XCUI; }
+  function UI() { return window.QYUI; }
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -65,7 +65,7 @@
   }
 
   function seed() {
-    const D = XC.addDays;
+    const D = QY.addDays;
     const imgCoffee = ph(640, 420, '#F7E3C8', '#D9A46A', '☕️');
     const imgBean = ph(640, 360, '#E8DCCB', '#B99B76', '🫘');
     const imgCookie = ph(640, 420, '#FFE3EA', '#F2A6BC', '🍪');
@@ -141,7 +141,7 @@
           title: '关于这个 App 的一点想法',
           cat: '灵感',
           date: D(-9),
-          tags: ['产品', 'xcnote'],
+          tags: ['产品', 'xctally'],
           plugins: [{ k: 'mood', v: '兴奋' }],
           bodyHtml: '<p>想做一个只给自己用的记录工具。不是记账，也不是待办 —— 是想知道「我拥有的东西每天值多少钱」「哪些钱是白花的」。</p>' +
             '<p>先做出来，能自己用三个月，再谈别的。</p>'
@@ -228,7 +228,7 @@
       const p = plug(e, k);
       if (!p || p.v == null || p.v === '') return;
       if (k === 'rating') bits.push('★' + p.v);
-      else if (k === 'price') bits.push(XC.fmtMoney(p.v));
+      else if (k === 'price') bits.push(QY.fmtMoney(p.v));
       else if (k === 'place') bits.push(p.v.name || '已定位');
       else if (k === 'mood') bits.push(p.v);
       else if (k === 'link') bits.push('链接');
@@ -264,7 +264,7 @@
     const pr = plug(e, 'price');
     let side = '';
     if (r) side += '<div class="row-value">' + stars(r.v) + '</div>';
-    if (pr && pr.v != null && pr.v > 0) side += '<div class="row-note">' + XC.fmtMoney(pr.v) + '</div>';
+    if (pr && pr.v != null && pr.v > 0) side += '<div class="row-note">' + QY.fmtMoney(pr.v) + '</div>';
     if (!side) side = '<div class="row-value" style="font-size:13px;color:var(--label-3)">' + shortDate(e.date) + '</div>';
 
     return '' +
@@ -324,7 +324,7 @@
     let out = '';
     const metrics = [];
     if (r) metrics.push('<div class="metric"><div class="m-label">评分</div><div class="m-value">' + r.v + '<small>/5</small></div></div>');
-    if (pr && pr.v != null) metrics.push('<div class="metric"><div class="m-label">价格</div><div class="m-value">' + XC.fmtMoney(pr.v) + '</div></div>');
+    if (pr && pr.v != null) metrics.push('<div class="metric"><div class="m-label">价格</div><div class="m-value">' + QY.fmtMoney(pr.v) + '</div></div>');
     if (md) metrics.push('<div class="metric"><div class="m-label">心情</div><div class="m-value" style="font-size:15px">' + esc(md.v) + '</div></div>');
     if (metrics.length) {
       out += '<div class="metrics" style="grid-template-columns:repeat(' + metrics.length + ',1fr);margin-top:16px">' +
@@ -356,7 +356,7 @@
 
     const meta = [];
     if (e.cat) meta.push(catEmoji(e.cat) + ' ' + e.cat);
-    meta.push(XC.fmtDate(e.date));
+    meta.push(QY.fmtDate(e.date));
     const n = imageCount(e.bodyHtml);
     if (n) meta.push(n + ' 张图');
 
@@ -603,7 +603,7 @@
   function formHTML(entry) {
     editingId = entry ? entry.id : null;
     placeCoord = { lat: null, lng: null };
-    const e = entry || { title: '', cat: (db.cats[0] && db.cats[0].name), date: XC.iso(XC.today()), tags: [], plugins: [], bodyHtml: '' };
+    const e = entry || { title: '', cat: (db.cats[0] && db.cats[0].name), date: QY.iso(QY.today()), tags: [], plugins: [], bodyHtml: '' };
     if (entry) {
       const pl = plug(entry, 'place');
       if (pl && pl.v) placeCoord = { lat: pl.v.lat, lng: pl.v.lng };
@@ -721,7 +721,7 @@
     const payload = {
       title: title,
       cat: catSel.value === '__new' ? (db.cats[0] ? db.cats[0].name : '未分类') : catSel.value,
-      date: document.getElementById('c-date').value || XC.iso(XC.today()),
+      date: document.getElementById('c-date').value || QY.iso(QY.today()),
       tags: (document.getElementById('c-tags').value || '').split(/[\s,，]+/).filter(Boolean),
       plugins: readPlugins(),
       bodyHtml: bodyHtml
@@ -739,7 +739,7 @@
       return;
     }
 
-    payload.id = XC.uid('c');
+    payload.id = QY.uid('c');
     db.entries.push(payload);
     save();
     UI().closeSheet();
@@ -754,13 +754,13 @@
     const lines = [e.title];
     const meta = [];
     if (e.cat) meta.push(e.cat);
-    meta.push(XC.fmtDate(e.date));
+    meta.push(QY.fmtDate(e.date));
     const md = plug(e, 'mood');
     if (md) meta.push(md.v);
     const pl = plug(e, 'place');
     if (pl && pl.v && pl.v.name) meta.push('📍' + pl.v.name);
     const pr = plug(e, 'price');
-    if (pr && pr.v) meta.push(XC.fmtMoney(pr.v));
+    if (pr && pr.v) meta.push(QY.fmtMoney(pr.v));
     const r = plug(e, 'rating');
     if (r) meta.push('★'.repeat(r.v));
     lines.push(meta.join(' · '));
@@ -929,11 +929,11 @@
       // 元信息
       const meta = [];
       if (e.cat) meta.push(e.cat);
-      meta.push(XC.fmtDate(e.date));
+      meta.push(QY.fmtDate(e.date));
       const r = plug(e, 'rating');
       if (r) meta.push('★'.repeat(r.v) + '☆'.repeat(5 - r.v));
       const pr = plug(e, 'price');
-      if (pr && pr.v) meta.push(XC.fmtMoney(pr.v));
+      if (pr && pr.v) meta.push(QY.fmtMoney(pr.v));
       const pl = plug(e, 'place');
       if (pl && pl.v && pl.v.name) meta.push('📍' + pl.v.name);
       g.fillStyle = '#8E8E93';
@@ -966,10 +966,10 @@
       // 页脚
       g.fillStyle = '#C7C7CC';
       g.font = '26px ' + FONT;
-      g.fillText('xcnote · ' + (e.tags || []).map(function (x) { return '#' + x; }).join(' '), PAD + 32, H - PAD - 40);
+      g.fillText('琪遇台账 · ' + (e.tags || []).map(function (x) { return '#' + x; }).join(' '), PAD + 32, H - PAD - 40);
 
       const url = c.toDataURL('image/png');
-      const name = 'xcnote-' + e.title.replace(/[\\/:*?"<>|\s]/g, '') + '.png';
+      const name = 'xctally-' + e.title.replace(/[\\/:*?"<>|\s]/g, '') + '.png';
       UI().openSheet('' +
         '<div class="sheet">' +
           '<div class="grabber"></div>' +
@@ -1240,7 +1240,7 @@
     return false;
   }
 
-  window.XCV = {
+  window.QYV = {
     renderList: renderList,
     renderDetailIfAny: renderDetailIfAny,
     clearDetail: function () { state.detailId = null; },

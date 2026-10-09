@@ -1,10 +1,17 @@
-# xcnote
+# 琪遇台账（xctally）
 
 > 家庭消耗台账 + 个人随笔 —— 记录**我有什么**（顺带算出**什么时候过期**、**每天值多少钱**、**每月用了多少**），也记录**我经历了什么**（图文随笔，插件式挂载评分 / 价格 / 定位）。
 >
 > **单机本地工具**：不注册、不联网、不上传。换手机靠导出备份文件。
 >
-> 当前状态：**可交互原型 + 两个手机壳**（安卓 APK / 鸿蒙 HAP，见 `apps/`）。
+> | | |
+> |---|---|
+> | App 名称 | 琪遇台账 |
+> | 代号 / 仓库 | xctally |
+> | 包名 | `com.qiyu.xctally` |
+> | 出品 | 琪遇（qiyu） |
+> | 当前状态 | **可交互原型 + 两个手机壳**（安卓 APK / 鸿蒙 HAP，见 `apps/`） |
+>
 > 原型里的 54 项页内自检全过，UI 与业务逻辑只有一份，两个壳共用。
 
 ---
@@ -42,7 +49,7 @@
 ## 目录结构
 
 ```
-xcnote/
+xctally/
 ├─ prototype/            网页应用本体（原生 HTML/CSS/JS，无依赖无构建）
 │  ├─ index.html         页面骨架 + 手机外框
 │  ├─ styles.css         设计变量与样式（浅深两套主题 + 原生壳模式）
@@ -123,7 +130,7 @@ xcnote/
 - 支持「编辑」已有随笔，不用删了重写
 
 ### 6. 数据只在本机，但随你带走
-xcnote 是**单机本地工具**：不注册、不联网、不上传，数据存在设备本地。
+xctally 是**单机本地工具**：不注册、不联网、不上传，数据存在设备本地。
 
 - **导出完整备份**：物品 + 随笔 + 能源打包成一个 JSON 文件，换手机时用它搬过去
 - **从备份恢复**：先算差异并预览（新增 / 相同 / 冲突），确认后才合并
@@ -151,10 +158,10 @@ UI 与业务逻辑只有**一份**（`prototype/`），两个壳只负责"装一
 rem 1. 在 Android Studio / DevEco 里各新建一个空项目，然后回到本仓库执行：
 
 rem 安卓（Windows 自带的 PowerShell 5.1 即可，不需要装 PowerShell 7）
-tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\XCNote"
+tools\copy-android.cmd -Project "C:\Users\你\AndroidStudioProjects\xctally"
 
 rem 鸿蒙
-tools\copy-harmony.cmd -Project "D:\DevEcoProjects\XCNote"
+tools\copy-harmony.cmd -Project "D:\DevEcoProjects\xctally"
 ```
 
 两个 `.cmd` 只是包装：它们自动挑可用的 PowerShell（`pwsh` 或 `powershell`），

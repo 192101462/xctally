@@ -1,9 +1,9 @@
 @echo off
 rem ---------------------------------------------------------------
-rem  xcnote - copy the Android shell into an Android Studio project
+rem  xctally - copy the Android shell into an Android Studio project
 rem
 rem  Usage (from the repo root, cmd or PowerShell):
-rem      tools\copy-android.cmd -Project "C:\Users\you\AndroidStudioProjects\XCNote"
+rem      tools\copy-android.cmd -Project "C:\Users\you\AndroidStudioProjects\xctally"
 rem
 rem  Why this wrapper exists:
 rem    - the .ps1 needs an execution policy that allows scripts

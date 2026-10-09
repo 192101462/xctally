@@ -1,4 +1,4 @@
-package com.xcnote.app
+package com.qiyu.xctally
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit
  *   - 精确定时需要 SCHEDULE_EXACT_ALARM 权限，国内 ROM 还会额外拦截
  *   - WorkManager 会自己处理重启、Doze、后台限制，省心且够用
  *
- * 提醒清单由网页在每次渲染时交过来（XCAndroid.scheduleReminders），
+ * 提醒清单由网页在每次渲染时交过来（QYAndroid.scheduleReminders），
  * 存进 SharedPreferences，这个 Worker 只负责按 remindAt 到期就弹通知。
  */
 class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
@@ -71,7 +71,7 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
 
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title.ifEmpty { "xcnote 提醒" })
+            .setContentTitle(title.ifEmpty { "xctally 提醒" })
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
@@ -87,10 +87,10 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
     }
 
     companion object {
-        private const val PREFS = "xcnote"
+        private const val PREFS = "xctally"
         private const val KEY = "reminders"
-        private const val CHANNEL = "xcnote_due"
-        private const val WORK = "xcnote_reminders"
+        private const val CHANNEL = "xctally_due"
+        private const val WORK = "xctally_reminders"
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

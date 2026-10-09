@@ -4,8 +4,8 @@
 # after cloning the repo there once.
 #
 # Usage:
-#   tools\update-android.cmd -Project "D:\AndroidStudioProjects\XCNote"
-#   tools\update-android.cmd -Project "D:\AndroidStudioProjects\XCNote" -Mode apk
+#   tools\update-android.cmd -Project "D:\AndroidStudioProjects\xctally"
+#   tools\update-android.cmd -Project "D:\AndroidStudioProjects\xctally" -Mode apk
 #
 # It will NOT pull if the working tree has local changes - it prints them and
 # stops, so nothing you edited on the build machine gets overwritten.

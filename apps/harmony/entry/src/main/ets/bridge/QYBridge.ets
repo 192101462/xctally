@@ -16,7 +16,7 @@ interface ReminderItem {
 }
 
 /**
- * xcnote 鸿蒙原生能力桥
+ * xctally 鸿蒙原生能力桥
  *
  * 注意：@JavaScriptProxy 暴露的方法只接受/返回基本类型（string/number/boolean），
  * 且必须同步返回。所以异步操作（选文件）完成后，用 runJavaScript 回调网页。
@@ -25,7 +25,7 @@ interface ReminderItem {
  *    如果某个 API 的签名与你 SDK 里的不一致，DevEco 会直接报错并给出正确签名，
  *    按提示调整即可；实在不行先注释掉对应方法，App 其余功能不受影响。
  */
-export class XCBridge {
+export class QYBridge {
   private ctx: common.UIAbilityContext | null = null;
   private controller: web_webview.WebviewController | null = null;
   private lastSavedPath: string = '';
@@ -133,7 +133,7 @@ export class XCBridge {
     }
     const payload = text === null ? 'null' : JSON.stringify(text);
     c.runJavaScript(
-      'window.XCPlatform && window.XCPlatform._deliver(' + JSON.stringify(id) + ',' + payload + ')'
+      'window.QYPlatform && window.QYPlatform._deliver(' + JSON.stringify(id) + ',' + payload + ')'
     );
   }
 

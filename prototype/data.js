@@ -1,4 +1,4 @@
-/* xcnote · 数据层（原型）
+/* xctally · 数据层（原型）
  * ---------------------------------------------------------------
  * 两个核心实体：
  *   Item  —— 我拥有 / 记录的「一样东西」
@@ -367,7 +367,7 @@
 
   /* ---------------- 本地存储 ---------------- */
 
-  const KEY = 'xcnote.prototype.v1';
+  const KEY = 'xctally.prototype.v1';
 
   function load() {
     try {
@@ -391,7 +391,7 @@
     return (prefix || 'id') + '_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3);
   }
 
-  global.XC = {
+  global.QY = {
     DAY: DAY,
     CATEGORIES: CATEGORIES,
     CATEGORY_NAMES: CATEGORY_NAMES,

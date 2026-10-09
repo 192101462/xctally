@@ -1,4 +1,4 @@
-/* xcnote · 页内自检
+/* xctally · 页内自检
  * ---------------------------------------------------------------
  * 打开 prototype/index.html#selftest 即会运行，把断言结果渲染成一张报告。
  * 也可以用命令行抓结果：
@@ -57,14 +57,14 @@
   }
 
   function run() {
-    const XC = window.XC;
-    const XCV = window.XCV;
-    const XCB = window.XCB;
-    const XCUI = window.XCUI;
+    const QY = window.QY;
+    const QYV = window.QYV;
+    const QYB = window.QYB;
+    const QYUI = window.QYUI;
 
-    ok('模块加载 XC / XCV / XCB / XCUI', !!(XC && XCV && XCB && XCUI));
-    if (!(XC && XCV && XCB)) return Promise.resolve();
-    const T = XCV._test;
+    ok('模块加载 QY / QYV / QYB / QYUI', !!(QY && QYV && QYB && QYUI));
+    if (!(QY && QYV && QYB)) return Promise.resolve();
+    const T = QYV._test;
 
     /* ---------- 1. 富文本净化 ---------- */
     const dirty =
@@ -122,9 +122,9 @@
       });
     }).then(function () {
       /* ---------- 5. 编辑往返（必须是更新，不是新增） ---------- */
-      const first = XCV.recent(1)[0];
+      const first = QYV.recent(1)[0];
       ok('存在一条随笔可用于编辑测试', !!first);
-      const before = XCV.count();
+      const before = QYV.count();
       const originalTitle = first.title;
 
       // 走真实点击路径：切到收藏标签 → 点开这一条 → 点编辑
@@ -152,67 +152,67 @@
       bodyEl.innerHTML = '<p>改过的正文</p><script>alert(1)</script><img src="https://evil.example/x.png">';
       document.querySelector('[data-action="c-save"]').click();
 
-      eq('编辑保存：条数不变（是更新不是新增）', XCV.count(), before);
+      eq('编辑保存：条数不变（是更新不是新增）', QYV.count(), before);
       const saved = T.get(first.id);
       eq('编辑保存：标题已更新', saved.title, 'SELFTEST-EDIT-OK');
       ok('编辑保存：脏脚本被净化', String(saved.bodyHtml).indexOf('script') < 0, saved.bodyHtml);
       ok('编辑保存：外链图片被丢弃', String(saved.bodyHtml).indexOf('evil.example') < 0);
       ok('编辑保存：正文文字保留', String(saved.bodyHtml).indexOf('改过的正文') >= 0);
 
-      // 复原，别污染演示数据（收藏数据要存 xcnote.collect.v1，不是 app 数据）
+      // 复原，别污染演示数据（收藏数据要存 xctally.collect.v1，不是 app 数据）
       saved.title = originalTitle;
-      XCV.save();
+      QYV.save();
     }).then(function () {
       /* ---------- 6. 备份与冲突保护 ---------- */
-      const pkg = XCB.buildBackup();
-      eq('备份：格式标识', pkg.format, 'xcnote.backup');
+      const pkg = QYB.buildBackup();
+      eq('备份：格式标识', pkg.format, 'xctally.backup');
       ok('备份：包含物品', pkg.app.items.length > 0, pkg.app.items.length);
       ok('备份：包含随笔', pkg.collect.entries.length > 0, pkg.collect.entries.length);
       ok('备份：包含能源表具', pkg.app.meters.length > 0, pkg.app.meters.length);
 
-      const target = XCV.recent(1)[0];
+      const target = QYV.recent(1)[0];
       const original = T.get(target.id).title;
       const remoteOld = JSON.parse(JSON.stringify(T.get(target.id)));
       remoteOld.title = 'BACKUP-OLD-TITLE';
 
-      const r1 = XCV.merge({ entries: [remoteOld], cats: [] }, false);
+      const r1 = QYV.merge({ entries: [remoteOld], cats: [] }, false);
       eq('冲突：默认判定为冲突', r1.conflict, 1);
       eq('冲突：本地版本未被覆盖', T.get(target.id).title, original);
 
-      const r2 = XCV.merge({ entries: [JSON.parse(JSON.stringify(remoteOld))], cats: [] }, true);
+      const r2 = QYV.merge({ entries: [JSON.parse(JSON.stringify(remoteOld))], cats: [] }, true);
       eq('冲突：选择对方版本时执行更新', r2.updated, 1);
       eq('冲突：已采用对方版本', T.get(target.id).title, 'BACKUP-OLD-TITLE');
 
       // 复原
       T.get(target.id).title = original;
-      XCV.save();
+      QYV.save();
     }).then(function () {
       /* ---------- 7. 物品成本计算 ---------- */
-      const d = XC.load();
+      const d = QY.load();
       const faqia = d.items.filter(function (i) { return i.id === 'it_faqia'; })[0];
       ok('成本：找到发卡这条记录', !!faqia);
       if (faqia) {
-        ok('成本：持有天数大于 200 天', XC.heldDays(faqia) > 200, XC.heldDays(faqia));
-        const expect = 9.9 / XC.heldDays(faqia);
+        ok('成本：持有天数大于 200 天', QY.heldDays(faqia) > 200, QY.heldDays(faqia));
+        const expect = 9.9 / QY.heldDays(faqia);
         ok('成本：日均成本 = 总价 ÷ 持有天数',
-          Math.abs(XC.perDay(faqia, d) - expect) < 1e-9,
-          XC.perDay(faqia, d).toFixed(4));
+          Math.abs(QY.perDay(faqia, d) - expect) < 1e-9,
+          QY.perDay(faqia, d).toFixed(4));
         ok('成本：未过期的牛奶不会计入浪费',
           d.items.filter(function (i) { return i.id === 'it_milk'; })[0] &&
-          !XC.isExpired(d.items.filter(function (i) { return i.id === 'it_milk'; })[0]));
+          !QY.isExpired(d.items.filter(function (i) { return i.id === 'it_milk'; })[0]));
       }
-      const s = XC.summaries(d);
+      const s = QY.summaries(d);
       ok('汇总：已浪费金额等于三条过期物品之和',
         Math.abs(s.wasted - 38.6) < 0.01, s.wasted);
       ok('汇总：持有成本合计为正常数值', s.daily > 1 && s.daily < 500, s.daily.toFixed(2));
     }).then(function () {
       /* ---------- 8. 存储占用（信息项） ---------- */
-      const imgBytes = XCV.imageBytes();
-      ok('存储：随笔图片占用已统计', imgBytes > 0, XCUI ? '' : '');
+      const imgBytes = QYV.imageBytes();
+      ok('存储：随笔图片占用已统计', imgBytes > 0, QYUI ? '' : '');
       results.push({ name: '存储：随笔图片合计', pass: true, detail: T.humanSize(imgBytes) });
       results.push({ name: '存储：localStorage 合计', pass: true, detail: T.humanSize(
-        (localStorage.getItem('xcnote.prototype.v1') || '').length +
-        (localStorage.getItem('xcnote.collect.v1') || '').length) });
+        (localStorage.getItem('xctally.prototype.v1') || '').length +
+        (localStorage.getItem('xctally.collect.v1') || '').length) });
     });
   }
 
@@ -232,7 +232,7 @@
       '<div class="selftest">' +
         '<button class="back-app" onclick="location.hash=\'\';location.reload()">← 返回应用</button>' +
         '<h1>SELFTEST ' + (fail === 0 ? 'ALL PASSED' : 'FAILED') + ' · ' + pass + '/' + results.length + '</h1>' +
-        '<p class="sub">xcnote 页内自检 · ' + new Date().toLocaleString() +
+        '<p class="sub">琪遇台账 页内自检 · ' + new Date().toLocaleString() +
           ' · 失败项已置顶，通过的只列名称</p>' +
         sorted.map(row).join('') +
         '<style>' +

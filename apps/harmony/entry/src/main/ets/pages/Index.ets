@@ -1,9 +1,9 @@
 import web_webview from '@ohos.web.webview';
 import common from '@ohos.app.ability.common';
-import { XCBridge } from '../bridge/XCBridge';
+import { QYBridge } from '../bridge/QYBridge';
 
 /**
- * xcnote 鸿蒙壳
+ * xctally 鸿蒙壳
  *
  * 用 ArkWeb 装下 rawfile/www/ 里的网页应用（与安卓壳同一份代码）。
  * 返回键交给网页决定：先关面板 → 再回上一层 → 都没有才退出。
@@ -12,7 +12,7 @@ import { XCBridge } from '../bridge/XCBridge';
 @Component
 struct Index {
   controller: web_webview.WebviewController = new web_webview.WebviewController();
-  private bridge: XCBridge = new XCBridge();
+  private bridge: QYBridge = new QYBridge();
 
   aboutToAppear(): void {
     const ctx = getContext(this) as common.UIAbilityContext;
@@ -23,7 +23,7 @@ struct Index {
   onBackPress(): boolean {
     // 返回值必须是同步的，所以这里总是"我来处理"，
     // 由网页告诉我们是否已经处理完（没处理完就自己退出应用）
-    this.controller.runJavaScript(XCBridge.BACK_JS).then((res: string) => {
+    this.controller.runJavaScript(QYBridge.BACK_JS).then((res: string) => {
       if (!res || res.indexOf('handled') < 0) {
         const ctx = getContext(this) as common.UIAbilityContext;
         ctx.terminateSelf();
@@ -43,10 +43,10 @@ struct Index {
         .fileAccess(true)
         .imageAccess(true)
         .databaseAccess(true)
-        // 桥接给网页的原生能力（网页里是 window.XCHarmony）
+        // 桥接给网页的原生能力（网页里是 window.QYHarmony）
         .javaScriptProxy({
           object: this.bridge,
-          name: 'XCHarmony',
+          name: 'QYHarmony',
           methodList: ['isApp', 'toast', 'saveFile', 'shareLastFile', 'pickFile', 'scheduleReminders'],
           controller: this.controller
         })
