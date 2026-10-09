@@ -1,0 +1,43 @@
+# ============================================================
+#  xcnote .gitignore
+# ============================================================
+
+# --- 同步进原生壳的网页副本：不要提交 ---------------------------------
+# 唯一真源是 prototype/。这两个目录是 tools 脚本复制出来的产物，
+# 提交它们只会造成"两份代码不一致"的困惑。
+apps/android/app/src/main/assets/www/
+apps/harmony/entry/src/main/resources/rawfile/www/
+
+# --- Android：构建产物与 IDE ------------------------------------------
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 签名文件绝不入库（丢了可以重建，泄露了很麻烦）
+*.jks
+*.keystore
+
+# --- HarmonyOS：构建产物与 IDE ----------------------------------------
+oh_modules/
+.hvigor/
+.clangd
+.clang-format
+.clang-tidy
+.preview/
+oh-package-lock.json5
+apps/harmony/local.properties
+
+# --- 脚本留下的临时文件与备份 -----------------------------------------
+*.bak
+design/_*.png
+*.log
+
+# --- 系统垃圾 ---------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini

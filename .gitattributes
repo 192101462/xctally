@@ -1,0 +1,29 @@
+# ============================================================
+#  xcnote .gitattributes
+#  统一换行符，避免"两台机器一同步就整文件 diff"
+# ============================================================
+
+# 仓库里一律存 LF；检出到工作区时按下面各条规则决定
+* text=auto eol=lf
+
+# Windows 脚本必须是 CRLF：
+# .cmd/.bat 用 LF 换行时 goto/label 会出问题，PowerShell 也是 CRLF 更稳
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+
+# 二进制文件：不要做任何换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.jks binary
+
+# 下面这些即使被当成二进制也无所谓，但显式声明更清楚
+*.xlsx binary
+*.docx binary

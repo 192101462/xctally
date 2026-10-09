@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>xcnote · 交互原型</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="stage">
+  <!-- 桌面端左侧说明，窄屏自动隐藏 -->
+  <aside class="panel">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 1024 1024" aria-hidden="true">
+        <defs>
+          <linearGradient id="bi-bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#5AB0FF" />
+            <stop offset=".55" stop-color="#1478FF" />
+            <stop offset="1" stop-color="#3A4ED8" />
+          </linearGradient>
+        </defs>
+        <rect width="1024" height="1024" rx="232" fill="url(#bi-bg)" />
+        <rect x="226" y="268" width="572" height="488" rx="72" fill="#FFFFFF" fill-opacity=".96" />
+        <rect x="300" y="352" width="252" height="30" rx="15" fill="#0A6CFF" fill-opacity=".16" />
+        <rect x="300" y="404" width="168" height="30" rx="15" fill="#0A6CFF" fill-opacity=".10" />
+        <path d="M300 512 C 380 512, 392 664, 470 664 S 600 676, 700 676"
+              fill="none" stroke="#1478FF" stroke-width="34" stroke-linecap="round" />
+        <circle cx="700" cy="676" r="32" fill="#FF9F0A" />
+      </svg>
+      <div>
+        <h1>xcnote</h1>
+        <p>家庭消耗台账 + 随笔 · 交互原型</p>
+      </div>
+    </div>
+    <p class="panel-desc">
+      单机本地工具：一张 <code>Item</code>（我有什么）+ 一张 <code>Event</code>（发生的事），
+      加上一本 <code>CollectEntry</code>（图文随笔，插件式挂载评分/价格/定位）。
+    </p>
+    <div class="panel-row">
+      <button class="btn ghost" data-action="toggle-theme">切换深色</button>
+      <button class="btn ghost" data-action="reset">重置数据</button>
+    </div>
+    <ul class="panel-list">
+      <li>底部五个标签切换模块</li>
+      <li>点任意物品 → 看<b>日均成本衰减曲线</b></li>
+      <li>「收藏」是<b>图文随笔</b>：评分 / 价格 / 定位按需挂载</li>
+      <li>正文可<b>图文混排</b>：粘贴截图或直接把图片拖进来</li>
+      <li>随笔详情可<b>复制文案</b>或<b>生成长图</b>（图片一起画进去）</li>
+      <li>「我的」里可导出完整备份，换手机搬过去</li>
+    </ul>
+    <p class="panel-foot">数据存在浏览器 localStorage，刷新不丢。</p>
+  </aside>
+
+  <!-- 手机外框 -->
+  <div class="device">
+    <div class="screen">
+      <div class="statusbar">
+        <span class="sb-time">9:41</span>
+        <span class="sb-right">
+          <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+          <svg width="16" height="11" viewBox="0 0 16 11"><path d="M8 9.6 5.4 7a3.7 3.7 0 0 1 5.2 0zM8 4.2c1.7 0 3.2.6 4.4 1.7l1.4-1.5A8.3 8.3 0 0 0 8 2 8.3 8.3 0 0 0 2.2 4.4l1.4 1.5A6.5 6.5 0 0 1 8 4.2z"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="20" height="11" rx="3.2" fill="none" stroke="currentColor" stroke-opacity="0.35"/><rect x="2" y="2" width="15" height="8" rx="2"/><path d="M22.4 4.2v3.6c1-.4 1.5-1 1.5-1.8s-.5-1.4-1.5-1.8z"/></svg>
+        </span>
+      </div>
+
+      <main id="view" class="view"></main>
+      <nav id="tabbar" class="tabbar"></nav>
+      <div class="home-indicator"></div>
+    </div>
+  </div>
+</div>
+
+<div id="sheet-root"></div>
+<div id="toast" class="toast"></div>
+
+<script src="platform.js"></script>
+<script src="data.js"></script>
+<script src="collect.js"></script>
+<script src="backup.js"></script>
+<script src="selftest.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

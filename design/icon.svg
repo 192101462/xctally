@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5AB0FF"/>
+      <stop offset="0.55" stop-color="#1478FF"/>
+      <stop offset="1" stop-color="#3A4ED8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.24" cy="0.14" r="0.9">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="curve" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0A6CFF"/>
+      <stop offset="1" stop-color="#5AB0FF"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#0A2A66" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <!-- iOS 风格的圆角方形底 -->
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#glow)"/>
+
+  <!-- 记账卡片 -->
+  <g filter="url(#cardShadow)">
+    <rect x="226" y="268" width="572" height="488" rx="72" fill="#FFFFFF" fill-opacity="0.96"/>
+  </g>
+
+  <!-- 卡片内的两条「记录线」 -->
+  <rect x="300" y="352" width="252" height="30" rx="15" fill="#0A6CFF" fill-opacity="0.16"/>
+  <rect x="300" y="404" width="168" height="30" rx="15" fill="#0A6CFF" fill-opacity="0.10"/>
+
+  <!-- 日均成本衰减曲线（这个 App 的招牌视觉） -->
+  <path d="M300 512 C 380 512, 392 664, 470 664 S 600 676, 700 676"
+        fill="none" stroke="url(#curve)" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="700" cy="676" r="32" fill="#FF9F0A"/>
+</svg>

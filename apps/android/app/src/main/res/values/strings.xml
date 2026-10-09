@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fallback strings.xml: only used when the target project does not have one.
+  If the project already has res/values/strings.xml, the copy script merges the
+  app_name entry into it instead of overwriting the file.
+-->
+<resources>
+    <string name="app_name">xcnote</string>
+</resources>
