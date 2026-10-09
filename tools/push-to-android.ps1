@@ -53,45 +53,85 @@ function Test-Jdk([string]$dir) {
     if (-not $dir) { return $false }
     return (Test-Path (Join-Path $dir 'bin\java.exe'))
 }
-
-# NOTE: do NOT name the local variable $javaHome - PowerShell variable names are
-# case-insensitive, so it would silently clobber the -JavaHome parameter.
-$jdkRoot = ''
-
-if ($JavaHome) {
-    if (Test-Jdk $JavaHome) { $jdkRoot = $JavaHome }
-    else { throw "-JavaHome does not look like a JDK root (no bin\java.exe): $JavaHome" }
-} elseif ($env:JAVA_HOME) {
-    if (Test-Jdk $env:JAVA_HOME) {
-        $jdkRoot = $env:JAVA_HOME
-        Write-Host "[2/2] using JAVA_HOME = $jdkRoot" -ForegroundColor DarkGray
-    } else {
-        Write-Host "[2/2] JAVA_HOME is invalid, ignoring it: $env:JAVA_HOME" -ForegroundColor Yellow
-        Write-Host "      (it must point at a JDK root, e.g. ...\Android Studio\jbr - not its bin folder)" -ForegroundColor Yellow
-    }
+function Get-JdkMajor([string]$dir) {
+    $m = [regex]::Match((Split-Path $dir -Leaf), '(\d+)')
+    if ($m.Success) { return [int]$m.Groups[1].Value }
+    return 0
 }
 
-if (-not $jdkRoot) {
-    $cands = @(
-        (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'),
-        (Join-Path ${env:ProgramFiles(x86)} 'Android\Android Studio\jbr'),
-        (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr'),
-        (Join-Path $env:LOCALAPPDATA 'Android\Android Studio\jbr'),
-        "$env:ProgramFiles\Android\Android Studio\jbr"
-    )
-    # also look for standalone JDKs under the usual vendors
-    foreach ($base in @((Join-Path $env:ProgramFiles 'Java'), (Join-Path $env:ProgramFiles 'Eclipse Adoptium'), (Join-Path $env:ProgramFiles 'Microsoft'))) {
-        if (Test-Path $base) {
-            Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-                $cands += $_.FullName
-                $cands += (Join-Path $_.FullName 'jbr')
+$jdkRoot = ''
+$found = @()
+
+if ($JavaHome) {
+    if (-not (Test-Jdk $JavaHome)) { throw "-JavaHome does not look like a JDK root (no bin\java.exe): $JavaHome" }
+    $jdkRoot = $JavaHome
+} else {
+    if ($env:JAVA_HOME) {
+        if (Test-Jdk $env:JAVA_HOME) {
+            $jdkRoot = $env:JAVA_HOME
+            Write-Host "[2/2] using JAVA_HOME = $jdkRoot" -ForegroundColor DarkGray
+        } else {
+            Write-Host "[2/2] JAVA_HOME is invalid, ignoring it: $env:JAVA_HOME" -ForegroundColor Yellow
+            Write-Host "      (must be a JDK root like ...\jbr or ...\.jdks\ms-17.0.20 - not its bin folder)" -ForegroundColor Yellow
+        }
+    }
+
+    if (-not $jdkRoot) {
+        $probe = @(
+            (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Android\Android Studio\jbr'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr'),
+            (Join-Path $env:LOCALAPPDATA 'Android\Android Studio\jbr')
+        )
+
+        # JDKs downloaded by Android Studio live in %USERPROFILE%\.jdks\<vendor-version>
+        # (ms-17.0.20, corretto-21..., jbr-17...). This is the usual place, so scan it.
+        $profiles = @()
+        if ($env:USERPROFILE) { $profiles += $env:USERPROFILE }
+        $userRoot = Split-Path -Parent $env:USERPROFILE
+        if ($userRoot -and (Test-Path $userRoot)) {
+            # fallback: profiles other than the current one (seen on renamed/cloned machines)
+            Get-ChildItem $userRoot -Directory -ErrorAction SilentlyContinue |
+                ForEach-Object { if ($profiles -notcontains $_.FullName) { $profiles += $_.FullName } }
+        }
+        foreach ($p in $profiles) {
+            $dotJdks = Join-Path $p '.jdks'
+            if (Test-Path $dotJdks) {
+                Get-ChildItem $dotJdks -Directory -ErrorAction SilentlyContinue |
+                    ForEach-Object { $probe += $_.FullName }
+            }
+        }
+
+        foreach ($base in @(
+            (Join-Path $env:ProgramFiles 'Java'),
+            (Join-Path $env:ProgramFiles 'Eclipse Adoptium'),
+            (Join-Path $env:ProgramFiles 'Microsoft')
+        )) {
+            if (Test-Path $base) {
+                Get-ChildItem $base -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                    $probe += $_.FullName
+                    $probe += (Join-Path $_.FullName 'jbr')
+                }
+            }
+        }
+
+        $found = @($probe | Where-Object { Test-Jdk $_ } | Select-Object -Unique)
+
+        if ($found.Count -gt 0) {
+            # Highest version first; entries with no version in the name (jbr) count as modern.
+            $best = $found |
+                ForEach-Object { [pscustomobject]@{ Path = $_; Major = (Get-JdkMajor $_) } } |
+                Sort-Object -Property @{ Expression = { if ($_.Major -eq 0) { 17 } else { $_.Major } } } -Descending |
+                Select-Object -First 1
+            $jdkRoot = $best.Path
+            $label = if ($best.Major -eq 0) { 'bundled JBR' } else { 'JDK ' + $best.Major }
+            Write-Host "[2/2] JAVA_HOME -> $jdkRoot  ($label)" -ForegroundColor DarkGray
+            if ($best.Major -ne 0 -and $best.Major -lt 17) {
+                Write-Host "[2/2] WARNING: that JDK is older than 17 and the build will likely fail." -ForegroundColor Yellow
+                Write-Host "      Pick a JDK 17+ in Android Studio: Settings - Build Tools - Gradle - Gradle JDK." -ForegroundColor Yellow
             }
         }
     }
-    foreach ($c in $cands) {
-        if (Test-Jdk $c) { $jdkRoot = $c; break }
-    }
-    if ($jdkRoot) { Write-Host "[2/2] JAVA_HOME -> $jdkRoot" -ForegroundColor DarkGray }
 }
 
 if (-not $jdkRoot) {
