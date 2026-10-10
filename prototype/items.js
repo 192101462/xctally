@@ -373,7 +373,8 @@
   }
 
   function openPicker(key, title) {
-    const sheet = document.querySelector('#sheet-root .sheet');
+    // 挂到 body 上：面板自身可能带 transform，挂在它里面会让 fixed 退化成 absolute
+    const sheet = document.body;
     if (!sheet) return;
     const cur = (document.getElementById('f-' + key) || {}).value;
     const opts = pickerOptionsFor(key).map(function (o) {
@@ -902,14 +903,15 @@
    * 于是"选完图片直接被弹回详情页"。
    */
   function openOverlay(html) {
-    const sheet = document.querySelector('#sheet-root .sheet');
-    if (!sheet) { UI().openSheet(html); return; }
+    // 同样挂到 body，理由见 openPicker
+    const host = document.body;
+    if (!host) { UI().openSheet(html); return; }
     closeOverlay();
     const layer = document.createElement('div');
     layer.className = 'picker-layer';
     layer.id = 'picker-layer';
     layer.innerHTML = html;
-    sheet.appendChild(layer);
+    host.appendChild(layer);
   }
 
   function closeOverlay() {

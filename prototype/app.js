@@ -579,6 +579,9 @@
     root.classList.remove('open');
     root.innerHTML = '';
     document.documentElement.classList.remove('sheet-open');
+    // 覆盖层挂在 body 上（picker / 确认框），关面板时一并清掉，避免留下孤儿浮层
+    const stray = document.querySelectorAll('#picker-layer, #qy-confirm');
+    Array.prototype.forEach.call(stray, function (el) { el.remove(); });
   }
 
   function itemFormHTML() {
