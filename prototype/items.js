@@ -57,15 +57,136 @@
     bits.push(QY.fmtDate(item.acquiredAt) + ' 获得');
     if (item.location) bits.push(item.location);
     return '' +
-      '<div class="row" data-action="i-open" data-id="' + item.id + '">' +
-        thumb(item) +
-        '<div class="row-main">' +
-          '<div class="row-title">' + esc(item.name) + '</div>' +
-          '<div class="row-sub">' + esc(bits.join(' · ')) + '</div>' +
+      '<div class="swipe" data-id="' + item.id + '">' +
+        '<div class="swipe-act left">' +
+          '<button class="sw-btn pin" data-action="i-pin" data-id="' + item.id + '">' +
+            (item.pinned ? '取消置顶' : '置顶') + '</button>' +
         '</div>' +
-        '<div class="row-side">' + sideOf(item) + '</div>' +
+        '<div class="swipe-body">' +
+          '<div class="row" data-action="i-open" data-id="' + item.id + '">' +
+            thumb(item) +
+            '<div class="row-main">' +
+              '<div class="row-title">' + (item.pinned ? '<span class="pin-dot">📌</span>' : '') +
+                esc(item.name) + '</div>' +
+              '<div class="row-sub">' + esc(bits.join(' · ')) + '</div>' +
+            '</div>' +
+            '<div class="row-side">' + sideOf(item) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="swipe-act right">' +
+          '<button class="sw-btn arch" data-action="i-archive" data-id="' + item.id + '">归档</button>' +
+          '<button class="sw-btn del" data-action="i-del" data-id="' + item.id + '">删除</button>' +
+        '</div>' +
       '</div>';
   }
+
+  /* ---------------- 滑动操作 ----------------
+   * 往右划：露出「置顶」；往左划：露出「归档 / 删除」。
+   * 都是"先露出、再点确认"，不做划过去就触发——误触的代价太大。
+   * touch-action: pan-y 交给浏览器处理竖向滚动，只接管横向。
+   */
+  const OPEN_LEFT = 104;    // 置顶按钮宽度
+  const OPEN_RIGHT = 156;   // 归档 + 删除
+
+  function shiftOf(wrap, dx) {
+    if (dx > 0) return Math.min(dx, OPEN_LEFT + 12);
+    return Math.max(dx, -(OPEN_RIGHT + 12));
+  }
+  function setShift(wrap, dx) {
+    const body = wrap.querySelector('.swipe-body');
+    if (body) body.style.transform = 'translateX(' + dx + 'px)';
+  }
+  function closeSwipe(wrap, instant) {
+    wrap.classList.remove('open-left', 'open-right');
+    const body = wrap.querySelector('.swipe-body');
+    if (!body) return;
+    if (instant) body.style.transition = 'none';
+    body.style.transform = '';
+    if (instant) requestAnimationFrame(function () { body.style.transition = ''; });
+  }
+  function closeAllSwipes(except) {
+    const all = document.querySelectorAll('#view .swipe.open-left, #view .swipe.open-right');
+    Array.prototype.forEach.call(all, function (w) { if (w !== except) closeSwipe(w); });
+  }
+
+  (function swipeEngine() {
+    let active = null;
+
+    document.addEventListener('pointerdown', function (e) {
+      if (e.button != null && e.button !== 0) return;
+      const wrap = e.target.closest && e.target.closest('#view .swipe');
+      if (!wrap) { closeAllSwipes(null); return; }
+      // 点的是露出来的按钮，交给 click 处理
+      if (e.target.closest('.sw-btn')) return;
+      const wasOpen = wrap.classList.contains('open-left') || wrap.classList.contains('open-right');
+      active = { wrap: wrap, x: e.clientX, y: e.clientY, dx: 0, dir: '', wasOpen: wasOpen };
+      if (wasOpen) {
+        active.dir = 'x';
+        active.dx = wrap.classList.contains('open-left') ? OPEN_LEFT : -OPEN_RIGHT;
+        setShift(wrap, active.dx);
+      }
+    }, { passive: true });
+
+    document.addEventListener('pointermove', function (e) {
+      if (!active) return;
+      const dx = e.clientX - active.x + (active.wasOpen ? active.dx : 0);
+      const dy = e.clientY - active.y;
+      if (!active.dir) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        active.dir = Math.abs(dx) > Math.abs(dy) * 1.4 ? 'x' : 'y';
+        if (active.dir === 'x') {
+          active.wrap.classList.add('swiping');
+          closeAllSwipes(active.wrap);
+        }
+      }
+      if (active.dir !== 'x') return;
+      active.dx = dx;
+      setShift(active.wrap, shiftOf(active.wrap, dx));
+    }, { passive: true });
+
+    function finish() {
+      if (!active) return;
+      const a = active;
+      active = null;
+      a.wrap.classList.remove('swiping');
+      if (a.dir !== 'x') return;
+      if (a.dx > 44) {
+        a.wrap.classList.add('open-left');
+        setShift(a.wrap, OPEN_LEFT);
+      } else if (a.dx < -44) {
+        a.wrap.classList.add('open-right');
+        setShift(a.wrap, -OPEN_RIGHT);
+      } else {
+        closeSwipe(a.wrap);
+      }
+    }
+    document.addEventListener('pointerup', finish);
+    document.addEventListener('pointercancel', finish);
+
+    // 滑动露出的三个动作在这里处理，不占用 app.js 的动作表
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest && e.target.closest('.sw-btn[data-action]');
+      if (!btn) return;
+      e.stopPropagation();
+      const act = btn.getAttribute('data-action');
+      const id = btn.getAttribute('data-id');
+      const item = byId(id);
+      if (!item) return;
+      if (act === 'i-pin') {
+        item.pinned = !item.pinned;
+        UI().save();
+        UI().mount();
+        UI().toast(item.pinned ? '已置顶' : '已取消置顶');
+      } else if (act === 'i-archive') {
+        item.status = item.status === '已处置' ? '在用' : '已处置';
+        UI().save();
+        UI().mount();
+        UI().toast(item.status === '已处置' ? '已归档，可在「归档」里回看' : '已取消归档');
+      } else if (act === 'i-del') {
+        deleteItem(id);
+      }
+    }, true);
+  })();
 
   function filtered() {
     const d = data();
@@ -77,7 +198,11 @@
       if (!q) return true;
       return ((it.name || '') + ' ' + (it.sub || '') + ' ' + (it.location || '') + ' ' + (it.source || ''))
         .toLowerCase().indexOf(q) >= 0;
-    }).sort(function (a, b) { return a.acquiredAt < b.acquiredAt ? 1 : -1; });
+    }).sort(function (a, b) {
+      // 置顶的排最前，其余按获得日期倒序
+      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+      return a.acquiredAt < b.acquiredAt ? 1 : -1;
+    });
   }
 
   function renderListInner() {
