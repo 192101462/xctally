@@ -23,8 +23,14 @@
   let msgs = [];        // 内存里的对话（不落盘：聊天记录会把 localStorage 撑爆）
   let busy = false;
   let pending = null;   // { reply, actions } 等用户确认
+  let pendingImage = null;   // 待发送的图片 dataURL
   let ballEl = null;
   let drag = null;
+
+  const CAMERA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.2a1 1 0 0 0 .83-.45l.94-1.4A1 1 0 0 1 9.3 3.7h5.4a1 1 0 0 1 .83.45l.94 1.4A1 1 0 0 0 17.3 6h1.2A2.5 2.5 0 0 1 21 8.5v9A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z"/>' +
+    '<circle cx="12" cy="12.6" r="3.6"/></svg>';
 
   function ballCfg() {
     const c = window.QYA ? QYA.cfg() : {};
@@ -131,7 +137,9 @@
 
   function bubble(m) {
     if (m.role === 'user') {
-      return '<div class="ai-msg me">' + esc(m.text) + '</div>';
+      return '<div class="ai-msg me">' +
+        (m.image ? '<img class="ai-msg-img" src="' + m.image + '" alt="" />' : '') +
+        esc(m.text) + '</div>';
     }
     let html = '<div class="ai-msg bot">' + esc(m.text) + '</div>';
     if (m.actions && m.actions.length) {
@@ -165,15 +173,20 @@
         '「昨天买的牛奶 15.9 两瓶，放冰箱了」<br>' +
         '「这个月在食品上花了多少」<br>' +
         '「哪些东西快过期了」<br>' +
-        '「把纯牛奶和全麦面包都归档」</div>';
+        '或者直接发一张<b>订单截图 / 小票</b>，我帮你把商品提出来。</div>';
     return '<div class="sheet ai-sheet"><div class="grabber"></div>' +
       '<div class="ai-head">' +
         '<div><h3>助手</h3><div class="ai-sub">' + esc(usageLine()) + '</div></div>' +
         '<button class="btn plain" data-ai="hide" style="padding:6px 12px;font-size:13px">关闭悬浮球</button>' +
       '</div>' +
       '<div class="ai-log" id="ai-log">' + body + '</div>' +
+      (pendingImage
+        ? '<div class="ai-attach"><img src="' + pendingImage + '" alt="" />' +
+          '<button class="ai-attach-x" data-ai="unpick" aria-label="移除图片">×</button></div>'
+        : '') +
       '<div class="ai-input">' +
-        '<input id="ai-text" class="input" placeholder="说点什么…" autocomplete="off"' +
+        '<button class="ai-pic" data-ai="pick" aria-label="发送图片">' + CAMERA + '</button>' +
+        '<input id="ai-text" class="input" placeholder="说点什么，或发张截图…" autocomplete="off"' +
           (busy ? ' disabled' : '') + ' />' +
         '<button class="btn primary" data-ai="send"' + (busy ? ' disabled' : '') + '>' +
           (busy ? '…' : '发送') + '</button>' +
@@ -292,21 +305,43 @@
 
   /* ---------------- 发消息 ---------------- */
 
+  /* 选一张图（拍照/相册），压缩后挂在输入框上方等发送 */
+  function pickImage() {
+    if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
+    QYV.pickImage(function (dataUrl) {
+      if (!dataUrl) return;
+      pendingImage = dataUrl;
+      rerenderChat();
+    }, { maxSide: 1280, quality: 0.8 });
+  }
+
   function send(text) {
     const t = String(text || '').trim();
-    if (!t || busy) return;
+    const img = pendingImage;
+    if ((!t && !img) || busy) return;
     busy = true;
     pending = null;
-    msgs.push({ role: 'user', text: t });
+    msgs.push({ role: 'user', text: t || '(图片)', img: !!img, image: img });
+    pendingImage = null;
     rerenderChat();
 
     const data = UI().data();
     const sys = { role: 'system', content: window.QYP.assistantPrompt(data) };
+    // 历史只带文字（每轮重发图片很贵），当前这条带图才发 base64
     const history = msgs.slice(-8).map(function (m) {
-      return { role: m.role === 'user' ? 'user' : 'assistant', content: m.text };
+      if (m.role === 'user' && m.image) {
+        return {
+          role: 'user',
+          content: [
+            { type: 'text', text: (m.text || '') + '\n（以上是用户发来的截图）' },
+            { type: 'image_url', image_url: { url: m.image } }
+          ]
+        };
+      }
+      return { role: m.role === 'user' ? 'user' : 'assistant', content: m.text || '' };
     });
 
-    QYA.call([sys].concat(history)).then(function (out) {
+    QYA.call([sys].concat(history), { vision: !!img }).then(function (out) {
       let obj;
       try {
         obj = QYA.parseJson(out);
@@ -338,6 +373,8 @@
 
     if (act === 'close') { hideBall(); return; }
     if (act === 'hide') { UI().closeSheet(); hideBall(); return; }
+    if (act === 'pick') { pickImage(); return; }
+    if (act === 'unpick') { pendingImage = null; rerenderChat(); return; }
     if (act === 'send') {
       const input = document.getElementById('ai-text');
       send(input ? input.value : '');

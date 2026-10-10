@@ -1088,10 +1088,12 @@
         setRow('i-ai-cfg', 'DeepSeek 配置', { side: (aiCfg && aiCfg.key) ? '已填 Key' : '未填', chev: true }) +
         setRow('i-ai-usage', '用量与额度', { side: (u && u.calls) ? u.calls + ' 次' : '未使用', chev: true }) +
         switchRow('set-ball', '对话助手悬浮球', ballOn) +
-        setRow('i-ocr', '从截图识别', { side: '订单/小票', chev: true }) +
         '</div>' +
-        (aiReady ? '' : '<div class="notice" style="margin-top:12px">' +
-          '填了 API Key 才能用识图和对话；在此之前 App 保持完全离线。</div>');
+        (aiReady
+          ? '<div class="notice" style="margin-top:12px">识图和对话都在悬浮球里：' +
+            '点右下角的气泡，可以直接发订单截图让它帮你记。</div>'
+          : '<div class="notice" style="margin-top:12px">填了 API Key 才能用助手；' +
+            '在此之前 App 保持完全离线。</div>');
     }
     if (top === 'data') {
       return nav + '<div class="group" style="margin-top:16px">' +
