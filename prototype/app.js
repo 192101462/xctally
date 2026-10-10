@@ -551,20 +551,10 @@
             '<div class="row-main"><div class="row-title">从备份恢复</div>' +
               '<div class="row-sub">先对比再合并，冲突时保留当前设备的版本</div></div>' +
           '</div>' +
-          '<div class="row" data-action="selftest">' +
-            '<div class="tl-dot">🧪</div>' +
-            '<div class="row-main"><div class="row-title">运行内置自检</div>' +
-              '<div class="row-sub">54 项断言，用来排查"数据算错 / 图片坏了"</div></div>' +
-          '</div>' +
           '<div class="row" data-action="toggle-theme">' +
             '<div class="tl-dot">🌗</div>' +
             '<div class="row-main"><div class="row-title">深色模式</div>' +
               '<div class="row-sub">跟随系统 / 手动切换</div></div>' +
-          '</div>' +
-          '<div class="row" data-action="reset">' +
-            '<div class="tl-dot">♻️</div>' +
-            '<div class="row-main"><div class="row-title">恢复示例数据</div>' +
-              '<div class="row-sub">清空本机改动，回到初始状态</div></div>' +
           '</div>' +
         '</div>' +
       '</div>';

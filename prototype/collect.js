@@ -156,7 +156,11 @@
       const raw = localStorage.getItem(KEY);
       if (raw) d = JSON.parse(raw);
     } catch (err) { d = null; }
-    if (!d || !d.entries) d = seed();
+    // 首次安装：不要示例随笔，只保留结构（分类、插件配置）
+    if (!d || !d.entries) {
+      d = seed();
+      d.entries = [];
+    }
     if (!d.cats) d.cats = [];
     d.entries.forEach(function (e) {
       if (!e.plugins) e.plugins = [];

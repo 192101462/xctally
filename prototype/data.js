@@ -481,7 +481,22 @@
     } catch (err) {
       d = null;
     }
-    if (!d || !d.items) d = seed();
+    if (!d || !d.items) {
+      // 首次安装：【不要示例内容】，只保留结构（分类配置、表具定义）。
+      // 表具本身留着（目前没有"新增表具"的界面），但读数清零，
+      // 免得首屏出现"本月能源 ¥188.20"这种假数字。
+      d = seed();
+      d.items = [];
+      d.events = [];
+      d.trash = [];
+      (d.meters || []).forEach(function (m) {
+        m.history = [];
+        m.current = {
+          m: iso(today()).slice(0, 7), usage: 0, cost: 0,
+          projected: 0, projectedCost: 0, trend: 0
+        };
+      });
+    }
 
     // 迁移：老数据没有 itemCats（分类原本是写死的），补上默认分类
     if (!d.itemCats || !d.itemCats.length) {
