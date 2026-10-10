@@ -33,6 +33,11 @@ import java.io.File
  * 资源通过 WebViewAssetLoader 以 https://appassets.androidplatform.net/ 提供，
  * 而不是 file:// —— 这样 localStorage、canvas、剪贴板的行为与普通网页完全一致，
  * 不会踩 file:// 域名的各种坑。
+ *
+ * 注意路径：网页应用不在模块里，而是在仓库的 prototype/，
+ * 由 app/build.gradle.kts 的 assets.srcDirs("../../prototype") 直接打包，
+ * 所以这些文件位于 assets 的【根目录】：URL 是 /assets/index.html，没有 www 这一层。
+ * 改动这里时请同步改 app/build.gradle.kts 里的 srcDirs。
  */
 class MainActivity : AppCompatActivity() {
 
@@ -86,7 +91,7 @@ class MainActivity : AppCompatActivity() {
                 ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
             }
             addJavascriptInterface(Bridge(), "QYAndroid")
-            loadUrl("https://appassets.androidplatform.net/assets/www/index.html")
+            loadUrl("https://appassets.androidplatform.net/assets/index.html")
         }
         setContentView(webView)
 
