@@ -1747,6 +1747,58 @@ html.scrolling .ai-ball { transition: none; }
 }
 .to-top:active { transform: translate(-50%, 0) scale(0.95); }
 
+/* 首页：DeepSeek 账号卡片（单击刷新金额，双击打开助手） */
+.ds-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.12s ease;
+}
+.ds-card:active { transform: scale(0.99); }
+.ds-title { font-size: 14.5px; font-weight: 650; }
+.ds-sub { margin-top: 3px; font-size: 11.5px; color: var(--label-3); }
+.ds-right { text-align: right; }
+.ds-money { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.ds-note { margin-top: 2px; font-size: 11.5px; color: var(--label-3); }
+
+/* 设置页里不显示底部标签栏（原来只清空了内容，空的长条还浮在那里） */
+html.in-settings .tabbar { display: none; }
+/* 打开任何面板时，悬浮球先让位，别压着表单 */
+html.sheet-open .ai-ball {
+  opacity: 0;
+  transform: scale(0.9);
+  pointer-events: none;
+}
+
+/* 表单里的图片：点缩略图选图，右上角小红叉删除 */
+.photo-wrap { position: relative; width: 84px; height: 84px; flex: none; }
+.photo-del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  display: none;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+.photo-wrap.has-img .photo-del { display: grid; }
+
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
 body.bare .stage { gap: 0; }

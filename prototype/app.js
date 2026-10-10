@@ -231,19 +231,37 @@
           (s.totalSpend ? (s.wasted / s.totalSpend * 100).toFixed(1) : '0') + '%</div>' +
       '</div>' +
 
-      '<div class="grid-2">' +
-        '<div class="card">' +
+      (function () {
+        const costCard = '<div class="card">' +
           '<div class="mini-label">持有成本</div>' +
           '<div class="mini-value">' + QY.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
           '<div class="mini-foot">全部在用物品合计</div>' +
-        '</div>' +
-        '<div class="card">' +
-          '<div class="mini-label">本月能源</div>' +
-          '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
-          '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
-            (s.energyTrend * 100).toFixed(0) + '%</div>' +
-        '</div>' +
-      '</div>' +
+        '</div>';
+        // 能源页被隐藏时，首页这张卡也一起不显示
+        if (!tabVisible('energy')) return costCard;
+        return '<div class="grid-2">' + costCard +
+          '<div class="card">' +
+            '<div class="mini-label">本月能源</div>' +
+            '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
+            '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
+              (s.energyTrend * 100).toFixed(0) + '%</div>' +
+          '</div>' +
+        '</div>';
+      })() +
+
+      // DeepSeek 账号：单击刷新金额，双击打开助手
+      (window.QYA && QYA.cfg().key
+        ? '<div class="ds-card" id="ds-card">' +
+            '<div>' +
+              '<div class="ds-title">DeepSeek 账号</div>' +
+              '<div class="ds-sub">单击刷新 · 双击打开助手</div>' +
+            '</div>' +
+            '<div class="ds-right">' +
+              '<div class="ds-money" id="ds-money">—</div>' +
+              '<div class="ds-note" id="ds-note"></div>' +
+            '</div>' +
+          '</div>'
+        : '') +
 
       '<div class="section">' +
         '<div class="section-head"><h2>临期提醒</h2><span>30 天内 ' + s.expiring.length + ' 件</span></div>' +
@@ -536,11 +554,13 @@
     const root = $('#sheet-root');
     root.innerHTML = '<div class="scrim" data-action="close-sheet"></div>' + html;
     root.classList.add('open');
+    document.documentElement.classList.add('sheet-open');   // 悬浮球让位
   }
   function closeSheet() {
     const root = $('#sheet-root');
     root.classList.remove('open');
     root.innerHTML = '';
+    document.documentElement.classList.remove('sheet-open');
   }
 
   function itemFormHTML() {
@@ -755,10 +775,13 @@
     view.innerHTML = html;
     // 设置 → AI：有 Key 就自动拉一次余额
     if (state.setting && state.setting[state.setting.length - 1] === 'ai') loadAiBalance();
+    // 首页：DS 账号卡片自动拉一次
+    if (!state.setting && state.tab === 'home') refreshHomeBalance();
     updateTopPill();
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
+    document.documentElement.classList.toggle('in-settings', !!state.setting);
     $('#tabbar').innerHTML = state.setting ? '' : TABS.filter(function (t) {
       return tabVisible(t.id);
     }).map(function (t) {
@@ -944,11 +967,27 @@
 
   // 跳到某个物品的详情（首页的临期/最近列表也用它）
   function goItem(id) {
+    state.detailFrom = state.tab;      // 记住从哪个页面点进来的
     state.tab = 'items';
     state.detailId = null;
     if (window.QYV) QYV.clearDetail();
     if (window.QYI) QYI.openDetail(id);
     mount();
+  }
+
+  /* 从物品详情返回：哪来的回哪去（首页 -> 首页，物品 -> 物品列表） */
+  function backFromDetail() {
+    const from = state.detailFrom;
+    state.detailFrom = null;
+    if (window.QYI) QYI.clearDetail();
+    if (from && from !== 'items') {
+      state.tab = from;
+      resetScrollUi();
+      mount();
+      restoreScroll();
+      return true;
+    }
+    return false;
   }
 
   /* ---------------- 设置面板 ---------------- */
@@ -1094,6 +1133,44 @@
     });
   }
 
+  /* 首页的 DeepSeek 账号卡片：余额走接口，用量读本机统计 */
+  function refreshHomeBalance() {
+    const money = document.getElementById('ds-money');
+    const note = document.getElementById('ds-note');
+    if (!money) return;
+    const u = window.QYA ? QYA.usage() : null;
+    if (note) {
+      note.textContent = (u && u.calls)
+        ? u.calls + ' 次 · ' + (u.priced ? '¥' + u.cost.toFixed(3) : u.total.toLocaleString() + ' token')
+        : '还没调用过';
+    }
+    if (!window.QYA || !QYA.cfg().key) { money.textContent = '未配置'; return; }
+    money.textContent = '查询中…';
+    QYA.balance().then(function (b) {
+      money.textContent = b.currency + ' ' + b.total;
+    }).catch(function (err) {
+      money.textContent = '查询失败';
+      if (note) note.textContent = (err && err.message) || '未知错误';
+    });
+  }
+
+  /* 首页 DS 卡片：单击刷新，双击打开助手（用 260ms 区分单双击） */
+  let dsClickTimer = null;
+  document.addEventListener('click', function (e) {
+    const card = e.target.closest && e.target.closest('#ds-card');
+    if (!card) return;
+    if (dsClickTimer) {
+      clearTimeout(dsClickTimer);
+      dsClickTimer = null;
+      if (window.QYO) QYO.openChat();      // 双击 = 打开悬浮球对话
+      return;
+    }
+    dsClickTimer = setTimeout(function () {
+      dsClickTimer = null;
+      refreshHomeBalance();                 // 单击 = 刷新金额
+    }, 260);
+  }, true);
+
   function settingsView() {
     const path = state.setting || [];
     const aiCfg = window.QYA ? QYA.cfg() : null;
@@ -1186,6 +1263,7 @@
     closeSheet: closeSheet,
     mount: mount,
     goItem: goItem,
+    backFromDetail: backFromDetail,
     ui: ui,
     uiSet: uiSet,
     itemById: function (id) { return itemById(id); },

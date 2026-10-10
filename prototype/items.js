@@ -472,13 +472,13 @@
 
         '<div class="field"><label>图片（可选，支持动图）</label>' +
           '<div class="photo-row">' +
-            '<div class="photo-thumb' + (formPhoto ? '' : ' empty') + '" id="f-photo"' +
-              ' data-action="i-photo"' +
-              (formPhoto ? ' style="background-image:url(' + formPhoto + ')"' : '') + '>' +
-              (formPhoto ? '' : '＋') + '</div>' +
-            '<div class="photo-actions">' +
-              '<button type="button" class="btn plain" data-action="i-photo">选择图片</button>' +
-              '<button type="button" class="btn plain" data-action="i-photo-clear">移除</button>' +
+            '<div class="photo-wrap' + (formPhoto ? ' has-img' : '') + '" id="f-photo-wrap">' +
+              '<div class="photo-thumb' + (formPhoto ? '' : ' empty') + '" id="f-photo"' +
+                ' data-action="i-photo"' +
+                (formPhoto ? ' style="background-image:url(' + formPhoto + ')"' : '') + '>' +
+                (formPhoto ? '' : '＋') + '</div>' +
+              '<button type="button" class="photo-del" data-action="i-photo-clear"' +
+                ' aria-label="删除图片">×</button>' +
             '</div>' +
           '</div></div>' +
 
@@ -519,6 +519,8 @@
 
   function syncPhoto() {
     const box = document.getElementById('f-photo');
+    const wrap = document.getElementById('f-photo-wrap');
+    if (wrap) wrap.classList.toggle('has-img', !!formPhoto);
     if (!box) return;
     if (formPhoto) {
       box.classList.remove('empty');
@@ -981,7 +983,13 @@
       if (UI().goItem) UI().goItem(id);
       else { state.detailId = id; UI().mount(); }
     }
-    else if (action === 'i-back') { state.detailId = null; UI().mount(); }
+    else if (action === 'i-back') {
+      // 从首页点进来的，返回要回首页，而不是甩到物品列表
+      if (!(UI().backFromDetail && UI().backFromDetail())) {
+        state.detailId = null;
+        UI().mount();
+      }
+    }
     else if (action === 'i-filter') { state.filter = el.getAttribute('data-k'); UI().mount(); }
     else if (action === 'i-cat') { state.category = el.getAttribute('data-cat'); UI().mount(); }
     else if (action === 'i-close') { editingId = null; UI().closeSheet(); }
