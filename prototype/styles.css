@@ -237,7 +237,7 @@ body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 18px 120px;
+  padding: 22px 18px 120px;
   scrollbar-width: none;
 }
 .view::-webkit-scrollbar { display: none; }
@@ -1241,6 +1241,9 @@ html.app-mode .statusbar { display: none; }        /* 假的 9:41 */
 html.app-mode .home-indicator { display: none; }
 html.app-mode .view {
   padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  /* 状态栏避让：targetSdk 35+ 起系统强制 edge-to-edge，网页会画到状态栏下面，
+     所以这里要主动让出顶部空间；env() 在支持 viewport-fit=cover 时更精确。 */
+  padding-top: calc(34px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
 }
 html.app-mode .tabbar {
@@ -1413,15 +1416,11 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 }
 .lightbox img { max-width: 96vw; max-height: 92vh; object-fit: contain; }
 
-/* ---------------- 上下留白 + 宽屏 / 平板适配 ---------------- */
-/* 注意：只在这里加 padding-top。
- * 底部留白必须留给 .view / html.app-mode .view 那两条规则（标签栏高度 + 安全区），
- * 用 #view 写 padding-bottom 会因为 ID 优先级更高把它们压掉，
- * 结果最后一行内容会贴着标签栏。
+/* ---------------- 宽屏 / 平板适配 ----------------
+ * 注意：上下留白都【不要】用 #view 写（ID 选择器会压掉 .view /
+ * html.app-mode .view 的规则，之前因此踩过两次：最后一行贴标签栏、
+ * 标题被状态栏挡住）。留白统一写在下面那两条类选择器上。
  */
-#view {
-  padding-top: 14px;
-}
 @media (min-width: 640px) {
   /* 平板 / 横屏：内容居中并限制宽度，避免一行拉得过长 */
   #view {
