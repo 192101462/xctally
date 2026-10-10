@@ -703,6 +703,41 @@
   }
   let pendingStatusPick = null;
 
+  /* App 自己的确认框。
+   * 不依赖 window.confirm —— 安卓 WebView 里它默认只会返回 false（见 MainActivity
+   * 里 webChromeClient 的注释），那样"点了删除没反应"。自己画还能统一风格。
+   */
+  function confirmSheet(message, o) {
+    o = o || {};
+    return new Promise(function (resolve) {
+      const layer = document.createElement('div');
+      layer.id = 'qy-confirm';
+      layer.className = 'picker-layer';
+      layer.innerHTML =
+        '<div class="confirm-box">' +
+          '<h3>' + esc(o.title || '确认') + '</h3>' +
+          '<p class="hint">' + esc(message) + '</p>' +
+          '<div class="sheet-actions">' +
+            '<button class="btn plain" data-c="0">' + esc(o.cancel || '取消') + '</button>' +
+            '<button class="btn primary" data-c="1"' +
+              (o.danger ? ' style="background:var(--red)"' : '') + '>' + esc(o.ok || '确定') + '</button>' +
+          '</div>' +
+        '</div>';
+      layer.addEventListener('click', function (ev) {
+        const b = ev.target.closest('[data-c]');
+        if (b) {
+          const v = b.getAttribute('data-c') === '1';
+          layer.remove();
+          resolve(v);
+          return;
+        }
+        if (ev.target === layer) { layer.remove(); resolve(false); }
+      });
+      const host = document.querySelector('#sheet-root .sheet');
+      (host || document.body).appendChild(layer);
+    });
+  }
+
   /* ---------------- 回收站 ----------------
    * 删除 = 进回收站（30 天），不是真删。恢复时物品和它的时间线一起回来。
    */
@@ -710,22 +745,25 @@
     const d = data();
     const item = byId(id);
     if (!item) return;
-    if (!window.confirm('把「' + item.name + '」移入回收站？\n' +
-      '保留 ' + QY.TRASH_DAYS + ' 天，期间可以恢复。')) return;
-    d.trash = d.trash || [];
-    d.trash.push({
-      id: QY.uid('tr'),
-      kind: 'item',
-      deletedAt: QY.iso(QY.today()),
-      item: item,
-      events: d.events.filter(function (e) { return e.itemId === id; })
+    confirmSheet('把「' + item.name + '」移入回收站？保留 ' + QY.TRASH_DAYS + ' 天，期间可以恢复。',
+      { title: '删除物品', ok: '移入回收站', cancel: '取消', danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
+      d.trash = d.trash || [];
+      d.trash.push({
+        id: QY.uid('tr'),
+        kind: 'item',
+        deletedAt: QY.iso(QY.today()),
+        item: item,
+        events: d.events.filter(function (e) { return e.itemId === id; })
+      });
+      d.items = d.items.filter(function (i) { return i.id !== id; });
+      d.events = d.events.filter(function (e) { return e.itemId !== id; });
+      UI().save();
+      state.detailId = null;
+      UI().mount();
+      UI().toast('已移入回收站，' + QY.TRASH_DAYS + ' 天内可恢复');
     });
-    d.items = d.items.filter(function (i) { return i.id !== id; });
-    d.events = d.events.filter(function (e) { return e.itemId !== id; });
-    UI().save();
-    state.detailId = null;
-    UI().mount();
-    UI().toast('已移入回收站，30 天内可恢复');
   }
 
   function openTrash() {

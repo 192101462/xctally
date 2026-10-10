@@ -11,6 +11,8 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.JavascriptInterface
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -219,6 +221,40 @@ class MainActivity : AppCompatActivity() {
                     view: WebView,
                     request: WebResourceRequest
                 ): WebResourceResponse? = assetLoader.shouldInterceptRequest(request.url)
+            }
+            // WebView 默认【不显示】JS 对话框：不设 WebChromeClient 时 window.confirm()
+            // 直接返回 false，window.alert() 什么也不做。后果很隐蔽——"点删除没反应"、
+            // "点清空没反应"全是因为它。这里放行，保证 confirm/alert 至少能用。
+            // 更好看的做法是网页自己做确认框（物品模块已经改用 confirmSheet 了）。
+            webChromeClient = object : WebChromeClient() {
+                override fun onJsConfirm(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: JsResult?
+                ): Boolean {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                        .setNegativeButton(android.R.string.cancel) { _, _ -> result?.cancel() }
+                        .setOnCancelListener { result?.cancel() }
+                        .show()
+                    return true
+                }
+
+                override fun onJsAlert(
+                    view: WebView?,
+                    url: String?,
+                    message: String?,
+                    result: JsResult?
+                ): Boolean {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage(message)
+                        .setPositiveButton(android.R.string.ok) { _, _ -> result?.confirm() }
+                        .setOnCancelListener { result?.cancel() }
+                        .show()
+                    return true
+                }
             }
             addJavascriptInterface(Bridge(), "QYAndroid")
             loadUrl("https://appassets.androidplatform.net/assets/index.html")
