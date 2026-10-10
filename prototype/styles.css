@@ -1835,13 +1835,14 @@ html.sheet-open .ai-ball {
   background: #ff3b30;
   box-shadow: 0 0 0 7px rgba(255, 59, 48, 0.22), 0 10px 28px rgba(255, 59, 48, 0.45);
 }
+/* 提示条贴在垃圾桶上方（不再放在屏幕顶部） */
 .ball-hint {
   position: fixed;
-  top: calc(10px + env(safe-area-inset-top, 0px));
   left: 50%;
-  transform: translate(-50%, -14px);
-  max-width: 88vw;
-  padding: 8px 14px;
+  bottom: calc(96px + 58px + 12px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 8px);
+  white-space: nowrap;
+  padding: 7px 14px;
   border-radius: 999px;
   background: var(--tabbar);
   backdrop-filter: saturate(180%) blur(18px);

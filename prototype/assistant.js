@@ -106,7 +106,10 @@
   let trashEl = null;
   let hintEl = null;
   let trashTimer = null;
+  let hintTimer = null;
   let closedByTrash = false;
+  const HOLD_MS = 1500;      // 放进垃圾桶并按住这么久才关闭
+  const HINT_MS = 500;       // 放进垃圾桶多久后给出提示
 
   function showDragUi() {
     if (!trashEl) {
@@ -120,17 +123,27 @@
       hintEl = document.createElement('div');
       hintEl.id = 'ball-hint';
       hintEl.className = 'ball-hint';
-      hintEl.textContent = '拖到垃圾桶按 2 秒可关闭 · 之后可在「我的 → 设置 → AI」里重新打开';
+      hintEl.textContent = '按住 1.5 秒删除';
       document.body.appendChild(hintEl);
     }
     trashEl.classList.add('show');
-    hintEl.classList.add('show');
   }
 
   function hideDragUi() {
     if (trashEl) trashEl.classList.remove('show', 'hot');
     if (hintEl) hintEl.classList.remove('show');
     if (trashTimer) { clearTimeout(trashTimer); trashTimer = null; }
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+  }
+
+  /* 放进垃圾桶满 1.5 秒才真的关闭；位置一并重置，下次打开回右下角初始位置 */
+  function closeByTrash() {
+    trashTimer = null;
+    closedByTrash = true;
+    hideDragUi();
+    saveBall({ x: null, y: null, hidden: true });
+    syncBall();
+    UI().toast('已关闭悬浮球，可在「我的 → 设置 → AI」里重新打开');
   }
 
   function updateTrashHover(cx, cy) {
@@ -140,18 +153,18 @@
     const over = cx >= r.left - pad && cx <= r.right + pad && cy >= r.top - pad && cy <= r.bottom + pad;
     trashEl.classList.toggle('hot', over);
     if (over) {
-      if (!trashTimer) {
-        trashTimer = setTimeout(function () {
-          trashTimer = null;
-          closedByTrash = true;
-          hideDragUi();
-          hideBall();
-          UI().toast('已关闭悬浮球，可在「我的 → 设置 → AI」里重新打开');
-        }, 2000);
+      if (!trashTimer) trashTimer = setTimeout(closeByTrash, HOLD_MS);
+      if (!hintTimer) {
+        hintTimer = setTimeout(function () {
+          hintTimer = null;
+          if (hintEl && trashEl.classList.contains('hot')) hintEl.classList.add('show');
+        }, HINT_MS);
       }
-    } else if (trashTimer) {
-      clearTimeout(trashTimer);          // 手指离开就重新计时，避免"蹭一下"就关
-      trashTimer = null;
+    } else {
+      // 手指离开就全部重来，避免"蹭一下"就关掉
+      if (trashTimer) { clearTimeout(trashTimer); trashTimer = null; }
+      if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+      if (hintEl) hintEl.classList.remove('show');
     }
   }
 

@@ -280,9 +280,6 @@
           '</div>'
         : '') +
 
-      // DeepSeek 账号余额卡片已经并在首页第二行，这里不再单独放
-      ''
-
       '<div class="section">' +
         '<div class="section-head"><h2>临期提醒</h2><span>30 天内 ' + s.expiring.length + ' 件</span></div>' +
         '<div class="group">' + (expiring || '<div class="empty"><div class="emoji">🫧</div><p>暂时没有快到期的东西</p></div>') + '</div>' +

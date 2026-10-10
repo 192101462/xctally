@@ -14,7 +14,7 @@
   const KEY = 'xctally.ai.v1';
   const DEFAULTS = {
     baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-v4.1-flash',
+    model: 'deepseek-flash',
     visionModel: '',            // 留空表示和 model 用同一个
     key: '',
     enabled: true
