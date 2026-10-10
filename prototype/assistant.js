@@ -95,6 +95,66 @@
   }
 
   /* 拖动：位移超过阈值算拖动，否则算点击（打开面板） */
+  const TRASH_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/></svg>';
+
+  /* ---------------- 拖到垃圾桶关闭 ----------------
+   * 拖动时露出垃圾桶与顶部提示；把球拖进垃圾桶并【按住 2 秒】才关闭。
+   * 单纯拖过去放一下不会关 —— 避免只是想挪个位置却把球弄没了。
+   */
+  let trashEl = null;
+  let hintEl = null;
+  let trashTimer = null;
+  let closedByTrash = false;
+
+  function showDragUi() {
+    if (!trashEl) {
+      trashEl = document.createElement('div');
+      trashEl.id = 'ball-trash';
+      trashEl.className = 'ball-trash';
+      trashEl.innerHTML = TRASH_SVG;
+      document.body.appendChild(trashEl);
+    }
+    if (!hintEl) {
+      hintEl = document.createElement('div');
+      hintEl.id = 'ball-hint';
+      hintEl.className = 'ball-hint';
+      hintEl.textContent = '拖到垃圾桶按 2 秒可关闭 · 之后可在「我的 → 设置 → AI」里重新打开';
+      document.body.appendChild(hintEl);
+    }
+    trashEl.classList.add('show');
+    hintEl.classList.add('show');
+  }
+
+  function hideDragUi() {
+    if (trashEl) trashEl.classList.remove('show', 'hot');
+    if (hintEl) hintEl.classList.remove('show');
+    if (trashTimer) { clearTimeout(trashTimer); trashTimer = null; }
+  }
+
+  function updateTrashHover(cx, cy) {
+    if (!trashEl || !trashEl.classList.contains('show')) return;
+    const r = trashEl.getBoundingClientRect();
+    const pad = 16;
+    const over = cx >= r.left - pad && cx <= r.right + pad && cy >= r.top - pad && cy <= r.bottom + pad;
+    trashEl.classList.toggle('hot', over);
+    if (over) {
+      if (!trashTimer) {
+        trashTimer = setTimeout(function () {
+          trashTimer = null;
+          closedByTrash = true;
+          hideDragUi();
+          hideBall();
+          UI().toast('已关闭悬浮球，可在「我的 → 设置 → AI」里重新打开');
+        }, 2000);
+      }
+    } else if (trashTimer) {
+      clearTimeout(trashTimer);          // 手指离开就重新计时，避免"蹭一下"就关
+      trashTimer = null;
+    }
+  }
+
   function bindDrag() {
     document.addEventListener('pointerdown', function (e) {
       const el = e.target.closest && e.target.closest('#ai-ball');
@@ -112,7 +172,7 @@
     document.addEventListener('pointermove', function (e) {
       if (!drag) return;
       if (!drag.moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 6) return;
-      drag.moved = true;
+      if (!drag.moved) { drag.moved = true; showDragUi(); }   // 真正开始拖动才露出垃圾桶
       const size = 56;
       drag.tx = Math.min(Math.max(8, e.clientX - drag.dx), Math.max(8, window.innerWidth - size - 8));
       drag.ty = Math.min(Math.max(8, e.clientY - drag.dy), Math.max(8, window.innerHeight - size - 90));
@@ -125,6 +185,7 @@
           drag.el.style.top = drag.ty + 'px';
         });
       }
+      updateTrashHover(drag.tx + size / 2, drag.ty + size / 2);
     }, { passive: true });
 
     function end() {
@@ -133,6 +194,11 @@
       drag = null;
       if (d.raf) cancelAnimationFrame(d.raf);
       d.el.classList.remove('dragging');
+      hideDragUi();
+      if (closedByTrash) {           // 已经被垃圾桶关掉了，别再写位置
+        closedByTrash = false;
+        return;
+      }
       if (d.moved) {
         // 落点用最后的目标值，别读 style（可能还差一帧没写进去）
         d.el.style.left = d.tx + 'px';
@@ -209,16 +275,16 @@
   }
 
   function openChat() {
-    if (!window.QYA || !QYA.ready()) { UI().toast('先在「我的 → DeepSeek 配置」里填 API Key'); return; }
+    if (!window.QYA || !QYA.ready()) { UI().toast('先在「我的 → 设置 → AI」里填 DeepSeek API Key'); return; }
     pending = null;
-    UI().openSheet(renderChat());
+    UI().openSheet(renderChat(), { keepBall: true });
     scrollLog();
     const t = document.getElementById('ai-text');
     if (t) t.focus();
   }
 
   function rerenderChat() {
-    UI().openSheet(renderChat());
+    UI().openSheet(renderChat(), { keepBall: true });
     scrollLog();
   }
 

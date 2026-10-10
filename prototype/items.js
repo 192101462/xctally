@@ -469,7 +469,7 @@
           '<input id="f-date" class="input" type="date" value="' + e.acquiredAt + '" /></div>' +
 
         '<label class="check-row"><input type="checkbox" id="f-costtrack"' + (costOn ? ' checked' : '') + ' />' +
-          '<span>计入日均成本</span><b>食品/药品这类消耗品通常不需要</b></label>' +
+          '<span>计入日均成本</span><b></b></label>' +
 
         '<div class="field"><label>图片（可选，支持动图）</label>' +
           '<div class="photo-row">' +

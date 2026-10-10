@@ -1809,6 +1809,55 @@ html.sheet-open .ai-ball {
 }
 .photo-wrap.has-img .photo-del { display: grid; }
 
+/* 拖动悬浮球时：底部垃圾桶 + 顶部提示（按住 2 秒才关闭） */
+.ball-trash {
+  position: fixed;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 12px) scale(0.8);
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 59, 48, 0.92);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 70;
+  box-shadow: 0 8px 24px rgba(255, 59, 48, 0.35);
+  transition: opacity 0.16s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.2s ease, background 0.2s ease;
+}
+.ball-trash.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.ball-trash.hot {
+  transform: translate(-50%, 0) scale(1.22);
+  background: #ff3b30;
+  box-shadow: 0 0 0 7px rgba(255, 59, 48, 0.22), 0 10px 28px rgba(255, 59, 48, 0.45);
+}
+.ball-hint {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translate(-50%, -14px);
+  max-width: 88vw;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--tabbar);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--hairline);
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--label);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 70;
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ball-hint.show { opacity: 1; transform: translate(-50%, 0); }
+
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
 body.bare .stage { gap: 0; }

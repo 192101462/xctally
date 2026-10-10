@@ -48,7 +48,7 @@
    */
   const UI_KEY = 'xctally.ui.v1';
   const UI_DEFAULTS = {
-    tabs: { home: true, items: true, collect: true, energy: true },
+    tabs: { home: true, items: true, collect: false, energy: false },
     sort: { items: 'date', collect: 'recent', energy: 'amount' },
     theme: 'auto'          // auto 跟随系统 / light / dark
   };
@@ -253,35 +253,35 @@
         '<div class="mini-foot">全部在用物品合计</div>' +
       '</div>' +
 
-      '<div class="grid-2">' +
-        '<div class="card">' +
+      (function () {
+        const wasteCard = '<div class="card">' +
           '<div class="mini-label">已经浪费掉的钱</div>' +
           '<div class="mini-value">' + QY.fmtMoney(s.wasted) + '</div>' +
           '<div class="mini-foot">' + s.wastedCount + ' 样过期未处置</div>' +
-        '</div>' +
-        (tabVisible('energy')
-          ? '<div class="card">' +
-              '<div class="mini-label">本月能源</div>' +
-              '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
-              '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
-                (s.energyTrend * 100).toFixed(0) + '%</div>' +
-            '</div>'
-          : '') +
-      '</div>' +
+        '</div>';
+        const hasKey = !!(window.QYA && QYA.cfg().key);
+        if (!hasKey) return wasteCard;
+        // 浪费的钱和 DS 账号余额并排
+        return '<div class="grid-2">' + wasteCard +
+          '<div class="card" id="ds-card">' +
+            '<div class="mini-label">DeepSeek 账号</div>' +
+            '<div class="mini-value" id="ds-money">—</div>' +
+            '<div class="mini-foot" id="ds-note">单击刷新 · 双击开球</div>' +
+          '</div>' +
+        '</div>';
+      })() +
 
-      // DeepSeek 账号：单击刷新金额，双击打开助手
-      (window.QYA && QYA.cfg().key
-        ? '<div class="ds-card" id="ds-card">' +
-            '<div>' +
-              '<div class="ds-title">DeepSeek 账号</div>' +
-              '<div class="ds-sub">单击刷新 · 双击打开助手</div>' +
-            '</div>' +
-            '<div class="ds-right">' +
-              '<div class="ds-money" id="ds-money">—</div>' +
-              '<div class="ds-note" id="ds-note"></div>' +
-            '</div>' +
+      (tabVisible('energy')
+        ? '<div class="card" style="margin-top:12px">' +
+            '<div class="mini-label">本月能源</div>' +
+            '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
+            '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
+              (s.energyTrend * 100).toFixed(0) + '%</div>' +
           '</div>'
         : '') +
+
+      // DeepSeek 账号余额卡片已经并在首页第二行，这里不再单独放
+      ''
 
       '<div class="section">' +
         '<div class="section-head"><h2>临期提醒</h2><span>30 天内 ' + s.expiring.length + ' 件</span></div>' +
@@ -545,7 +545,7 @@
     }).join('');
 
     return '' +
-      pageHead('我的', '数据全部存在本机 · 无需注册、不联网',
+      pageHead('我的', '',
         '<button class="gear-btn" data-action="open-settings" aria-label="设置">' + GEAR + '</button>') +
 
       '<div class="group">' +
@@ -570,11 +570,12 @@
 
   /* ---------------- 表单面板 ---------------- */
 
-  function openSheet(html) {
+  function openSheet(html, opts) {
     const root = $('#sheet-root');
     root.innerHTML = '<div class="scrim" data-action="close-sheet"></div>' + html;
     root.classList.add('open');
-    document.documentElement.classList.add('sheet-open');   // 悬浮球让位
+    // 对话面板例外：它自己就是悬浮球打开的，别把球藏了（否则像"点一下就关了"）
+    if (!(opts && opts.keepBall)) document.documentElement.classList.add('sheet-open');
   }
   function closeSheet() {
     const root = $('#sheet-root');
@@ -748,9 +749,9 @@
     else if (raw.indexOf('dark') >= 0) document.documentElement.setAttribute('data-theme', 'dark');
     if (!h) return;
     if (h === 'settings') {
-      state.setting = [];
+      state.setting = ['root'];
     } else if (h.indexOf('settings=') === 0) {
-      state.setting = h.slice(9).split(',');
+      state.setting = ['root'].concat(h.slice(9).split(','));
     } else if (h.indexOf('detail=') === 0) {
       state.tab = 'items';
       state.detailId = null;
@@ -917,7 +918,8 @@
       if (window.QYV) QYV.openDetail(id);
       mount();
     } else if (action === 'open-settings') {
-      state.setting = [];
+      // 'root' 是菜单层本身，这样二级页返回会回到菜单，而不是直接退出设置
+      state.setting = ['root'];
       mount();
     } else if (action === 'set-close') {
       state.setting = null;
@@ -1214,7 +1216,7 @@
     const memBytes = localBytes();
     const memImg = window.QYV ? QYV.imageBytes() : 0;
 
-    if (!path.length) {
+    if (!path.length || path[path.length - 1] === 'root') {
       return setNav('set-close', '我的', '设置', '该开的开，该关的关') +
         '<div class="group" style="margin-top:16px">' +
           setRow('set-go', 'AI', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
