@@ -666,25 +666,30 @@ body {
   -webkit-backdrop-filter: saturate(180%) blur(22px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--hairline);
   z-index: 3;
-  /* 淡入淡出的时长由 JS 按滑动距离写入 --fade-ms */
-  transition: opacity var(--fade-ms, 220ms) ease,
-              transform var(--fade-ms, 260ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 透明度/位移由 JS 按滑动进度写入 --hide-p（0 完全显示，1 完全隐去），
+     所以是"滑多少淡多少"，不是到点才切换。 */
+  opacity: calc(1 - var(--hide-p, 0));
+  transform: translateY(calc(var(--hide-p, 0) * 14px));
+  transition: opacity var(--fade-ms, 200ms) ease,
+              transform var(--fade-ms, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-/* 滑列表时淡出，停手后淡回 */
-html.scrolling .tabbar {
-  opacity: 0;
-  transform: translateY(14px);
-  pointer-events: none;
-}
+/* 手指还在滑 / 惯性还在动：进度实时跟手，不做补间 */
+html.scrolling .tabbar { transition: none; }
+/* 基本隐去之后就不再接收点击，避免点到看不见的按钮 */
+html.hide-bars .tabbar,
+html.hide-bars .ai-ball { pointer-events: none; }
+/* 程序滚动（切页、回顶）期间关掉补间，免得闪一下 */
+html.no-anim .tabbar,
+html.no-anim .ai-ball,
+html.no-anim .to-top { transition: none !important; }
 /* 平板/宽屏：长条别拉满，居中并限宽 */
 @media (min-width: 640px) {
   .tabbar {
     left: 50%;
     right: auto;
-    transform: translateX(-50%);
     width: min(430px, calc(100% - 28px));
+    transform: translateX(-50%) translateY(calc(var(--hide-p, 0) * 14px));
   }
-  html.scrolling .tabbar { transform: translateX(-50%) translateY(14px); }
 }
 .tab {
   flex: 1;
@@ -1525,15 +1530,14 @@ html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
   touch-action: none;          /* 拖动时不触发页面滚动 */
   cursor: grab;
   user-select: none;
-  transition: transform var(--fade-ms, 200ms) ease, opacity var(--fade-ms, 220ms) ease;
+  will-change: transform;      /* 拖动时走合成层，减少重绘 */
+  opacity: calc(1 - var(--hide-p, 0));
+  transform: scale(calc(1 - var(--hide-p, 0) * 0.14));
+  transition: transform var(--fade-ms, 200ms) ease, opacity var(--fade-ms, 200ms) ease;
 }
 .ai-ball.dragging { transform: scale(0.94); cursor: grabbing; }
-/* 滑列表时和标签栏一起淡出 */
-html.scrolling .ai-ball {
-  opacity: 0;
-  transform: scale(0.86);
-  pointer-events: none;
-}
+/* 往下滑时和标签栏一起按进度淡出 */
+html.scrolling .ai-ball { transition: none; }
 .ai-ball-x {
   position: absolute;
   top: -3px;

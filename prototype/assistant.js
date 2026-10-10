@@ -101,7 +101,11 @@
       if (!el) return;
       if (e.target.closest('[data-ai="close"]')) return;
       const r = el.getBoundingClientRect();
-      drag = { el: el, dx: e.clientX - r.left, dy: e.clientY - r.top, moved: false, sx: e.clientX, sy: e.clientY };
+      drag = {
+        el: el, dx: e.clientX - r.left, dy: e.clientY - r.top,
+        moved: false, sx: e.clientX, sy: e.clientY,
+        tx: r.left, ty: r.top, raf: 0
+      };
       el.classList.add('dragging');
     }, { passive: true });
 
@@ -110,19 +114,30 @@
       if (!drag.moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 6) return;
       drag.moved = true;
       const size = 56;
-      const x = Math.min(Math.max(8, e.clientX - drag.dx), Math.max(8, window.innerWidth - size - 8));
-      const y = Math.min(Math.max(8, e.clientY - drag.dy), Math.max(8, window.innerHeight - size - 90));
-      drag.el.style.left = x + 'px';
-      drag.el.style.top = y + 'px';
+      drag.tx = Math.min(Math.max(8, e.clientX - drag.dx), Math.max(8, window.innerWidth - size - 8));
+      drag.ty = Math.min(Math.max(8, e.clientY - drag.dy), Math.max(8, window.innerHeight - size - 90));
+      // 一帧只写一次样式：pointermove 一秒能来上百次，逐次写会明显发抖
+      if (!drag.raf) {
+        drag.raf = requestAnimationFrame(function () {
+          if (!drag) return;
+          drag.raf = 0;
+          drag.el.style.left = drag.tx + 'px';
+          drag.el.style.top = drag.ty + 'px';
+        });
+      }
     }, { passive: true });
 
     function end() {
       if (!drag) return;
       const d = drag;
       drag = null;
+      if (d.raf) cancelAnimationFrame(d.raf);
       d.el.classList.remove('dragging');
       if (d.moved) {
-        saveBall({ x: parseFloat(d.el.style.left), y: parseFloat(d.el.style.top) });
+        // 落点用最后的目标值，别读 style（可能还差一帧没写进去）
+        d.el.style.left = d.tx + 'px';
+        d.el.style.top = d.ty + 'px';
+        saveBall({ x: d.tx, y: d.ty });
       } else {
         openChat();
       }
