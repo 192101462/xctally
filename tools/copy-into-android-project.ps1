@@ -114,13 +114,29 @@ foreach ($legacy in @("$dst\app\build.gradle.kts.bak", "$dst\app\build.gradle.ba
 }
 
 # ---------------------------------------------------------------- 1. web app
+# If the module builds its assets straight from the repo (assets.srcDirs, set up by
+# adopt-studio-project.cmd), there is nothing to copy - and copying would leave a
+# stale duplicate in assets/www that Gradle would merge as well.
+$usesSrcDirs = $false
+if ($gradlePath -and (Test-Path $gradlePath)) {
+    $gxCheck = [System.IO.File]::ReadAllText($gradlePath, [System.Text.Encoding]::UTF8)
+    $usesSrcDirs = ($gxCheck -match 'assets\.srcDirs')
+}
+
+$wwwDst = Join-Path $mainDir 'assets\www'
+if ($usesSrcDirs) {
+    Write-Host "  [web]     assets.srcDirs is set -> building straight from prototype/, nothing to copy" -ForegroundColor Green
+    if (Test-Path $wwwDst) {
+        Remove-Item (Join-Path $mainDir 'assets') -Recurse -Force
+        Write-Host "  [clean]   removed the stale assets\www copy" -ForegroundColor Yellow
+    }
+} else {
 # Do not hardcode the file list: sync every web asset in prototype/.
 # (Hardcoding it once dropped items.js, the app silently fell back to old code
 #  paths, and the symptoms looked nothing like "a file is missing".)
 $webFiles = Get-ChildItem $prototype -File | Where-Object {
     $_.Extension -in '.js', '.css', '.html'
 }
-$wwwDst = Join-Path $mainDir 'assets\www'
 if (Test-Path $wwwDst) { Remove-Item $wwwDst -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $wwwDst | Out-Null
 
@@ -148,6 +164,7 @@ if (Test-Path $htmlPath) {
                " - the app would silently fall back to old code paths.")
     }
     Write-Host "  [web]     all <script> referenced by index.html are present" -ForegroundColor Green
+}
 }
 
 # ---------------------------------------------------------------- 2. shell sources
