@@ -755,6 +755,7 @@
     view.innerHTML = html;
     // 设置 → AI：有 Key 就自动拉一次余额
     if (state.setting && state.setting[state.setting.length - 1] === 'ai') loadAiBalance();
+    updateTopPill();
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
@@ -818,11 +819,27 @@
     if (window.QYI && QYI.handleAction(action, el)) return;
 
     if (action === 'tab') {
-      state.tab = el.getAttribute('data-tab');
+      const next = el.getAttribute('data-tab');
+      const v = $('#view');
+      if (next === state.tab && v) {
+        // 点同一个标签：回到顶部（和多数 App 一致）
+        v.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      rememberScroll();
+      state.tab = next;
       state.detailId = null;
       if (window.QYV) QYV.clearDetail();
       if (window.QYI) QYI.clearDetail();
+      resetScrollUi();                 // 切页面不播淡入淡出
       mount();
+      restoreScroll();                 // 切回来还在原来的位置
+    } else if (action === 'to-top') {
+      const v2 = $('#view');
+      resetScrollUi();                 // 回顶是程序滚动，同样不播动画
+      if (v2) v2.scrollTo({ top: 0, behavior: 'smooth' });
+      const pill = document.getElementById('to-top');
+      if (pill) pill.classList.remove('show');
     } else if (action === 'detail') {
       state.detailId = id;
       mount();
@@ -1181,16 +1198,81 @@
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
 
-  /* 滑动列表时淡出底部标签栏与悬浮球，停手后再淡入 */
+  /* ---------------- 滚动相关 ----------------
+   * 1) 滑列表时底部标签栏与对话悬浮球淡出，停手后淡回；
+   *    快慢由【本次滑动的距离】决定：滑得越远，淡出/淡回越快，回来得也越晚。
+   * 2) 只有用户主动滑动（触摸/滚轮）才触发动画 ——
+   *    切换页面、点"回到顶部"这类程序滚动不该让控件闪一下。
+   * 3) 往下滑之后，页面标题在顶部变成小长圆条，点它直接回到最上方。
+   * 4) 每个标签页各自记住滚动位置，切回来还在原地；点同一个标签则回到顶部。
+   */
+  const PAGE_TITLES = { home: '今天', items: '物品', collect: '收藏', energy: '能源', me: '我的' };
+  const scrollMemo = {};
   let scrollIdle = null;
+  let scrollUiAllowed = false;     // 只有在用户触摸/滚轮之后才允许触发动画
+  let gestureStartTop = null;
+
+  document.addEventListener('touchstart', function () { scrollUiAllowed = true; },
+    { passive: true, capture: true });
+  document.addEventListener('wheel', function () { scrollUiAllowed = true; },
+    { passive: true, capture: true });
+
+  (function initTopPill() {
+    const el = document.createElement('div');
+    el.id = 'to-top';
+    el.className = 'to-top';
+    el.setAttribute('data-action', 'to-top');
+    el.innerHTML = '<span id="to-top-label"></span>';
+    document.body.appendChild(el);
+  })();
+
+  function viewEl() { return document.getElementById('view'); }
+
+  function resetScrollUi() {
+    scrollUiAllowed = false;
+    gestureStartTop = null;
+    if (scrollIdle) { clearTimeout(scrollIdle); scrollIdle = null; }
+    document.documentElement.classList.remove('scrolling');
+  }
+
+  function rememberScroll() {
+    const v = viewEl();
+    if (v && !state.setting) scrollMemo[state.tab] = v.scrollTop;
+  }
+
+  function restoreScroll() {
+    const v = viewEl();
+    if (!v) return;
+    v.scrollTop = state.setting ? 0 : (scrollMemo[state.tab] || 0);
+    updateTopPill();
+  }
+
+  function updateTopPill() {
+    const pill = document.getElementById('to-top');
+    if (!pill) return;
+    const lbl = document.getElementById('to-top-label');
+    if (lbl) lbl.textContent = PAGE_TITLES[state.tab] || '';
+    const v = viewEl();
+    pill.classList.toggle('show', !!(v && !state.setting && v.scrollTop > 200));
+  }
+
   document.addEventListener('scroll', function (e) {
     const t = e.target;
     if (!t || !t.classList || !t.classList.contains('view')) return;
+    updateTopPill();
+    if (!scrollUiAllowed) return;                  // 程序滚动：不参与淡入淡出
+    if (gestureStartTop == null) gestureStartTop = t.scrollTop;
+    const moved = Math.abs(t.scrollTop - gestureStartTop);
+    const fade = Math.min(420, 130 + moved * 0.35);
+    const hold = Math.min(900, 180 + moved * 0.8);
+    document.documentElement.style.setProperty('--fade-ms', Math.round(fade) + 'ms');
     document.documentElement.classList.add('scrolling');
     if (scrollIdle) clearTimeout(scrollIdle);
     scrollIdle = setTimeout(function () {
       document.documentElement.classList.remove('scrolling');
-    }, 520);
+      gestureStartTop = null;
+      scrollIdle = null;
+    }, hold);
   }, true);
 
   // 先记下原始 hash：mount() 会把它改写成规范形式

@@ -653,25 +653,27 @@ body {
 /* 底部标签栏：悬浮的圆角长条（不再是贴到底边的整宽栏） */
 .tabbar {
   position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  height: 62px;
+  left: 16px;
+  right: 16px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  height: 54px;
   display: flex;
   align-items: center;
-  padding: 0 8px;
-  border-radius: 31px;
+  padding: 0 6px;
+  border-radius: 27px;
   background: var(--tabbar);
   backdrop-filter: saturate(180%) blur(22px);
   -webkit-backdrop-filter: saturate(180%) blur(22px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13), 0 0 0 0.5px var(--hairline);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.12), 0 0 0 0.5px var(--hairline);
   z-index: 3;
-  transition: opacity 0.28s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 淡入淡出的时长由 JS 按滑动距离写入 --fade-ms */
+  transition: opacity var(--fade-ms, 220ms) ease,
+              transform var(--fade-ms, 260ms) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 /* 滑列表时淡出，停手后淡回 */
 html.scrolling .tabbar {
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(14px);
   pointer-events: none;
 }
 /* 平板/宽屏：长条别拉满，居中并限宽 */
@@ -682,7 +684,7 @@ html.scrolling .tabbar {
     transform: translateX(-50%);
     width: min(430px, calc(100% - 28px));
   }
-  html.scrolling .tabbar { transform: translateX(-50%) translateY(16px); }
+  html.scrolling .tabbar { transform: translateX(-50%) translateY(14px); }
 }
 .tab {
   flex: 1;
@@ -692,14 +694,15 @@ html.scrolling .tabbar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 4px 0;
+  justify-content: center;   /* 图标 + 文字整体在长条里垂直居中 */
+  gap: 2px;
+  padding: 0;
   color: var(--label-3);
   cursor: pointer;
   transition: color 0.18s ease;
 }
-.tab svg { width: 25px; height: 25px; }
-.tab span { font-size: 10px; font-weight: 600; letter-spacing: -0.01em; }
+.tab svg { width: 23px; height: 23px; display: block; }
+.tab span { font-size: 10px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.1; }
 .tab.active { color: var(--blue); }
 
 /* 页面标题栏：大标题 + 右侧圆形操作按钮（比悬浮按钮更干净，不遮挡列表内容） */
@@ -1522,7 +1525,7 @@ html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
   touch-action: none;          /* 拖动时不触发页面滚动 */
   cursor: grab;
   user-select: none;
-  transition: transform 0.2s ease, opacity 0.28s ease;
+  transition: transform var(--fade-ms, 200ms) ease, opacity var(--fade-ms, 220ms) ease;
 }
 .ai-ball.dragging { transform: scale(0.94); cursor: grabbing; }
 /* 滑列表时和标签栏一起淡出 */
@@ -1711,6 +1714,34 @@ html.scrolling .ai-ball {
   cursor: pointer;
 }
 .ai-balance:active { opacity: 0.55; }
+
+/* 往下滑时，页面标题变成顶部的小长圆条：点它回到最上方 */
+.to-top {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translate(-50%, -16px);
+  opacity: 0;
+  pointer-events: none;
+  padding: 7px 17px;
+  border-radius: 999px;
+  background: var(--tabbar);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--hairline);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--label);
+  z-index: 5;
+  transition: opacity var(--fade-ms, 200ms) ease,
+              transform var(--fade-ms, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.to-top.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+.to-top:active { transform: translate(-50%, 0) scale(0.95); }
 
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
