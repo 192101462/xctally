@@ -332,7 +332,8 @@
     }).join('');
 
     return '' +
-      '<div class="navbar"><button class="back" data-action="i-back">‹ 物品</button></div>' +
+      '<div class="navbar"><button class="back" data-action="i-back">‹ ' +
+        esc(UI().detailBackLabel ? UI().detailBackLabel() : '物品') + '</button></div>' +
       hero +
       '<div style="padding:18px 4px 0">' +
         '<h1 style="margin:0;font-size:25px;font-weight:700;letter-spacing:-0.025em">' + esc(item.name) + '</h1>' +

@@ -1400,6 +1400,11 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .swipe.swiping .swipe-body { transition: none; }
 .swipe.open-right .swipe-body { transform: translateX(-236px); }
 .swipe-act { position: absolute; top: 0; bottom: 0; display: flex; z-index: 0; }
+/* 操作按钮平时完全透明：只有真的在横滑或已划开时才出现。
+   这样无论圆角/行高怎么算，静止和竖滑时都不可能露出一点蓝/灰/红。 */
+.swipe-act { opacity: 0; transition: opacity 0.12s ease; }
+.swipe.swiping .swipe-act,
+.swipe.open-right .swipe-act { opacity: 1; }
 .swipe-act.right { right: 0; }
 .sw-btn {
   border: 0;

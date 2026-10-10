@@ -247,30 +247,27 @@
     return '' +
       pageHead('今天', dateLabel + ' · 正在记录 ' + s.count + ' 样东西', iconBtn('add', '新增记录')) +
 
-      '<div class="card hero">' +
-        '<div class="hero-label">已经浪费掉的钱</div>' +
-        '<div class="hero-value">' + QY.fmtMoney(s.wasted) + '</div>' +
-        '<div class="hero-foot">' + s.wastedCount + ' 样东西过期未处置 · 累计投入的 ' +
-          (s.totalSpend ? (s.wasted / s.totalSpend * 100).toFixed(1) : '0') + '%</div>' +
+      '<div class="card">' +
+        '<div class="mini-label">持有成本</div>' +
+        '<div class="mini-value">' + QY.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
+        '<div class="mini-foot">全部在用物品合计</div>' +
       '</div>' +
 
-      (function () {
-        const costCard = '<div class="card">' +
-          '<div class="mini-label">持有成本</div>' +
-          '<div class="mini-value">' + QY.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
-          '<div class="mini-foot">全部在用物品合计</div>' +
-        '</div>';
-        // 能源页被隐藏时，首页这张卡也一起不显示
-        if (!tabVisible('energy')) return costCard;
-        return '<div class="grid-2">' + costCard +
-          '<div class="card">' +
-            '<div class="mini-label">本月能源</div>' +
-            '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
-            '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
-              (s.energyTrend * 100).toFixed(0) + '%</div>' +
-          '</div>' +
-        '</div>';
-      })() +
+      '<div class="grid-2">' +
+        '<div class="card">' +
+          '<div class="mini-label">已经浪费掉的钱</div>' +
+          '<div class="mini-value">' + QY.fmtMoney(s.wasted) + '</div>' +
+          '<div class="mini-foot">' + s.wastedCount + ' 样过期未处置</div>' +
+        '</div>' +
+        (tabVisible('energy')
+          ? '<div class="card">' +
+              '<div class="mini-label">本月能源</div>' +
+              '<div class="mini-value">' + QY.fmtMoney(s.energy) + '</div>' +
+              '<div class="mini-foot ' + trendCls + '">较上月 ' + (s.energyTrend >= 0 ? '+' : '') +
+                (s.energyTrend * 100).toFixed(0) + '%</div>' +
+            '</div>'
+          : '') +
+      '</div>' +
 
       // DeepSeek 账号：单击刷新金额，双击打开助手
       (window.QYA && QYA.cfg().key
@@ -1003,6 +1000,14 @@
     mount();
   }
 
+  /* 详情页返回按钮上写什么：哪来的就写哪 */
+  function detailBackLabel() {
+    const from = state.detailFrom;
+    if (!from || from === 'items') return '物品';
+    if (from === 'home') return '首页';
+    return PAGE_TITLES[from] || '物品';
+  }
+
   /* 从物品详情返回：哪来的回哪去（首页 -> 首页，物品 -> 物品列表） */
   function backFromDetail() {
     const from = state.detailFrom;
@@ -1296,6 +1301,7 @@
     mount: mount,
     goItem: goItem,
     backFromDetail: backFromDetail,
+    detailBackLabel: detailBackLabel,
     ui: ui,
     uiSet: uiSet,
     itemById: function (id) { return itemById(id); },
