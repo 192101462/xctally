@@ -87,23 +87,36 @@ $gradlePath = Join-Path $target 'app\build.gradle.kts'
 $gx = [System.IO.File]::ReadAllText($gradlePath, [System.Text.Encoding]::UTF8)
 
 if ($gx -notmatch 'assets\.srcDirs') {
-    $m = [regex]::Match($gx, '(?m)^android\s*\{')
-    if (-not $m.Success) { throw "Could not find the android { } block in $gradlePath" }
-    $block = @'
+    $anchor = 'android {'
+    $idx = $gx.IndexOf($anchor)
+    if ($idx -lt 0) { throw "Could not find 'android {' in $gradlePath" }
 
+    $header = @'
+// The web app in the repo IS this module's asset dir - no copy, so "Update Project"
+// (Ctrl+T) plus Run is the whole workflow.
+// srcDirs resolves relative paths against the MODULE dir (apps/android/app), and a
+// wrong path fails silently (empty assets -> white screen in the app), so anchor it
+// on rootProject and fail the build loudly if it is missing.
+val webAssetsDir = rootProject.projectDir.resolve("../../prototype")
+require(webAssetsDir.isDirectory) {
+    "Web assets not found: $webAssetsDir (expected <repo>/prototype)"
+}
+
+'@
+    $inner = @'
     sourceSets {
-        // Build the web app straight from the repo (../../prototype) instead of
-        // keeping a copy in assets/www. That is what removes the sync step:
-        // git pull / Update Project is enough, then press Run.
         getByName("main") {
-            assets.srcDirs("../../prototype")
+            assets.srcDirs(webAssetsDir)
         }
     }
+
 '@
-    $gx = $gx.Insert($m.Index + $m.Length, $block)
+    # single deterministic splice: header before "android {", sourceSets just inside it
+    $gx = $gx.Substring(0, $idx) + $header + $anchor + "`r`n" + $inner +
+          $gx.Substring($idx + $anchor.Length)
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($gradlePath, $gx, $utf8NoBom)
-    Write-Host "  [edit]  app\build.gradle.kts: assets.srcDirs -> ../../prototype" -ForegroundColor Green
+    Write-Host "  [edit]  app\build.gradle.kts: assets.srcDirs -> <repo>\prototype" -ForegroundColor Green
 } else {
     Write-Host "  [ok]    app\build.gradle.kts already has assets.srcDirs" -ForegroundColor DarkGray
 }
