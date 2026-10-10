@@ -488,6 +488,31 @@
         '</div>' +
       '</div>' +
 
+      // AI：没填 Key 时只露出"配置"一项，界面保持干净；填了才出现识图入口
+      (function () {
+        const aiReady = !!(window.QYO && QYO.ready());
+        const cfg = window.QYA ? QYA.cfg() : null;
+        return '<div class="section">' +
+          '<div class="section-head"><h2>AI 助手</h2><span>' +
+            (aiReady ? '已开启 · 需要联网' : '未配置') + '</span></div>' +
+          '<div class="group">' +
+            (aiReady ? '<div class="row" data-action="i-ocr">' +
+              '<div class="tl-dot">📷</div>' +
+              '<div class="row-main"><div class="row-title">从截图识别</div>' +
+                '<div class="row-sub">淘宝/京东/拼多多订单截图、购物小票</div></div>' +
+              '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
+            '<div class="row" data-action="i-ai-cfg">' +
+              '<div class="tl-dot">🔑</div>' +
+              '<div class="row-main"><div class="row-title">DeepSeek 配置</div>' +
+                '<div class="row-sub">' + (cfg && cfg.key
+                  ? '模型 ' + esc(cfg.model)
+                  : '填 API Key 后开启识图与对话') + '</div></div>' +
+              '<div class="row-side"><span class="chev">›</span></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      })() +
+
       '<div class="section">' +
         '<div class="section-head"><h2>数据</h2><span>' + backupHint + '</span></div>' +
         (heavy ? '<div class="notice">本地占用已经接近浏览器上限（约 5MB）。建议先导出一份备份，' +

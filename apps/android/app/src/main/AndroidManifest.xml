@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   xctally 安卓壳
-  注意：这里**没有申请 INTERNET 权限** —— 应用完全离线，只读本地资源。
+
+  网络权限：只为了「从截图识别」和对话助手 —— 这两项要调用大模型 API。
+  加了 INTERNET 之后应用不再是"完全离线"：截图与对话内容会上传到模型服务商。
+  因此网页侧把 AI 做成【默认关闭】的开关（我的 → DeepSeek 配置），
+  不填 API Key 时 App 的行为和纯离线工具完全一样。
   分享备份用的是系统 FileProvider，不需要网络。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"

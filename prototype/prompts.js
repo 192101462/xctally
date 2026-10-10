@@ -1,0 +1,128 @@
+/* 琪遇台账 · AI 提示词
+ * ---------------------------------------------------------------
+ * 两个提示词都放在这里，不散落在业务代码里：
+ *   VISION    订单/小票截图 -> 物品 JSON（识图导入）
+ *   ASSISTANT 对话 -> 动作清单（助手改数据，下一轮接）
+ *
+ * 设计原则（踩过的坑总结）：
+ *   1. 宁可让它留空，也不要让它猜。价格猜错你发现不了，字段缺了你一眼看见。
+ *   2. 分类只能从用户自己的分类里选，禁止自创（否则会冒出"乳制品"这种没建过的分类）。
+ *   3. 要求输出严格 JSON，并在代码里做容错解析（模型偶尔会包 ```json）。
+ *   4. 模型只产出"动作"，真正改数据一律由 App 确认后执行。
+ */
+(function () {
+  'use strict';
+
+  // 显式取，别依赖裸全局：浏览器里 window.QY 恰好能当 QY 用，
+  // 但这个文件是纯函数模块，应当在任何环境（含 node 探针）下都能跑。
+  const QY = window.QY;
+
+  const VISION = `你是订单信息提取器。只输出 JSON，不要任何解释文字，不要 markdown 代码块。
+
+【输入】一张订单或购物小票的截图。
+【输出】严格按这个结构：
+{
+  "order": { "platform": "淘宝|天猫|京东|拼多多|其他", "date": "YYYY-MM-DD", "paidTotal": 数字或null },
+  "items": [
+    { "name": "", "price": 数字或null, "qty": 数字, "category": "", "sub": "",
+      "confidence": "high|low", "note": "" }
+  ],
+  "unreadable": [ "读不清的字段说明" ]
+}
+
+【铁律】
+1. 只提取截图里真实存在的信息。看不清、被遮挡、没有的字段：数字填 null，文本填 ""。
+   绝对不要猜测、不要补全、不要"看起来应该是"。
+2. price 是该商品的实付金额（已含满减、优惠券分摊）。若一单多件只给了总实付，
+   按各商品标价比例分摊，并在 note 里写明"按比例分摊"。无法确定就填 null，
+   并在 unreadable 里说明原因。
+3. qty 是数量，默认 1。不要把规格算进数量（如 250ml×12盒 属于规格，写进 note）。
+4. category 只能从这个清单里选：{{CATEGORIES}}
+   没有合适的填 "其他"。禁止自创分类名。
+5. 不要输出到期日、保质期字段，用户自己填。
+6. date 用 YYYY-MM-DD。截图里是 "2026-10-09 12:33" 就取 2026-10-09。
+7. confidence 填 "low" 的情况：数字或名称模糊、你做了分摊、你做了任何推断。其余填 "high"。
+8. note 写规格、店铺名、口味等截图里确实有的补充信息。
+9. 截图里有几行商品就输出几条，不要合并看起来相似的商品。
+10. 如果整张图都不是订单（例如聊天记录、风景照），输出 {"error":"not_an_order"}，不要硬编。`;
+
+  const ASSISTANT = `你是「琪遇台账」的助手，帮用户管理物品（库存、过期、成本）和能源用量。
+
+【当前数据】
+物品清单（id | 名称 | 分类 | 价格 | 状态 | 归档 | 到期日）：
+{{ITEMS_TABLE}}
+
+汇总：在用 {{COUNT}} 件，持有成本 {{DAILY}}/天，已浪费 ¥{{WASTED}}
+今天是 {{TODAY}}
+用户自己的分类：{{CATEGORIES}}
+
+【输出】严格按这个结构，不要有其他文字：
+{ "reply": "给用户看的话（简体中文，简短）", "actions": [ ...动作... ] }
+
+【动作】
+{ "type":"add_item",     "name":"", "price":数字或null, "qty":数字, "category":"", "sub":"", "acquiredAt":"YYYY-MM-DD", "source":"", "location":"", "note":"" }
+{ "type":"update_item",  "id":"", "fields":{ 要改的字段 } }
+{ "type":"set_archived", "id":"", "archived":true|false }
+{ "type":"set_pinned",   "id":"", "pinned":true|false }
+{ "type":"delete_item",  "id":"" }
+
+【铁律】
+1. 只能使用上面清单里真实存在的 id。清单里没有的 id 一律不许编造。
+2. 信息不全时（例如用户没给价格、没给日期）不要瞎填：actions 留空，
+   在 reply 里问清楚。日期缺失可以默认今天，但要说明"按今天记"。
+3. 删除、归档这类会改变数据的动作，只生成动作，不要声称已经完成——App 会先让用户确认。
+4. 一次最多 10 个动作。
+5. 分类只能用上面的分类清单，没有合适的用 "其他"。
+6. 统计、筛选类问题（"这个月食品花了多少""哪些快过期了"）直接用 reply 回答，
+   actions 留空。清单里没有的信息就说不知道，不要推算。
+7. 语气像同事帮你记账：简短、直接，不要客套，不要复述用户的话。`;
+
+  function fill(tpl, vars) {
+    return String(tpl).replace(/\{\{(\w+)\}\}/g, function (m, k) {
+      return vars && vars[k] != null ? String(vars[k]) : '';
+    });
+  }
+
+  function catNames(data) {
+    const list = (window.QY && QY.catList) ? QY.catList(data) : [];
+    const names = list.map(function (c) { return c.name; });
+    if (names.indexOf('其他') < 0) names.push('其他');
+    return names.join(' / ');
+  }
+
+  function itemsTable(data) {
+    const items = (data && data.items) || [];
+    if (!items.length) return '（空）';
+    return items.map(function (it) {
+      return [
+        it.id,
+        it.name,
+        it.category,
+        it.cost == null ? '-' : it.cost,
+        it.status,
+        QY.isArchived(it) ? '已归档' : '在用',
+        it.expiresAt || '-'
+      ].join(' | ');
+    }).join('\n');
+  }
+
+  window.QYP = {
+    VISION: VISION,
+    ASSISTANT: ASSISTANT,
+    fill: fill,
+    visionPrompt: function (data) {
+      return fill(VISION, { CATEGORIES: catNames(data) });
+    },
+    assistantPrompt: function (data) {
+      const s = QY.summaries(data);
+      return fill(ASSISTANT, {
+        ITEMS_TABLE: itemsTable(data),
+        COUNT: s.count,
+        DAILY: QY.fmtRate(s.daily),
+        WASTED: s.wasted.toFixed(2),
+        TODAY: QY.iso(QY.today()),
+        CATEGORIES: catNames(data)
+      });
+    }
+  };
+})();
