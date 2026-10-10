@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    自适应图标（Android 8+）的前景层：透明底，只有曲线主体。
+    整张画布是 108dp，安全区是中间 72dp（约 66%），所以图形必须留在中间。
+    这里把主图形整体上移 80 并缩到 0.94，正好落在安全区内。
+  -->
+  <g transform="translate(0,-80) scale(0.94) translate(27,27)">
+    <path d="M232 372 C 372 372, 452 648, 792 676"
+          fill="none" stroke="#ffffff" stroke-width="64" stroke-linecap="round"/>
+    <circle cx="792" cy="676" r="70" fill="#ffffff"/>
+    <circle cx="792" cy="676" r="29" fill="#2C7BF6"/>
+  </g>
+</svg>
