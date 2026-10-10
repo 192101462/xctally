@@ -49,7 +49,8 @@
   const UI_KEY = 'xctally.ui.v1';
   const UI_DEFAULTS = {
     tabs: { home: true, items: true, collect: true, energy: true },
-    sort: { items: 'date', collect: 'recent', energy: 'amount' }
+    sort: { items: 'date', collect: 'recent', energy: 'amount' },
+    theme: 'auto'          // auto 跟随系统 / light / dark
   };
   // 这三个是主要入口（"我的"还是设置的入口），不允许隐藏
   const FORCED_TABS = { home: 1, items: 1, me: 1 };
@@ -59,18 +60,40 @@
     try { c = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (err) { c = {}; }
     return {
       tabs: Object.assign({}, UI_DEFAULTS.tabs, c.tabs || {}),
-      sort: Object.assign({}, UI_DEFAULTS.sort, c.sort || {})
+      sort: Object.assign({}, UI_DEFAULTS.sort, c.sort || {}),
+      theme: c.theme || UI_DEFAULTS.theme
     };
   }
   function uiSet(patch) {
     const cur = ui();
     const next = {
       tabs: Object.assign({}, cur.tabs, (patch && patch.tabs) || {}),
-      sort: Object.assign({}, cur.sort, (patch && patch.sort) || {})
+      sort: Object.assign({}, cur.sort, (patch && patch.sort) || {}),
+      theme: (patch && patch.theme) || cur.theme || 'auto'
     };
     try { localStorage.setItem(UI_KEY, JSON.stringify(next)); } catch (err) { /* 忽略 */ }
   }
   function tabVisible(id) { return !!FORCED_TABS[id] || ui().tabs[id] !== false; }
+
+  /* 主题：跟随系统 / 浅色 / 深色 */
+  const THEME_MODES = [
+    { v: 'auto', t: '跟随系统' },
+    { v: 'light', t: '浅色' },
+    { v: 'dark', t: '深色' }
+  ];
+  function themeLabel() {
+    const m = ui().theme || 'auto';
+    for (let i = 0; i < THEME_MODES.length; i++) if (THEME_MODES[i].v === m) return THEME_MODES[i].t;
+    return '跟随系统';
+  }
+  function systemPrefersDark() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  function applyTheme() {
+    const mode = ui().theme || 'auto';
+    const dark = mode === 'dark' || (mode === 'auto' && systemPrefersDark());
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  }
 
   const ITEMS_SORTS = [
     { v: 'date', t: '获得日期（新 → 旧）' },
@@ -782,6 +805,7 @@
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
     document.documentElement.classList.toggle('in-settings', !!state.setting);
+    document.documentElement.classList.toggle('in-detail', inDetail());
     $('#tabbar').innerHTML = state.setting ? '' : TABS.filter(function (t) {
       return tabVisible(t.id);
     }).map(function (t) {
@@ -917,6 +941,10 @@
       const tabsPatch = {};
       tabsPatch[key] = !!el.checked;
       uiSet({ tabs: tabsPatch });
+      mount();
+    } else if (action === 'set-theme-mode') {
+      uiSet({ theme: el.getAttribute('data-v') });
+      applyTheme();
       mount();
     } else if (action === 'set-sort') {
       const sortPatch = {};
@@ -1103,10 +1131,10 @@
       (on ? ' checked' : '') + ' /><i></i></label></div>';
   }
 
-  function sortGroup(label, key, opts, cur) {
+  function sortGroup(label, key, opts, cur, action) {
     return '<div class="set-group-title">' + esc(label) + '</div><div class="group">' +
       opts.map(function (o) {
-        return '<div class="set-row" data-action="set-sort" data-g="' + key +
+        return '<div class="set-row" data-action="' + (action || 'set-sort') + '" data-g="' + key +
           '" data-v="' + o.v + '">' +
           '<span class="set-title">' + esc(o.t) + '</span>' +
           (cur === o.v ? '<span class="chev" style="color:var(--blue)">✓</span>' : '') +
@@ -1162,7 +1190,7 @@
     if (dsClickTimer) {
       clearTimeout(dsClickTimer);
       dsClickTimer = null;
-      if (window.QYO) QYO.openChat();      // 双击 = 打开悬浮球对话
+      if (window.QYO) QYO.showBall();      // 双击 = 让悬浮球出现（不直接开对话）
       return;
     }
     dsClickTimer = setTimeout(function () {
@@ -1192,7 +1220,7 @@
     }
 
     const top = path[path.length - 1];
-    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序' };
+    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序', theme: '深色模式' };
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {
@@ -1216,10 +1244,14 @@
       const t0 = ui().tabs;
       const hidden = ['collect', 'energy'].filter(function (k) { return t0[k] === false; }).length;
       return nav + '<div class="group" style="margin-top:16px">' +
-        switchRow('set-theme', '深色模式', dark) +
+        setRow('set-go', '深色模式', { k: 'theme', side: themeLabel(), chev: true }) +
         setRow('set-go', '界面', { k: 'tabs', side: hidden ? '隐藏 ' + hidden + ' 个' : '全部显示', chev: true }) +
         setRow('set-go', '排序', { k: 'sort', chev: true }) +
         '</div>';
+    }
+    if (top === 'theme') {
+      return nav + sortGroup('深色模式', 'theme', THEME_MODES, ui().theme || 'auto', 'set-theme-mode') +
+        '<div class="notice" style="margin-top:12px">"跟随系统"会跟着手机的深色开关走。</div>';
     }
     if (top === 'tabs') {
       const t = ui().tabs;
@@ -1273,8 +1305,15 @@
 
   /* ---------------- 启动 ---------------- */
 
-  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  applyTheme();
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) {
+      mq.addEventListener('change', function () {
+        if ((ui().theme || 'auto') === 'auto') applyTheme();   // 跟随系统时才跟随
+      });
+    }
+  }
 
   /* ---------------- 滚动相关 ----------------
    * 1) 滑列表时底部标签栏与对话悬浮球按【滑动进度】连续淡出（滑多少淡多少），
@@ -1333,6 +1372,13 @@
 
   function viewEl() { return document.getElementById('view'); }
 
+  /* 是否处在"某条记录的详情页"（物品详情 / 随笔详情） */
+  function inDetail() {
+    return !!(state.detailId ||
+      (window.QYI && QYI.hasDetail && QYI.hasDetail()) ||
+      (window.QYV && QYV.hasDetail && QYV.hasDetail()));
+  }
+
   function resetScrollUi() {
     scrollUiAllowed = false;
     gestureStartTop = null;
@@ -1361,7 +1407,8 @@
     const lbl = document.getElementById('to-top-label');
     if (lbl) lbl.textContent = PAGE_TITLES[state.tab] || '';
     const v = viewEl();
-    pill.classList.toggle('show', !!(v && !state.setting && v.scrollTop > 200));
+    // 详情页里既不要底部标签栏，也不要这个回顶长条
+    pill.classList.toggle('show', !!(v && !state.setting && !inDetail() && v.scrollTop > 200));
   }
 
   document.addEventListener('scroll', function (e) {

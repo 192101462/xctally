@@ -656,11 +656,11 @@ body {
   left: 16px;
   right: 16px;
   bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  height: 54px;
+  height: 58px;
   display: flex;
   align-items: center;
   padding: 0 6px;
-  border-radius: 27px;
+  border-radius: 29px;
   background: var(--tabbar);
   backdrop-filter: saturate(180%) blur(22px);
   -webkit-backdrop-filter: saturate(180%) blur(22px);
@@ -1416,7 +1416,11 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .sw-btn.del { background: var(--red); }
 /* 行之间的分隔线：行被 .swipe 包起来后不再是兄弟节点，这里补回来 */
 .swipe + .swipe .swipe-body .row { box-shadow: inset 0 1px 0 var(--hairline); }
-/* 首尾行的圆角要跟着行一起滑动，否则滑动时第一行的圆角看起来是"破"的 */
+/* 首尾行的圆角要跟着行一起滑动，否则滑动时第一行的圆角看起来是"破"的。
+   .swipe 自己也要圆角 —— 否则下面那层操作按钮会在圆角处露出蓝/灰/红的小角。 */
+.swipe:first-child { border-radius: var(--r-lg) var(--r-lg) 0 0; }
+.swipe:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.swipe:only-child { border-radius: var(--r-lg); }
 .swipe:first-child .swipe-body { border-radius: var(--r-lg) var(--r-lg) 0 0; }
 .swipe:last-child .swipe-body { border-radius: 0 0 var(--r-lg) var(--r-lg); }
 .swipe:only-child .swipe-body { border-radius: var(--r-lg); }
@@ -1769,8 +1773,9 @@ html.scrolling .ai-ball { transition: none; }
 .ds-money { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 .ds-note { margin-top: 2px; font-size: 11.5px; color: var(--label-3); }
 
-/* 设置页里不显示底部标签栏（原来只清空了内容，空的长条还浮在那里） */
-html.in-settings .tabbar { display: none; }
+/* 设置页 / 详情页里不显示底部标签栏 */
+html.in-settings .tabbar,
+html.in-detail .tabbar { display: none; }
 /* 打开任何面板时，悬浮球先让位，别压着表单 */
 html.sheet-open .ai-ball {
   opacity: 0;
