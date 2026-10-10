@@ -149,6 +149,15 @@
     return html;
   }
 
+  /* 标题下那行小字：用了多少钱 / 多少次 */
+  function usageLine() {
+    const u = window.QYA ? QYA.usage() : null;
+    if (!u || !u.calls) return '还没用过';
+    return '已用 ' + (u.priced
+      ? '¥' + u.cost.toFixed(3)
+      : u.total.toLocaleString() + ' token') + ' · ' + u.calls + ' 次';
+  }
+
   function renderChat() {
     const body = msgs.length
       ? msgs.map(bubble).join('')
@@ -158,8 +167,10 @@
         '「哪些东西快过期了」<br>' +
         '「把纯牛奶和全麦面包都归档」</div>';
     return '<div class="sheet ai-sheet"><div class="grabber"></div>' +
-      '<div class="ai-head"><h3>助手</h3>' +
-        '<button class="btn plain" data-ai="hide" style="padding:6px 12px;font-size:13px">关闭悬浮球</button></div>' +
+      '<div class="ai-head">' +
+        '<div><h3>助手</h3><div class="ai-sub">' + esc(usageLine()) + '</div></div>' +
+        '<button class="btn plain" data-ai="hide" style="padding:6px 12px;font-size:13px">关闭悬浮球</button>' +
+      '</div>' +
       '<div class="ai-log" id="ai-log">' + body + '</div>' +
       '<div class="ai-input">' +
         '<input id="ai-text" class="input" placeholder="说点什么…" autocomplete="off"' +
