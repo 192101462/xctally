@@ -1558,6 +1558,80 @@ html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
 .ai-input { display: flex; gap: 8px; align-items: center; padding-top: 4px; }
 .ai-input .input { flex: 1; }
 
+/* ---------------- 设置（全屏 · 两级 · iOS 风格） ---------------- */
+.gear-btn {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill-2);
+  color: var(--label-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.gear-btn:active { background: var(--fill); }
+
+.set-group-title {
+  margin: 22px 4px 7px;
+  font-size: 13px;
+  color: var(--label-3);
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 11px 16px;
+  font-size: 15.5px;
+  cursor: pointer;
+}
+.set-row + .set-row { box-shadow: inset 0 1px 0 var(--hairline); }
+.set-row:active { background: var(--fill-2); }
+.set-title { flex: 1; }
+.set-value { color: var(--label-3); font-size: 14.5px; text-align: right; }
+
+/* iOS 那种滑动开关 */
+.switch {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  display: inline-block;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.switch i {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: var(--fill);
+  transition: background 0.22s ease;
+  pointer-events: none;
+}
+.switch i::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.22s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.switch input:checked + i { background: #34c759; }
+.switch input:checked + i::after { transform: translateX(20px); }
+
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
 body.bare .stage { gap: 0; }

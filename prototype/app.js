@@ -456,7 +456,8 @@
     }).join('');
 
     return '' +
-      pageHead('我的', '数据全部存在本机 · 无需注册、不联网', iconBtn('open-settings', '设置')) +
+      pageHead('我的', '数据全部存在本机 · 无需注册、不联网',
+        '<button class="gear-btn" data-action="open-settings" aria-label="设置">' + GEAR + '</button>') +
 
       '<div class="group">' +
         kv('在用物品', s.count + ' 件' + (s.archived ? '（另有 ' + s.archived + ' 件归档）' : '')) +
@@ -473,92 +474,9 @@
       '<div class="section">' +
         '<div class="section-head"><h2>物品分类</h2><span>可自定义</span></div>' +
         '<div class="group">' +
-          '<div class="row" data-action="i-cat-manage">' +
-            '<div class="tl-dot">🏷</div>' +
-            '<div class="row-main"><div class="row-title">管理分类</div>' +
-              '<div class="row-sub">新增 / 改名 / 删除，并设置默认是否算日均成本</div></div>' +
-            '<div class="row-side"><span class="chev">›</span></div>' +
-          '</div>' +
-          '<div class="row" data-action="i-trash">' +
-            '<div class="tl-dot">🗑</div>' +
-            '<div class="row-main"><div class="row-title">回收站</div>' +
-              '<div class="row-sub">删除的物品保留 ' + QY.TRASH_DAYS + ' 天，可恢复</div></div>' +
-            '<div class="row-side"><span class="chev">›</span></div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-
-      // AI：没填 Key 时只露出"配置"一项，界面保持干净；填了才出现识图入口
-      (function () {
-        const aiReady = !!(window.QYO && QYO.ready());
-        const cfg = window.QYA ? QYA.cfg() : null;
-        return '<div class="section">' +
-          '<div class="section-head"><h2>AI 助手</h2><span>' +
-            (aiReady ? '已开启 · 需要联网' : '未配置') + '</span></div>' +
-          '<div class="group">' +
-            (aiReady ? '<div class="row" data-action="i-ocr">' +
-              '<div class="tl-dot">📷</div>' +
-              '<div class="row-main"><div class="row-title">从截图识别</div>' +
-                '<div class="row-sub">淘宝/京东/拼多多订单截图、购物小票</div></div>' +
-              '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
-            (aiReady ? '<div class="row" data-action="i-ball-show">' +
-              '<div class="tl-dot">💬</div>' +
-              '<div class="row-main"><div class="row-title">对话助手</div>' +
-                '<div class="row-sub">右下角悬浮球，可拖动，位置会记住</div></div>' +
-              '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
-            (aiReady ? (function () {
-              const u = window.QYA ? QYA.usage() : null;
-              return '<div class="row" data-action="i-ai-usage">' +
-                '<div class="tl-dot">📊</div>' +
-                '<div class="row-main"><div class="row-title">用量与额度</div>' +
-                  '<div class="row-sub">' + (u && u.calls
-                    ? u.calls + ' 次调用 · ' + u.total.toLocaleString() + ' token' +
-                      (u.priced ? ' · 约 ¥' + u.cost.toFixed(3) : '')
-                    : '还没有调用过') + '</div></div>' +
-                '<div class="row-side"><span class="chev">›</span></div></div>';
-            })() : '') +
-            '<div class="row" data-action="i-ai-cfg">' +
-              '<div class="tl-dot">🔑</div>' +
-              '<div class="row-main"><div class="row-title">DeepSeek 配置</div>' +
-                '<div class="row-sub">' + (cfg && cfg.key
-                  ? '模型 ' + esc(cfg.model)
-                  : '填 API Key 后开启识图与对话') + '</div></div>' +
-              '<div class="row-side"><span class="chev">›</span></div>' +
-            '</div>' +
-          '</div>' +
-        '</div>';
-      })() +
-
-      '<div class="section">' +
-        '<div class="section-head"><h2>数据</h2><span>' + backupHint + '</span></div>' +
-        (heavy ? '<div class="notice">本地占用已经接近浏览器上限（约 5MB）。建议先导出一份备份，' +
-          '再删掉一些老随笔里的图片。</div>' : '') +
-        '<div class="group">' +
-          '<div class="row static">' +
-            '<div class="tl-dot">💾</div>' +
-            '<div class="row-main"><div class="row-title">本地占用</div>' +
-              '<div class="row-sub">其中随笔图片 ' + humanBytes(imgBytes) + '</div></div>' +
-            '<div class="row-side"><div class="row-value">' + humanBytes(totalBytes) + '</div></div>' +
-          '</div>' +
-          '<div class="row" data-action="b-export">' +
-            '<div class="tl-dot">📤</div>' +
-            '<div class="row-main"><div class="row-title">导出完整备份</div>' +
-              '<div class="row-sub">物品 + 随笔 + 能源，换手机时导入即可</div></div>' +
-            '<div class="row-side"><span class="pill blue">一个文件</span></div>' +
-          '</div>' +
-          '<div class="row" data-action="b-import">' +
-            '<div class="tl-dot">📥</div>' +
-            '<div class="row-main"><div class="row-title">从备份恢复</div>' +
-              '<div class="row-sub">先对比再合并，冲突时保留当前设备的版本</div></div>' +
-          '</div>' +
-          '<div class="row" data-action="toggle-theme">' +
-            '<div class="tl-dot">🌗</div>' +
-            '<div class="row-main"><div class="row-title">深色模式</div>' +
-              '<div class="row-sub">跟随系统 / 手动切换</div></div>' +
-          '</div>' +
+          setRow('i-cat-manage', '管理分类', { side: '新增 / 改名 / 删除', chev: true }) +
         '</div>' +
       '</div>';
-
   }
 
   /* ---------------- 表单面板 ---------------- */
@@ -738,7 +656,11 @@
     if (raw.indexOf('light') >= 0) document.documentElement.setAttribute('data-theme', 'light');
     else if (raw.indexOf('dark') >= 0) document.documentElement.setAttribute('data-theme', 'dark');
     if (!h) return;
-    if (h.indexOf('detail=') === 0) {
+    if (h === 'settings') {
+      state.setting = [];
+    } else if (h.indexOf('settings=') === 0) {
+      state.setting = h.slice(9).split(',');
+    } else if (h.indexOf('detail=') === 0) {
       state.tab = 'items';
       state.detailId = null;
       if (window.QYI) QYI.openDetail(h.slice(7));
@@ -760,7 +682,9 @@
     // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
     if (window.QYO && QYO.syncBall) QYO.syncBall();
     let html;
-    if (state.tab === 'collect' && QYV) {
+    if (state.setting) {
+      html = settingsView();
+    } else if (state.tab === 'collect' && QYV) {
       html = QYV.renderDetailIfAny() || QYV.renderList();
     } else if (state.tab === 'items' && QYI) {
       html = QYI.renderDetailIfAny() || QYI.renderList();
@@ -779,7 +703,7 @@
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
-    $('#tabbar').innerHTML = TABS.map(function (t) {
+    $('#tabbar').innerHTML = state.setting ? '' : TABS.map(function (t) {
       return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail &&
         !(itemDetail && t.id === 'items') ? 'active' : '') +
         '" data-action="tab" data-tab="' + t.id + '">' + t.icon + '<span>' + t.label + '</span></button>';
@@ -875,7 +799,22 @@
       if (window.QYV) QYV.openDetail(id);
       mount();
     } else if (action === 'open-settings') {
-      openSettings();
+      state.setting = [];
+      mount();
+    } else if (action === 'set-close') {
+      state.setting = null;
+      mount();
+    } else if (action === 'set-back') {
+      (state.setting || []).pop();
+      if (!(state.setting || []).length) state.setting = null;
+      mount();
+    } else if (action === 'set-go') {
+      state.setting = (state.setting || []).concat([el.getAttribute('data-k')]);
+      mount();
+    } else if (action === 'set-theme') {
+      const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', nowDark ? 'light' : 'dark');
+      mount();
     } else if (action === 'clear-data') {
       clearAllData();
     } else if (action === 'set-ball') {
@@ -1011,6 +950,95 @@
         });
       });
     });
+  }
+
+  /* ---------------- 设置（全屏 · 两级导航 · iOS 风格） ----------------
+   * state.setting 是路径：null = 不在设置里；[] = 一级菜单；['ai'] = 二级菜单。
+   * 全屏渲染在 #view 里（不是半屏 sheet），并隐藏底部标签栏。
+   */
+
+  const GEAR = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"' +
+    ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+    '<circle cx="12" cy="12" r="3.1"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10.6 3.09V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 16.11 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20.4 9v.09a1.65 1.65 0 0 0 1.51 1H22a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+  function setRow(action, title, opts) {
+    opts = opts || {};
+    return '<div class="set-row" data-action="' + action + '"' +
+      (opts.k ? ' data-k="' + opts.k + '"' : '') + '>' +
+      '<span class="set-title">' + esc(title) + '</span>' +
+      (opts.side ? '<span class="set-value">' + esc(opts.side) + '</span>' : '') +
+      (opts.chev ? '<span class="chev">›</span>' : '') +
+      '</div>';
+  }
+
+  function switchRow(action, title, on) {
+    return '<div class="set-row"><span class="set-title">' + esc(title) + '</span>' +
+      '<label class="switch"><input type="checkbox" data-action="' + action + '"' +
+      (on ? ' checked' : '') + ' /><i></i></label></div>';
+  }
+
+  function setNav(backAction, backLabel, title, sub) {
+    return '<div class="navbar"><button class="back" data-action="' + backAction + '">‹ ' +
+      esc(backLabel) + '</button></div>' + pageHead(title, sub || '');
+  }
+
+  function settingsView() {
+    const path = state.setting || [];
+    const aiCfg = window.QYA ? QYA.cfg() : null;
+    const u = window.QYA ? QYA.usage() : null;
+    const aiReady = !!(window.QYO && QYO.ready());
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const ballOn = !!(aiCfg && aiCfg.ball && !aiCfg.ball.hidden);
+    const memBytes = localBytes();
+    const memImg = window.QYV ? QYV.imageBytes() : 0;
+
+    if (!path.length) {
+      return setNav('set-close', '我的', '设置', '该开的开，该关的关') +
+        '<div class="group" style="margin-top:16px">' +
+          setRow('set-go', 'AI', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
+          setRow('set-go', '数据管理', { k: 'data', chev: true }) +
+          setRow('set-go', '外观', { k: 'look', chev: true }) +
+          setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
+        '</div>';
+    }
+
+    const top = path[0];
+    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存' };
+    const nav = setNav('set-back', '设置', titles[top] || '设置');
+
+    if (top === 'ai') {
+      return nav + '<div class="group" style="margin-top:16px">' +
+        setRow('i-ai-cfg', 'DeepSeek 配置', { side: (aiCfg && aiCfg.key) ? '已填 Key' : '未填', chev: true }) +
+        setRow('i-ai-usage', '用量与额度', { side: (u && u.calls) ? u.calls + ' 次' : '未使用', chev: true }) +
+        switchRow('set-ball', '对话助手悬浮球', ballOn) +
+        setRow('i-ocr', '从截图识别', { side: '订单/小票', chev: true }) +
+        '</div>' +
+        (aiReady ? '' : '<div class="notice" style="margin-top:12px">' +
+          '填了 API Key 才能用识图和对话；在此之前 App 保持完全离线。</div>');
+    }
+    if (top === 'data') {
+      return nav + '<div class="group" style="margin-top:16px">' +
+        setRow('b-export', '导出完整备份', { chev: true }) +
+        setRow('b-import', '导入数据', { chev: true }) +
+        setRow('i-trash', '回收站', { side: '保留 ' + QY.TRASH_DAYS + ' 天', chev: true }) +
+        '</div>';
+    }
+    if (top === 'look') {
+      return nav + '<div class="group" style="margin-top:16px">' +
+        switchRow('set-theme', '深色模式', dark) +
+        setRow('noop', '界面', { side: '下一版', chev: true }) +
+        '</div>';
+    }
+    if (top === 'mem') {
+      return nav + '<div class="group" style="margin-top:16px">' +
+        setRow('noop', '本地占用', { side: humanBytes(memBytes) }) +
+        setRow('noop', '其中随笔图片', { side: humanBytes(memImg) }) +
+        setRow('clear-data', '清空数据', { chev: true }) +
+        '</div>' +
+        '<div class="notice" style="margin-top:12px">清空会删除物品、随笔、能源读数，' +
+        '并需要连续确认三次。</div>';
+    }
+    return nav;
   }
 
   window.QYUI = {
