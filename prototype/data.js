@@ -423,6 +423,28 @@
 
   const KEY = 'xctally.prototype.v1';
 
+  /* ---------------- 回收站 ----------------
+   * 删除不直接抹掉：物品和它的时间线一起进回收站，保留 30 天，
+   * 期间可以恢复，也可以手动清空。过期条目在每次加载时自动清理。
+   */
+  const TRASH_DAYS = 30;
+
+  function purgeTrash(d) {
+    const cutoff = Date.now() - TRASH_DAYS * DAY;
+    const before = (d.trash || []).length;
+    d.trash = (d.trash || []).filter(function (t) {
+      const ts = new Date(t.deletedAt).getTime();
+      return !isNaN(ts) && ts >= cutoff;
+    });
+    return before - d.trash.length;
+  }
+
+  function trashDaysLeft(entry) {
+    const ts = new Date(entry && entry.deletedAt).getTime();
+    if (isNaN(ts)) return 0;
+    return Math.max(0, TRASH_DAYS - Math.floor((Date.now() - ts) / DAY));
+  }
+
   function load() {
     let d = null;
     try {
@@ -444,7 +466,12 @@
       if (it.photo === undefined) it.photo = null;
       if (it.sub === undefined) it.sub = '';
       if (it.status === undefined) it.status = '在用';
+      if (it.archived === undefined) it.archived = !!LEGACY_ARCHIVED_STATUS[it.status];
+      if (it.pinned === undefined) it.pinned = false;
     });
+    // 回收站：补字段 + 清掉超过 30 天的
+    if (!d.trash) d.trash = [];
+    purgeTrash(d);
     return d;
   }
   function save(data) {
@@ -484,6 +511,9 @@
     isExpired: isExpired,
     isActive: isActive,
     isArchived: isArchived,
+    TRASH_DAYS: TRASH_DAYS,
+    purgeTrash: purgeTrash,
+    trashDaysLeft: trashDaysLeft,
     catList: catList,
     catOf: catOf,
     nextCatStyle: nextCatStyle,

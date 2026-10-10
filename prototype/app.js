@@ -479,6 +479,12 @@
               '<div class="row-sub">新增 / 改名 / 删除，并设置默认是否算日均成本</div></div>' +
             '<div class="row-side"><span class="chev">›</span></div>' +
           '</div>' +
+          '<div class="row" data-action="i-trash">' +
+            '<div class="tl-dot">🗑</div>' +
+            '<div class="row-main"><div class="row-title">回收站</div>' +
+              '<div class="row-sub">删除的物品保留 ' + QY.TRASH_DAYS + ' 天，可恢复</div></div>' +
+            '<div class="row-side"><span class="chev">›</span></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
 

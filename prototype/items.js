@@ -703,18 +703,114 @@
   }
   let pendingStatusPick = null;
 
+  /* ---------------- 回收站 ----------------
+   * 删除 = 进回收站（30 天），不是真删。恢复时物品和它的时间线一起回来。
+   */
   function deleteItem(id) {
     const d = data();
     const item = byId(id);
     if (!item) return;
-    if (!window.confirm('删除「' + item.name + '」？物品和它的时间线都会一起删掉，不能恢复。')) return;
+    if (!window.confirm('把「' + item.name + '」移入回收站？\n' +
+      '保留 ' + QY.TRASH_DAYS + ' 天，期间可以恢复。')) return;
+    d.trash = d.trash || [];
+    d.trash.push({
+      id: QY.uid('tr'),
+      kind: 'item',
+      deletedAt: QY.iso(QY.today()),
+      item: item,
+      events: d.events.filter(function (e) { return e.itemId === id; })
+    });
     d.items = d.items.filter(function (i) { return i.id !== id; });
     d.events = d.events.filter(function (e) { return e.itemId !== id; });
     UI().save();
     state.detailId = null;
     UI().mount();
-    UI().toast('已删除');
+    UI().toast('已移入回收站，30 天内可恢复');
   }
+
+  function openTrash() {
+    const d = data();
+    const list = (d.trash || []).slice().sort(function (a, b) {
+      return a.deletedAt < b.deletedAt ? 1 : -1;
+    });
+    const rows = list.length ? list.map(function (t) {
+      const left = QY.trashDaysLeft(t);
+      const it = t.item || {};
+      return '<div class="row static">' +
+        thumb(it, true) +
+        '<div class="row-main">' +
+          '<div class="row-title">' + esc(it.name || '（无名称）') + '</div>' +
+          '<div class="row-sub">' + esc(it.category || '') + ' · ' + QY.fmtDate(it.acquiredAt) +
+            ' 获得 · 还有 ' + left + ' 天</div>' +
+        '</div>' +
+        '<div class="row-side" style="display:flex;gap:6px">' +
+          '<button class="btn plain" data-action="i-restore" data-id="' + t.id + '" ' +
+            'style="padding:8px 12px;font-size:13px">恢复</button>' +
+          '<button class="btn plain" data-action="i-purge" data-id="' + t.id + '" ' +
+            'style="padding:8px 12px;font-size:13px;color:var(--red)">彻底删除</button>' +
+        '</div></div>';
+    }).join('') : '<div class="empty"><div class="emoji">🗑</div><p>回收站是空的</p></div>';
+
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>回收站</h3>' +
+        '<p class="hint">删除的物品会在这里保留 ' + QY.TRASH_DAYS + ' 天，过期自动清理</p>' +
+        '<div class="group">' + rows + '</div>' +
+        (list.length ? '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="i-empty" style="color:var(--red)">清空回收站</button>' +
+          '<button class="btn primary" data-action="i-close">完成</button></div>'
+        : '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="i-close">关闭</button></div>') +
+      '</div>');
+  }
+
+  function restoreTrash(trashId) {
+    const d = data();
+    const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
+    if (!t) return;
+    d.items.push(t.item);
+    (t.events || []).forEach(function (e) { d.events.push(e); });
+    d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
+    UI().save();
+    UI().mount();
+    openTrash();
+    UI().toast('已恢复「' + (t.item && t.item.name ? t.item.name : '') + '」');
+  }
+
+  function purgeOne(trashId) {
+    const d = data();
+    const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
+    if (!t) return;
+    if (!window.confirm('彻底删除「' + (t.item && t.item.name ? t.item.name : '') + '」？\n这一步不可恢复。')) return;
+    d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
+    UI().save();
+    UI().mount();
+    openTrash();
+    UI().toast('已彻底删除');
+  }
+
+  // 回收站里的动作单独挂一个监听，不占用 app.js 的动作表
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest && e.target.closest('[data-action="i-restore"],[data-action="i-purge"],[data-action="i-empty"]');
+    if (!btn) return;
+    e.stopPropagation();
+    const act = btn.getAttribute('data-action');
+    const d = data();
+    if (act === 'i-restore') {
+      restoreTrash(btn.getAttribute('data-id'));
+    } else if (act === 'i-purge') {
+      purgeOne(btn.getAttribute('data-id'));
+    } else if (act === 'i-empty') {
+      const n = (d.trash || []).length;
+      if (!n) return;
+      if (!window.confirm('清空回收站？' + n + ' 项会被彻底删除，不可恢复。')) return;
+      d.trash = [];
+      UI().save();
+      UI().mount();
+      openTrash();
+      UI().toast('回收站已清空');
+    }
+  }, true);
 
   /* 覆盖层：盖在当前面板之上，不销毁它。
    * 表单里要弹东西（选图片、选分类）必须用它——直接 openSheet 会把表单 DOM 冲掉，
@@ -841,6 +937,8 @@
       deleteItem(id);
     } else if (action === 'i-cat-manage') {
       openCatManager();
+    } else if (action === 'i-trash') {
+      openTrash();
     } else if (action === 'i-cat-new') {
       catEdit = '';
       renderCatSheet();
@@ -879,6 +977,7 @@
     clearDetail: function () { state.detailId = null; },
     openForm: openForm,
     openCatManager: openCatManager,
+    openTrash: openTrash,
     handleAction: handleAction,
     handleInput: handleInput
   };
