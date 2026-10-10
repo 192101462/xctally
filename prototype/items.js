@@ -350,9 +350,11 @@
     if (key === 'category') return QY.catList(d).map(function (c) { return { v: c.name, t: c.name, e: c.emoji }; });
     if (key === 'source') return QY.SOURCES.map(function (s) { return { v: s, t: s }; });
     if (key === 'unit') return QY.UNITS.map(function (s) { return { v: s, t: s }; });
-    if (key === 'status') return QY.STATUSES.map(function (s) {
-      return { v: s, t: s + (QY.isArchived({ status: s }) ? '（归档）' : '') };
-    });
+    if (key === 'status') {
+      // 状态词跟着【当前选中的分类】走（食品是"已吃完"、电子是"已损坏"）
+      const cat = (document.getElementById('f-category') || {}).value;
+      return QY.catStatuses(cat, d).map(function (s) { return { v: s, t: s }; });
+    }
     return [];
   }
 
@@ -385,10 +387,19 @@
     const label = document.getElementById('pf-' + key);
     if (input) input.value = value;
     if (label) label.textContent = value;
-    // 分类变了，如果用户还没手动改过"计入日均成本"，就跟着分类默认值走
-    if (key === 'category' && !formCostTouched) {
-      const cb = document.getElementById('f-costtrack');
-      if (cb) cb.checked = QY.catOf(value, data()).costTrack !== false;
+    // 分类变了：默认的"计入日均成本"跟着走；当前状态若不在新分类的词表里，换成第一个
+    if (key === 'category') {
+      if (!formCostTouched) {
+        const cb = document.getElementById('f-costtrack');
+        if (cb) cb.checked = QY.catOf(value, data()).costTrack !== false;
+      }
+      const list = QY.catStatuses(value, data());
+      const cur = document.getElementById('f-status');
+      if (cur && list.indexOf(cur.value) < 0) {
+        cur.value = list[0];
+        const lbl = document.getElementById('pf-status');
+        if (lbl) lbl.textContent = list[0];
+      }
     }
     closePicker();
   }
@@ -411,9 +422,10 @@
     formPhoto = item ? (item.photo || null) : null;
     formCostTouched = !!item && typeof item.costTrack === 'boolean';
 
+    const defCat = (QY.catList(d)[0] || {}).name || '其他';
     const e = item || {
-      name: '', category: (QY.catList(d)[0] || {}).name || '其他', sub: '', acquiredAt: QY.iso(QY.today()),
-      source: '商店购买', cost: null, qty: 1, unit: '个', status: '在用', location: '',
+      name: '', category: defCat, sub: '', acquiredAt: QY.iso(QY.today()),
+      source: '商店购买', cost: null, qty: 1, unit: '个', status: QY.catStatuses(defCat, d)[0], location: '',
       expiresAt: null, openedAt: null, warrantyUntil: null, note: '', photo: null
     };
     const costOn = item
@@ -660,17 +672,25 @@
     const name = catEdit;
     if (!name) return;
     const used = d.items.filter(function (i) { return i.category === name; }).length;
-    if (!window.confirm(used
-      ? '有 ' + used + ' 件物品在用「' + name + '」，删除后它们会变成「其他」。确定吗？'
-      : '删除分类「' + name + '」？')) return;
-    d.itemCats = QY.catList(d).filter(function (c) { return c.name !== name; });
-    if (!d.itemCats.length) d.itemCats = QY.DEFAULT_CATS.map(function (c) { return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack }; });
-    d.items.forEach(function (i) { if (i.category === name) i.category = '其他'; });
-    UI().save();
-    catEdit = null;
-    renderCatSheet();
-    UI().mount();
-    UI().toast('分类已删除');
+    confirmSheet(used
+      ? '有 ' + used + ' 件物品在用「' + name + '」，删除后它们会变成「其他」。'
+      : '删除分类「' + name + '」？',
+      { title: '删除分类', ok: '删除', danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
+      d.itemCats = QY.catList(d).filter(function (c) { return c.name !== name; });
+      if (!d.itemCats.length) {
+        d.itemCats = QY.DEFAULT_CATS.map(function (c) {
+          return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack, statuses: c.statuses.slice() };
+        });
+      }
+      d.items.forEach(function (i) { if (i.category === name) i.category = '其他'; });
+      UI().save();
+      catEdit = null;
+      renderCatSheet();
+      UI().mount();
+      UI().toast('分类已删除');
+    });
   }
 
   /* ---------------- 其它动作 ---------------- */
@@ -687,13 +707,15 @@
       UI().mount();
       UI().toast(QY.isArchived(item) ? '已移入归档，随时可以改回来' : '状态已改为 ' + v);
     };
+    const list = QY.catStatuses(item.category, data());
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
         '<h3>改状态</h3>' +
-        '<p class="hint">已用完 / 已处置 会移入归档，不是删除，随时能改回来</p>' +
-        '<div class="group">' + QY.STATUSES.map(function (s) {
-          return '<div class="picker-opt ' + (s === cur ? 'on' : '') + '" data-action="i-status-set" data-v="' + s + '">' +
-            '<span>' + s + (QY.isArchived({ status: s }) ? '（归档）' : '') + '</span>' +
+        '<p class="hint">' + esc(item.category) + ' 的状态：' + esc(list.join(' → ')) +
+        '<br>归档是另一件事：它不改状态，只是把东西收起来，随时能翻回来看</p>' +
+        '<div class="group">' + list.map(function (s) {
+          return '<div class="picker-opt ' + (s === cur ? 'on' : '') + '" data-action="i-status-set" data-v="' + esc(s) + '">' +
+            '<span>' + esc(s) + '</span>' +
             (s === cur ? '<span class="tick">✓</span>' : '') + '</div>';
         }).join('') + '</div>' +
         '<div class="sheet-actions" style="margin-top:14px">' +
@@ -819,12 +841,17 @@
     const d = data();
     const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
     if (!t) return;
-    if (!window.confirm('彻底删除「' + (t.item && t.item.name ? t.item.name : '') + '」？\n这一步不可恢复。')) return;
-    d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
-    UI().save();
-    UI().mount();
-    openTrash();
-    UI().toast('已彻底删除');
+    const nm = (t.item && t.item.name) ? t.item.name : '';
+    confirmSheet('彻底删除「' + nm + '」？这一步不可恢复。',
+      { title: '彻底删除', ok: '彻底删除', danger: true }
+    ).then(function (ok) {
+      if (!ok) return;
+      d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
+      UI().save();
+      UI().mount();
+      openTrash();
+      UI().toast('已彻底删除');
+    });
   }
 
   // 回收站里的动作单独挂一个监听，不占用 app.js 的动作表
@@ -841,12 +868,16 @@
     } else if (act === 'i-empty') {
       const n = (d.trash || []).length;
       if (!n) return;
-      if (!window.confirm('清空回收站？' + n + ' 项会被彻底删除，不可恢复。')) return;
-      d.trash = [];
-      UI().save();
-      UI().mount();
-      openTrash();
-      UI().toast('回收站已清空');
+      confirmSheet('清空回收站？' + n + ' 项会被彻底删除，不可恢复。',
+        { title: '清空回收站', ok: '清空', danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        d.trash = [];
+        UI().save();
+        UI().mount();
+        openTrash();
+        UI().toast('回收站已清空');
+      });
     }
   }, true);
 
@@ -909,19 +940,18 @@
       const isGif = /^data:image\/gif/i.test(dataUrl);
       if (isGif && bytes > 1.5 * 1024 * 1024) {
         const mb = (bytes / 1024 / 1024).toFixed(1);
-        if (window.confirm('这张动图有 ' + mb + 'MB，会很快占满本机存储（上限约 5MB）。\n' +
-          '确定 = 保留动图；取消 = 只取第一帧当普通图片')) {
-          formPhoto = dataUrl;
-        } else {
+        confirmSheet('这张动图有 ' + mb + 'MB，会很快占满本机存储（上限约 5MB）。',
+          { title: '动图偏大', ok: '保留动图', cancel: '只要静态图' }
+        ).then(function (keep) {
+          if (keep) { formPhoto = dataUrl; syncPhoto(); return; }
           QYV.staticFirstFrame(dataUrl, function (still) {
             formPhoto = still || dataUrl;
             syncPhoto();
           });
-          return;
-        }
-      } else {
-        formPhoto = dataUrl;
+        });
+        return;
       }
+      formPhoto = dataUrl;
       syncPhoto();
     }, { maxSide: source === 'camera' ? 1280 : 1080, quality: 0.82, source: source });
   }
@@ -1019,6 +1049,10 @@
     handleAction: handleAction,
     handleInput: handleInput
   };
+
+  // 供其它模块复用（收藏、助手等）：别再用 window.confirm —— 安卓 WebView 默认
+  // 不显示 JS 对话框，而且原生样式和 App 不搭
+  window.QYDialog = { confirm: confirmSheet };
 
   // 用户手动动过"计入日均成本"开关后，切换分类不再覆盖它
   document.addEventListener('qy-costtouch', function () { formCostTouched = true; });

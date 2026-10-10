@@ -21,15 +21,19 @@
 
   // 默认分类。costTrack 决定"这个分类下的物品默认是否算日均成本"：
   // 食物、药品是消耗品，按天摊价格没有意义；耐用品才有意义。
+  // statuses：这个分类下物品会经历哪些阶段。归档是独立标记，不在这里。
+  // 方案②：状态里【不放"已过期"】—— 过期由到期日自动算并显示红标，
+  // 否则会出现"东西过期了但状态还写着已开封"这种自相矛盾。
   const DEFAULT_CATS = [
-    { name: '食品', emoji: '🥛', g: ['#FFE7C2', '#FFC46B'], costTrack: false },
-    { name: '药品', emoji: '💊', g: ['#FFD9DC', '#FF9AA2'], costTrack: false },
-    { name: '日用', emoji: '🧺', g: ['#D9E8FF', '#9CC2FF'], costTrack: true },
-    { name: '服饰', emoji: '🧣', g: ['#E6DEFF', '#B6A4FF'], costTrack: true },
-    { name: '电子', emoji: '💻', g: ['#D6F3EA', '#84DCC0'], costTrack: true },
-    { name: '表具', emoji: '⚡️', g: ['#FFF1C9', '#FFD666'], costTrack: true },
-    { name: '其他', emoji: '📦', g: ['#ECECF1', '#CFCFD8'], costTrack: true }
+    { name: '食品', emoji: '🥛', g: ['#FFE7C2', '#FFC46B'], costTrack: false, statuses: ['未开封', '已开封', '已吃完'] },
+    { name: '药品', emoji: '💊', g: ['#FFD9DC', '#FF9AA2'], costTrack: false, statuses: ['未开封', '已开封', '已用完'] },
+    { name: '日用', emoji: '🧺', g: ['#D9E8FF', '#9CC2FF'], costTrack: true, statuses: ['未开封', '使用中', '已用完'] },
+    { name: '服饰', emoji: '🧣', g: ['#E6DEFF', '#B6A4FF'], costTrack: true, statuses: ['新购', '穿着中', '闲置', '已丢弃'] },
+    { name: '电子', emoji: '💻', g: ['#D6F3EA', '#84DCC0'], costTrack: true, statuses: ['新购', '使用中', '已损坏', '已丢弃'] },
+    { name: '表具', emoji: '⚡️', g: ['#FFF1C9', '#FFD666'], costTrack: true, statuses: ['正常', '停用'] },
+    { name: '其他', emoji: '📦', g: ['#ECECF1', '#CFCFD8'], costTrack: true, statuses: ['未开封', '使用中', '已用完'] }
   ];
+  const FALLBACK_STATUSES = ['未开封', '使用中', '已用完'];
   const FALLBACK_CAT = { name: '未分类', emoji: '📦', g: ['#ECECF1', '#CFCFD8'], costTrack: true };
   const EMOJI_POOL = ['📦', '🏷', '🎁', '🧩', '🔧', '🧴', '🪥', '🧸', '📚', '🎨', '🎵', '⌚️', '🔌', '🪴', '🧯'];
   const GRAD_POOL = [
@@ -50,6 +54,30 @@
   function nextCatStyle(data) {
     const n = catList(data).length;
     return { emoji: EMOJI_POOL[n % EMOJI_POOL.length], g: GRAD_POOL[n % GRAD_POOL.length] };
+  }
+
+  // 某个分类下物品可用的状态词
+  function catStatuses(name, data) {
+    const list = catOf(name, data).statuses;
+    return (list && list.length) ? list : FALLBACK_STATUSES;
+  }
+
+  // 老数据的状态词迁移：在用/闲置/借出/已开封/已用完/已处置 -> 新词表
+  function migrateStatus(old, list) {
+    if (!old) return list[0];
+    if (list.indexOf(old) >= 0) return old;                 // 已经是新词表里的词
+    const pick = function (kw) {
+      for (let i = 0; i < list.length; i++) if (list[i].indexOf(kw) >= 0) return list[i];
+      return null;
+    };
+    const second = function () { return list[Math.min(1, list.length - 1)]; };
+    if (/吃完|食用|用完/.test(old)) return pick('吃完') || pick('用完') || list[list.length - 1];
+    if (/处置|丢弃|损坏|报废/.test(old)) return pick('丢弃') || list[list.length - 1];
+    if (/过期/.test(old)) return pick('用完') || list[list.length - 1];
+    if (/开封/.test(old)) return pick('开封') || second();
+    if (/闲置/.test(old)) return pick('闲置') || second();
+    if (/借出|外借/.test(old)) return second();
+    return pick('使用中') || pick('穿着中') || second();
   }
 
   // 是否计算日均成本：物品上的开关优先，否则跟随分类默认值
@@ -458,9 +486,18 @@
     // 迁移：老数据没有 itemCats（分类原本是写死的），补上默认分类
     if (!d.itemCats || !d.itemCats.length) {
       d.itemCats = DEFAULT_CATS.map(function (c) {
-        return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack };
+        return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack, statuses: c.statuses.slice() };
+      });
+    } else {
+      // 已有分类的老数据：补 statuses 字段（按同名默认分类，找不到给通用词表）
+      d.itemCats.forEach(function (c) {
+        if (!c.statuses || !c.statuses.length) {
+          const def = DEFAULT_CATS.filter(function (x) { return x.name === c.name; })[0];
+          c.statuses = (def ? def.statuses : FALLBACK_STATUSES).slice();
+        }
       });
     }
+
     // 归一化：补齐新字段，避免各处判空
     d.items.forEach(function (it) {
       if (it.photo === undefined) it.photo = null;
@@ -468,6 +505,8 @@
       if (it.status === undefined) it.status = '在用';
       if (it.archived === undefined) it.archived = !!LEGACY_ARCHIVED_STATUS[it.status];
       if (it.pinned === undefined) it.pinned = false;
+      // 状态词迁移到该分类的新词表（老数据是全局的 在用/闲置/借出/已开封/已用完/已处置）
+      it.status = migrateStatus(it.status, catStatuses(it.category, d));
     });
     // 回收站：补字段 + 清掉超过 30 天的
     if (!d.trash) d.trash = [];
@@ -516,6 +555,9 @@
     trashDaysLeft: trashDaysLeft,
     catList: catList,
     catOf: catOf,
+    catStatuses: catStatuses,
+    migrateStatus: migrateStatus,
+    FALLBACK_STATUSES: FALLBACK_STATUSES,
     nextCatStyle: nextCatStyle,
     tracksCost: tracksCost,
     iconOf: iconOf,
