@@ -26,6 +26,7 @@
   let pendingImage = null;   // 待发送的图片 dataURL
   let ballEl = null;
   let drag = null;
+  let justDragged = false;      // 刚拖完紧接着会有个 click，用它挡掉，避免误开对话
 
   const CAMERA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"' +
     ' stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
@@ -184,7 +185,7 @@
 
     document.addEventListener('pointermove', function (e) {
       if (!drag) return;
-      if (!drag.moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 6) return;
+      if (!drag.moved && Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 8) return;
       if (!drag.moved) { drag.moved = true; showDragUi(); }   // 真正开始拖动才露出垃圾桶
       const size = 56;
       drag.tx = Math.min(Math.max(8, e.clientX - drag.dx), Math.max(8, window.innerWidth - size - 8));
@@ -217,14 +218,28 @@
         d.el.style.left = d.tx + 'px';
         d.el.style.top = d.ty + 'px';
         saveBall({ x: d.tx, y: d.ty });
-      } else {
-        openChat();
+        // 拖完还会冒一个 click，短时间内挡住它，别让"拖"变成"点"
+        justDragged = true;
+        setTimeout(function () { justDragged = false; }, 350);
       }
+      // 注意：单纯的"点"不在这里处理 —— 交给下面的 click 事件。
+      // 之前把 openChat 放在这里，导致手指点一下的轻微抖动被判成拖动，点了没反应。
     }
     document.addEventListener('pointerup', end);
     document.addEventListener('pointercancel', end);
 
     window.addEventListener('resize', placeBall);
+
+    /* 点击悬浮球 = 打开对话。用原生 click，天然只在"真点了"时触发，
+       不会再被手指的轻微抖动干扰。 */
+    document.addEventListener('click', function (e) {
+      const ball = e.target.closest && e.target.closest('#ai-ball');
+      if (!ball) return;
+      if (justDragged) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openChat();
+    }, true);
   }
 
   /* ---------------- 聊天面板 ---------------- */
