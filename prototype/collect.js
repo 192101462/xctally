@@ -467,7 +467,7 @@
   function compressImage(file, opts) {
     const maxSide = (opts && opts.maxSide) || IMG_MAX_SIDE;
     const quality = (opts && opts.quality) || IMG_QUALITY;
-    if (/image\/gif/i.test(file.type)) {
+    if (/image\/gif/i.test(file.type) && !(opts && opts.forceStatic)) {
       // 动图：原样保留（代价是体积大，插的时候会提示）
       return readAsDataURL(file).then(function (u) {
         return { dataUrl: u, before: file.size, after: bytesOfDataUrl(u), gif: true, w: 0, h: 0 };
@@ -1266,11 +1266,12 @@
     merge: merge,
     save: save,
     // 给物品模块复用：选一张图（原生可拍照/相册）-> 压缩 -> 回调 dataURL
+    // cb(dataUrl, info)，info.bytes 是最终字节数、info.gif 标记动图
     pickImage: function (cb, opts) {
       const handle = function (file) {
         if (!file) { cb(null); return; }
         compressImage(file, opts).then(function (r) {
-          cb(r.dataUrl);
+          cb(r.dataUrl, { bytes: r.after, gif: !!r.gif, kept: r.kept });
         }).catch(function (err) {
           UI().toast('图片处理失败：' + err.message);
           cb(null);
@@ -1280,7 +1281,7 @@
       if (window.QYPlatform && QYPlatform.pickImage) {
         QYPlatform.pickImage(function (dataUrl) {
           handle(dataUrl ? dataUrlToFile(dataUrl) : null);
-        });
+        }, (opts && opts.source) || '');
         return;
       }
       const input = document.createElement('input');
@@ -1294,6 +1295,18 @@
         handle(f);
       });
       input.click();
+    },
+
+    /* 取动图第一帧，用于"只留静态图"的降级选择 */
+    staticFirstFrame: function (dataUrl, cb) {
+      try {
+        const file = dataUrlToFile(dataUrl);
+        compressImage(file, { forceStatic: true }).then(function (r) {
+          cb(r.dataUrl);
+        }).catch(function () { cb(null); });
+      } catch (err) {
+        cb(null);
+      }
     },
     humanSize: humanSize,
     recent: function (n) {

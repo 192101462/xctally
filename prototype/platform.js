@@ -85,12 +85,12 @@
       if (cb) cb(text == null ? null : String(text));
     },
 
-    /* 选图片：原生弹「拍照 / 从相册选择」，浏览器走 input[type=file] */
-    pickImage: function (cb) {
+    /* 选图片：source 为 'camera' / 'gallery' / ''（空则让原生决定） */
+    pickImage: function (cb, source) {
       if (native && native.pickImage) {
         const id = 'img' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         pendingImg[id] = cb;
-        try { native.pickImage(id); return; } catch (err) { /* 落到浏览器兜底 */ }
+        try { native.pickImage(id, source || ''); return; } catch (err) { /* 落到浏览器兜底 */ }
       }
       const input = document.createElement('input');
       input.type = 'file';

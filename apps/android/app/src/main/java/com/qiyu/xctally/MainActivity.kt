@@ -341,21 +341,20 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        /** 选图片：弹「拍照 / 从相册选择」 */
+        /**
+         * 选图片。source 是网页侧已经选好的来源（camera / gallery / 空），
+         * 网页用自己的底部面板问过用户了，这里不再弹安卓原生对话框——
+         * 那种原生弹窗和 App 的设计完全不搭。
+         */
         @JavascriptInterface
-        fun pickImage(id: String) {
+        fun pickImage(id: String, source: String) {
             runOnUiThread {
                 pendingImageId = id
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("添加图片")
-                    .setItems(arrayOf("拍照", "从相册选择")) { _, which ->
-                        if (which == 0) launchCamera(id) else launchGallery(id)
-                    }
-                    .setOnCancelListener {
-                        pendingImageId = null
-                        deliverImage(id, null)
-                    }
-                    .show()
+                when (source) {
+                    "camera" -> launchCamera(id)
+                    "gallery" -> launchGallery(id)
+                    else -> launchGallery(id)      // 没指定就默认相册
+                }
             }
         }
 

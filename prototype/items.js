@@ -323,9 +323,10 @@
         '<label class="check-row"><input type="checkbox" id="f-costtrack"' + (costOn ? ' checked' : '') + ' />' +
           '<span>计入日均成本</span><b>食品/药品这类消耗品通常不需要</b></label>' +
 
-        '<div class="field"><label>图片（可选）</label>' +
+        '<div class="field"><label>图片（可选，支持动图）</label>' +
           '<div class="photo-row">' +
             '<div class="photo-thumb' + (formPhoto ? '' : ' empty') + '" id="f-photo"' +
+              ' data-action="i-photo"' +
               (formPhoto ? ' style="background-image:url(' + formPhoto + ')"' : '') + '>' +
               (formPhoto ? '' : '＋') + '</div>' +
             '<div class="photo-actions">' +
@@ -595,11 +596,51 @@
 
   function pickPhoto() {
     if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
-    QYV.pickImage(function (dataUrl) {
+    // 用 App 自己的底部面板选来源，不用安卓原生弹窗（那样和整体设计不搭）
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>添加图片</h3>' +
+        '<p class="hint">可以拍照，也可以从相册选；动图（GIF）会保留动画</p>' +
+        '<div class="group">' +
+          '<div class="row" data-action="i-photo-from" data-src="camera">' +
+            '<div class="tl-dot">📷</div>' +
+            '<div class="row-main"><div class="row-title">拍照</div></div>' +
+            '<div class="row-side"><span class="chev">›</span></div></div>' +
+          '<div class="row" data-action="i-photo-from" data-src="gallery">' +
+            '<div class="tl-dot">🖼</div>' +
+            '<div class="row-main"><div class="row-title">从相册选择</div></div>' +
+            '<div class="row-side"><span class="chev">›</span></div></div>' +
+        '</div>' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="i-close">取消</button>' +
+        '</div>' +
+      '</div>');
+  }
+
+  function takePhoto(source) {
+    if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
+    QYV.pickImage(function (dataUrl, info) {
       if (!dataUrl) return;
-      formPhoto = dataUrl;
+      // 动图不重编码，所以体积可能很大，而本机存储总共只有 5MB 左右
+      const bytes = info && info.bytes ? info.bytes : Math.round((dataUrl.length - dataUrl.indexOf(',')) * 0.75);
+      const isGif = /^data:image\/gif/i.test(dataUrl);
+      if (isGif && bytes > 1.5 * 1024 * 1024) {
+        const mb = (bytes / 1024 / 1024).toFixed(1);
+        if (window.confirm('这张动图有 ' + mb + 'MB，会很快占满本机存储（上限约 5MB）。\n' +
+          '确定 = 保留动图；取消 = 只取第一帧当普通图片')) {
+          formPhoto = dataUrl;
+        } else {
+          QYV.staticFirstFrame(dataUrl, function (still) {
+            formPhoto = still || dataUrl;
+            syncPhoto();
+          });
+          return;
+        }
+      } else {
+        formPhoto = dataUrl;
+      }
       syncPhoto();
-    }, { maxSide: 1080, quality: 0.82 });
+    }, { maxSide: source === 'camera' ? 1280 : 1080, quality: 0.82, source: source });
   }
 
   /* ---------------- 动作路由 ---------------- */
@@ -633,6 +674,8 @@
       closePicker();
     } else if (action === 'i-photo') {
       pickPhoto();
+    } else if (action === 'i-photo-from') {
+      takePhoto(el.getAttribute('data-src'));
     } else if (action === 'i-photo-clear') {
       formPhoto = null;
       syncPhoto();
