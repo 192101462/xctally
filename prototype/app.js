@@ -873,19 +873,9 @@
       state.detailId = null;
       if (window.QYV) QYV.openDetail(id);
       mount();
-    } else if (action === 'selftest') {
-      // 真机上没有地址栏，用这一行进入自检报告
-      location.hash = 'selftest';
-      location.reload();
     } else if (action === 'toggle-theme') {
       const cur = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
-    } else if (action === 'reset') {
-      data = QY.reset();
-      if (window.QYV) QYV.reset();
-      state.detailId = null;
-      mount();
-      toast('已恢复示例数据');
     } else if (action === 'dispose') {
       disposeItem(id);
     } else if (action === 'add-event') {
