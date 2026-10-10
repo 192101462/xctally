@@ -456,7 +456,7 @@
     }).join('');
 
     return '' +
-      pageHead('我的', '数据全部存在本机 · 无需注册、不联网') +
+      pageHead('我的', '数据全部存在本机 · 无需注册、不联网', iconBtn('open-settings', '设置')) +
 
       '<div class="group">' +
         kv('在用物品', s.count + ' 件' + (s.archived ? '（另有 ' + s.archived + ' 件归档）' : '')) +
@@ -558,6 +558,7 @@
           '</div>' +
         '</div>' +
       '</div>';
+
   }
 
   /* ---------------- 表单面板 ---------------- */
@@ -873,6 +874,13 @@
       state.detailId = null;
       if (window.QYV) QYV.openDetail(id);
       mount();
+    } else if (action === 'open-settings') {
+      openSettings();
+    } else if (action === 'clear-data') {
+      clearAllData();
+    } else if (action === 'set-ball') {
+      if (el.checked) { if (window.QYO) QYO.showBall(); }
+      else if (window.QYO) QYO.hideBall();
     } else if (action === 'toggle-theme') {
       const cur = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
@@ -915,6 +923,94 @@
     if (window.QYV) QYV.clearDetail();
     if (window.QYI) QYI.openDetail(id);
     mount();
+  }
+
+  /* ---------------- 设置面板 ---------------- */
+
+  function openSettings() {
+    const imgBytes = window.QYV ? QYV.imageBytes() : 0;
+    const totalBytes = localBytes();
+    const aiReady = !!(window.QYO && QYO.ready());
+    const aiCfg = window.QYA ? QYA.cfg() : null;
+    const u = window.QYA ? QYA.usage() : null;
+    const ballOn = !!(window.QYO && aiCfg && !aiCfg.ball.hidden);
+
+    const row = function (action, emoji, title, sub, side) {
+      return '<div class="row" data-action="' + action + '">' +
+        '<div class="tl-dot">' + emoji + '</div>' +
+        '<div class="row-main"><div class="row-title">' + esc(title) + '</div>' +
+          (sub ? '<div class="row-sub">' + esc(sub) + '</div>' : '') + '</div>' +
+        (side || '') + '</div>';
+    };
+    const head = function (t) {
+      return '<div class="section-head" style="margin:16px 0 8px"><h2>' + t + '</h2></div>';
+    };
+    const chev = '<div class="row-side"><span class="chev">›</span></div>';
+
+    openSheet('<div class="sheet"><div class="grabber"></div>' +
+      '<h3>设置</h3>' +
+      head('AI') +
+      '<div class="group">' +
+        row('i-ai-cfg', '🔑', 'DeepSeek 配置',
+          aiCfg && aiCfg.key ? '模型 ' + aiCfg.model : '填 API Key 后开启识图与对话', chev) +
+        (aiReady ? row('i-ocr', '📷', '从截图识别', '订单截图、购物小票', chev) : '') +
+        (aiReady ? row('i-ai-usage', '📊', '用量与额度',
+          (u && u.calls)
+            ? u.calls + ' 次 · ' + (u.priced ? '约 ¥' + u.cost.toFixed(3) : u.total.toLocaleString() + ' token')
+            : '还没调用过', chev) : '') +
+        (aiReady ? '<label class="check-row"><input type="checkbox" data-action="set-ball"' +
+          (ballOn ? ' checked' : '') + ' /><span>对话助手悬浮球</span>' +
+          '<b>右下角可拖动的那个球</b></label>' : '') +
+      '</div>' +
+      head('数据管理') +
+      '<div class="group">' +
+        row('b-export', '📤', '导出完整备份', '物品 + 随笔 + 能源', chev) +
+        row('b-import', '📥', '导入数据', '先对比再合并，冲突保留本机版本', chev) +
+        row('i-trash', '🗑', '回收站', '删除的物品保留 ' + QY.TRASH_DAYS + ' 天，可恢复', chev) +
+      '</div>' +
+      head('外观') +
+      '<div class="group">' +
+        row('toggle-theme', '🌗', '深色模式', '点一下在浅色/深色之间切换', chev) +
+        row('noop', '📱', '界面', '选择显示哪些标签页（下一版）', chev) +
+      '</div>' +
+      head('内存') +
+      '<div class="group">' +
+        row('noop', '💾', '本地占用', '其中随笔图片 ' + humanBytes(imgBytes),
+          '<div class="row-side"><div class="row-value">' + humanBytes(totalBytes) + '</div></div>') +
+        row('clear-data', '⚠️', '清空数据', '物品、随笔、能源全部删除，不可恢复', chev) +
+      '</div>' +
+      '<div class="sheet-actions" style="margin-top:16px">' +
+        '<button class="btn plain" data-action="close-sheet">完成</button>' +
+      '</div>' +
+    '</div>');
+  }
+
+  /* 清空数据：三次确认。删掉两个存储键即可 —— 重新加载时 load() 会给出空数据集 */
+  function clearAllData() {
+    const ask = function (msg, title, ok, danger) {
+      if (!window.QYDialog || !QYDialog.confirm) {
+        toast('确认组件未加载，已取消');
+        return Promise.resolve(false);
+      }
+      return QYDialog.confirm(msg, { title: title, ok: ok, cancel: '取消', danger: danger });
+    };
+    ask('要清空所有数据吗？物品、事件、随笔、能源读数都会被删除。',
+      '清空数据 1/3', '继续').then(function (a) {
+      if (!a) return;
+      ask('这一步不可恢复，也没有"恢复示例数据"可以退回。',
+        '清空数据 2/3', '我确定').then(function (b) {
+        if (!b) return;
+        ask('最后一次确认：真的要清空吗？建议先导出备份。',
+          '清空数据 3/3', '清空', true).then(function (c) {
+          if (!c) return;
+          try {
+            localStorage.removeItem('xctally.prototype.v1');
+            localStorage.removeItem('xctally.collect.v1');
+          } catch (err) { /* 忽略 */ }
+          location.reload();
+        });
+      });
+    });
   }
 
   window.QYUI = {
