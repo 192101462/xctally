@@ -1326,7 +1326,9 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
   background: var(--sheet);
   display: flex;
   flex-direction: column;
-  z-index: 5;
+  /* 必须高于 #sheet-root（60）：覆盖层挂在 body 上，
+     层级低于它就会被整个面板盖住，看不见也点不到 */
+  z-index: 200;
   animation: fade 0.18s ease;
 }
 .picker-head {
