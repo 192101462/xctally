@@ -3,9 +3,13 @@ package com.qiyu.xctally
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Base64
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -13,12 +17,14 @@ import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
@@ -74,6 +80,130 @@ class MainActivity : AppCompatActivity() {
         toast(if (granted) "到期提醒已开启" else "没有通知权限，到期时不会弹提醒")
     }
 
+    private var pendingImageId: String? = null
+    private var cameraUri: Uri? = null
+
+    /**
+     * 选图片：拍照或从相册选择，返回 dataURL 给网页。
+     * 网页里直接写 <input type="file"> 在 WebView 里是没反应的（宿主必须实现
+     * onShowFileChooser），所以图片一律走这个原生入口。
+     */
+    private val imageLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = pendingImageId
+        pendingImageId = null
+        val fromCamera = cameraUri
+        cameraUri = null
+        if (id == null) return@registerForActivityResult
+        if (result.resultCode != RESULT_OK) {
+            deliverImage(id, null)
+            return@registerForActivityResult
+        }
+        val uri = fromCamera ?: result.data?.data
+        if (uri == null) {
+            deliverImage(id, null)
+            return@registerForActivityResult
+        }
+        val dataUrl = try {
+            readImageAsDataUrl(uri)
+        } catch (e: Exception) {
+            null
+        }
+        if (dataUrl == null) toast("读不出这张图片")
+        deliverImage(id, dataUrl)
+    }
+
+    private fun launchCamera(id: String) {
+        try {
+            val dir = File(cacheDir, "camera").apply { mkdirs() }
+            val file = File(dir, "shot_${System.currentTimeMillis()}.jpg")
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            cameraUri = uri
+            imageLauncher.launch(
+                Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                    putExtra(MediaStore.EXTRA_OUTPUT, uri)
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                }
+            )
+        } catch (e: Exception) {
+            pendingImageId = null
+            deliverImage(id, null)
+            toast("打不开相机：${e.message}")
+        }
+    }
+
+    private fun launchGallery(id: String) {
+        try {
+            imageLauncher.launch(
+                Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+            )
+        } catch (e: Exception) {
+            pendingImageId = null
+            deliverImage(id, null)
+            toast("打不开相册：${e.message}")
+        }
+    }
+
+    /**
+     * 读图 -> 缩到长边 1600 -> JPEG 88 -> dataURL。
+     * 原生必须先缩一道：原图直传会产生几 MB 的 base64 字符串，
+     * 过 WebView 桥又慢又容易 OOM，而网页侧反正还要再压一次。
+     * GIF 例外：解码会毁掉动画，所以原样透传。
+     */
+    private fun readImageAsDataUrl(uri: Uri): String? {
+        val mime = contentResolver.getType(uri) ?: "image/jpeg"
+        if (mime == "image/gif") {
+            val raw = contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+            return "data:image/gif;base64," + Base64.encodeToString(raw, Base64.NO_WRAP)
+        }
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, 1600)
+        }
+        var bmp = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, opts)
+        } ?: return null
+
+        val longSide = maxOf(bmp.width, bmp.height)
+        if (longSide > 1600) {
+            val ratio = 1600f / longSide
+            val scaled = Bitmap.createScaledBitmap(
+                bmp,
+                maxOf(1, (bmp.width * ratio).toInt()),
+                maxOf(1, (bmp.height * ratio).toInt()),
+                true
+            )
+            if (scaled !== bmp) {
+                bmp.recycle()
+                bmp = scaled
+            }
+        }
+
+        val out = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 88, out)
+        bmp.recycle()
+        if (out.size() == 0) return null
+        return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    private fun sampleSizeFor(w: Int, h: Int, target: Int): Int {
+        var size = 1
+        var longSide = maxOf(w, h)
+        while (longSide / 2 >= target) {
+            longSide /= 2
+            size *= 2
+        }
+        return size
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -125,6 +255,14 @@ class MainActivity : AppCompatActivity() {
         val js = "window.QYPlatform && window.QYPlatform._deliver(" +
             JSONObject.quote(id) + "," +
             (if (text == null) "null" else JSONObject.quote(text)) + ")"
+        runOnUiThread { webView.evaluateJavascript(js, null) }
+    }
+
+    /** 把选到的图片（dataURL）回传给网页 */
+    private fun deliverImage(id: String, dataUrl: String?) {
+        val js = "window.QYPlatform && window.QYPlatform._deliverImage(" +
+            JSONObject.quote(id) + "," +
+            (if (dataUrl == null) "null" else JSONObject.quote(dataUrl)) + ")"
         runOnUiThread { webView.evaluateJavascript(js, null) }
     }
 
@@ -200,6 +338,24 @@ class MainActivity : AppCompatActivity() {
                     deliver(id, null)
                     toast("打不开文件选择器：${e.message}")
                 }
+            }
+        }
+
+        /** 选图片：弹「拍照 / 从相册选择」 */
+        @JavascriptInterface
+        fun pickImage(id: String) {
+            runOnUiThread {
+                pendingImageId = id
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("添加图片")
+                    .setItems(arrayOf("拍照", "从相册选择")) { _, which ->
+                        if (which == 0) launchCamera(id) else launchGallery(id)
+                    }
+                    .setOnCancelListener {
+                        pendingImageId = null
+                        deliverImage(id, null)
+                    }
+                    .show()
             }
         }
 

@@ -444,6 +444,17 @@
     return i < 0 ? 0 : Math.round((u.length - i - 1) * 0.75);
   }
 
+  // 原生活回的是 dataURL，转回 File 好复用同一条压缩管线（含 GIF 判定）
+  function dataUrlToFile(dataUrl) {
+    const s = String(dataUrl || '');
+    const comma = s.indexOf(',');
+    const mime = (s.slice(0, comma).match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+    const bin = atob(s.slice(comma + 1));
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new File([arr], 'photo.' + (mime.split('/')[1] || 'jpg'), { type: mime });
+  }
+
   function readAsDataURL(file) {
     return new Promise(function (resolve, reject) {
       const fr = new FileReader();
@@ -1254,8 +1265,24 @@
     snapshot: snapshot,
     merge: merge,
     save: save,
-    // 给物品模块复用：选一张图 -> 压缩 -> 回调 dataURL
+    // 给物品模块复用：选一张图（原生可拍照/相册）-> 压缩 -> 回调 dataURL
     pickImage: function (cb, opts) {
+      const handle = function (file) {
+        if (!file) { cb(null); return; }
+        compressImage(file, opts).then(function (r) {
+          cb(r.dataUrl);
+        }).catch(function (err) {
+          UI().toast('图片处理失败：' + err.message);
+          cb(null);
+        });
+      };
+      // 安卓/鸿蒙壳：走原生选择器，才可能调起相机
+      if (window.QYPlatform && QYPlatform.pickImage) {
+        QYPlatform.pickImage(function (dataUrl) {
+          handle(dataUrl ? dataUrlToFile(dataUrl) : null);
+        });
+        return;
+      }
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
@@ -1264,13 +1291,7 @@
       input.addEventListener('change', function () {
         const f = input.files && input.files[0];
         input.remove();
-        if (!f) { cb(null); return; }
-        compressImage(f, opts).then(function (r) {
-          cb(r.dataUrl);
-        }).catch(function (err) {
-          UI().toast('图片处理失败：' + err.message);
-          cb(null);
-        });
+        handle(f);
       });
       input.click();
     },

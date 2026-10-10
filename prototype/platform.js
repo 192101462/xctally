@@ -32,6 +32,7 @@
   }
 
   const pending = {};   // pickFile 的待回调：id → callback
+  const pendingImg = {};   // pickImage 的待回调：id → callback
 
   window.QYPlatform = {
     native: !!native,
@@ -82,6 +83,36 @@
       const cb = pending[id];
       delete pending[id];
       if (cb) cb(text == null ? null : String(text));
+    },
+
+    /* 选图片：原生弹「拍照 / 从相册选择」，浏览器走 input[type=file] */
+    pickImage: function (cb) {
+      if (native && native.pickImage) {
+        const id = 'img' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        pendingImg[id] = cb;
+        try { native.pickImage(id); return; } catch (err) { /* 落到浏览器兜底 */ }
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        const f = input.files && input.files[0];
+        input.remove();
+        if (!f) { cb(null); return; }
+        const fr = new FileReader();
+        fr.onload = function () { cb(String(fr.result)); };
+        fr.readAsDataURL(f);
+      });
+      input.click();
+    },
+
+    /* 原生侧选完图片后回传 dataURL（由原生调用） */
+    _deliverImage: function (id, dataUrl) {
+      const cb = pendingImg[id];
+      delete pendingImg[id];
+      if (cb) cb(dataUrl == null ? null : String(dataUrl));
     },
 
     /* 把待提醒清单交给原生，让系统去发通知 */
