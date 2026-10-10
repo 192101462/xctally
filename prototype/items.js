@@ -715,7 +715,6 @@
   function changeStatus(id) {
     const item = byId(id);
     if (!item) return;
-    const sheet = document.querySelector('#sheet-root .sheet');
     const cur = item.status;
     const onPick = function (v) {
       item.status = v;
@@ -772,8 +771,9 @@
         }
         if (ev.target === layer) { layer.remove(); resolve(false); }
       });
-      const host = document.querySelector('#sheet-root .sheet');
-      (host || document.body).appendChild(layer);
+      // 和 picker 一样必须挂 body：面板带 transform 时，挂在里面会让 fixed 退化成
+      // absolute，滚动过的面板上弹确认框就会跑到内容顶部（看不见）
+      document.body.appendChild(layer);
     });
   }
 
