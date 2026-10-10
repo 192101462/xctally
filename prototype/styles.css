@@ -1241,7 +1241,7 @@ html.app-mode .statusbar { display: none; }        /* 假的 9:41 */
 html.app-mode .home-indicator { display: none; }
 html.app-mode .view {
   padding-top: calc(14px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
 }
 html.app-mode .tabbar {
   height: calc(64px + env(safe-area-inset-bottom, 0px));
@@ -1414,10 +1414,13 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .lightbox img { max-width: 96vw; max-height: 92vh; object-fit: contain; }
 
 /* ---------------- 上下留白 + 宽屏 / 平板适配 ---------------- */
-/* 手机上给内容留出上下呼吸空间（底部还要避开标签栏） */
+/* 注意：只在这里加 padding-top。
+ * 底部留白必须留给 .view / html.app-mode .view 那两条规则（标签栏高度 + 安全区），
+ * 用 #view 写 padding-bottom 会因为 ID 优先级更高把它们压掉，
+ * 结果最后一行内容会贴着标签栏。
+ */
 #view {
   padding-top: 14px;
-  padding-bottom: 12px;
 }
 @media (min-width: 640px) {
   /* 平板 / 横屏：内容居中并限制宽度，避免一行拉得过长 */
