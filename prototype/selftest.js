@@ -205,6 +205,31 @@
       ok('汇总：已浪费金额等于三条过期物品之和',
         Math.abs(s.wasted - 38.6) < 0.01, s.wasted);
       ok('汇总：持有成本合计为正常数值', s.daily > 1 && s.daily < 500, s.daily.toFixed(2));
+
+      /* ---------- 7b. 物品模块：日均成本开关 / 归档 / 分类 ---------- */
+      const food = d.items.filter(function (i) { return i.category === '食品'; })[0];
+      const drug = d.items.filter(function (i) { return i.category === '药品'; })[0];
+      const durable = d.items.filter(function (i) { return i.category === '电子'; })[0];
+      ok('成本开关：食品默认不计入日均成本', !!food && QY.tracksCost(food, d) === false);
+      ok('成本开关：药品默认不计入日均成本', !!drug && QY.tracksCost(drug, d) === false);
+      ok('成本开关：电子默认计入日均成本', !!durable && QY.tracksCost(durable, d) === true);
+      ok('成本开关：物品上的显式设置优先于分类默认值',
+        QY.tracksCost({ category: '食品', costTrack: true }, d) === true);
+      ok('汇总：日均合计只统计计入的物品', s.dailyCount > 0 && s.dailyCount < s.count,
+        s.dailyCount + '/' + s.count);
+
+      ok('归档：已处置算归档', QY.isArchived({ status: '已处置' }) === true);
+      ok('归档：已用完算归档', QY.isArchived({ status: '已用完' }) === true);
+      ok('归档：在用不算归档', QY.isArchived({ status: '在用' }) === false);
+      ok('归档：改回在用即可还原', QY.isActive({ status: '已处置' }) === false &&
+        QY.isActive({ status: '在用' }) === true);
+
+      ok('缩略图：无图片时取名称首字', QY.thumbChar({ name: '发卡' }) === '发');
+      ok('缩略图：有图片时走 background-image', QY.thumbStyle({ photo: 'data:image/png;base64,AAA' })
+        .indexOf('background-image') >= 0);
+      ok('分类：未知分类回退为未分类', QY.catOf('不存在', d).name === '未分类');
+      ok('分类：分类列表来自数据（可自定义）', QY.catList(d).length === d.itemCats.length);
+      ok('物品模块已加载 QYI', !!window.QYI);
     }).then(function () {
       /* ---------- 8. 存储占用（信息项） ---------- */
       const imgBytes = QYV.imageBytes();

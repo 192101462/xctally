@@ -453,7 +453,9 @@
     });
   }
 
-  function compressImage(file) {
+  function compressImage(file, opts) {
+    const maxSide = (opts && opts.maxSide) || IMG_MAX_SIDE;
+    const quality = (opts && opts.quality) || IMG_QUALITY;
     if (/image\/gif/i.test(file.type)) {
       // 动图：原样保留（代价是体积大，插的时候会提示）
       return readAsDataURL(file).then(function (u) {
@@ -467,7 +469,7 @@
         im.onload = function () {
           const w0 = im.naturalWidth || 1;
           const h0 = im.naturalHeight || 1;
-          const scale = Math.min(1, IMG_MAX_SIDE / Math.max(w0, h0));
+          const scale = Math.min(1, maxSide / Math.max(w0, h0));
           const w = Math.max(1, Math.round(w0 * scale));
           const h = Math.max(1, Math.round(h0 * scale));
           const c = document.createElement('canvas');
@@ -477,7 +479,7 @@
           g.fillStyle = '#FFFFFF';        // 透明 PNG 转 JPEG 会变黑底，先铺白
           g.fillRect(0, 0, w, h);
           g.drawImage(im, 0, 0, w, h);
-          const out = c.toDataURL('image/jpeg', IMG_QUALITY);
+          const out = c.toDataURL('image/jpeg', quality);
 
           // 纯色截图 / 图标这类图，JPEG 可能反而更大 —— 原图本来就小的话就直接用原图
           const keepOriginal = out.length > src.length && src.length < 400 * 1024;
@@ -1252,6 +1254,26 @@
     snapshot: snapshot,
     merge: merge,
     save: save,
+    // 给物品模块复用：选一张图 -> 压缩 -> 回调 dataURL
+    pickImage: function (cb, opts) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        const f = input.files && input.files[0];
+        input.remove();
+        if (!f) { cb(null); return; }
+        compressImage(f, opts).then(function (r) {
+          cb(r.dataUrl);
+        }).catch(function (err) {
+          UI().toast('图片处理失败：' + err.message);
+          cb(null);
+        });
+      });
+      input.click();
+    },
     humanSize: humanSize,
     recent: function (n) {
       return db.entries.slice()

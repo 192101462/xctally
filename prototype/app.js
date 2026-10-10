@@ -54,9 +54,12 @@
   /* ---------------- 通用组件 ---------------- */
 
   function tile(item, small) {
-    const g = QY.colorOf(item);
-    return '<div class="tile ' + (small ? 'sm' : '') + '" style="background:linear-gradient(150deg,' +
-      g[0] + ',' + g[1] + ')">' + QY.iconOf(item) + '</div>';
+    // 有图片就用图片；没有就用中性底 + 名称首字（物品列表已不用 emoji 图标）
+    if (item.photo) {
+      return '<div class="tile ' + (small ? 'sm' : '') + '" style="background-image:url(' + item.photo +
+        ');background-size:cover;background-position:center"></div>';
+    }
+    return '<div class="tile tile-plain ' + (small ? 'sm' : '') + '">' + esc(QY.thumbChar(item)) + '</div>';
   }
 
   function expiryPill(item) {
@@ -129,7 +132,7 @@
 
     const expiring = s.expiring.slice(0, 5).map(function (it) {
       return '' +
-        '<div class="row" data-action="detail" data-id="' + it.id + '">' +
+        '<div class="row" data-action="i-open" data-id="' + it.id + '">' +
           tile(it) +
           '<div class="row-main">' +
             '<div class="row-title">' + esc(it.name) + '</div>' +
@@ -140,16 +143,17 @@
     }).join('');
 
     const recent = s.recent.map(function (it) {
-      const p = QY.perDay(it, data);
+      const tracked = QY.tracksCost(it, data);
+      const p = tracked ? QY.perDay(it, data) : null;
       return '' +
-        '<div class="row" data-action="detail" data-id="' + it.id + '">' +
+        '<div class="row" data-action="i-open" data-id="' + it.id + '">' +
           tile(it, true) +
           '<div class="row-main">' +
             '<div class="row-title">' + esc(it.name) + '</div>' +
             '<div class="row-sub">' + QY.fmtDate(it.acquiredAt) + ' · ' + esc(it.source || '—') + '</div>' +
           '</div>' +
           '<div class="row-side"><div class="row-value">' + QY.fmtMoney(it.cost) + '</div>' +
-            '<div class="row-note">' + (p != null ? QY.fmtRate(p) + '/天' : '—') + '</div></div>' +
+            (p != null ? '<div class="row-note">' + QY.fmtRate(p) + '/天</div>' : '') + '</div>' +
         '</div>';
     }).join('');
 
@@ -437,14 +441,14 @@
     const max = cats.length ? byCat[cats[0]] : 1;
 
     const catRows = cats.map(function (c) {
-      const g = QY.CATEGORIES[c] ? QY.CATEGORIES[c].g : ['#ECECF1', '#CFCFD8'];
+      const g = QY.catOf(c, data).g;
       const pct = (byCat[c] / max * 100).toFixed(1);
       return '' +
         '<div class="row static">' +
           '<div class="tile sm" style="background:linear-gradient(150deg,' + g[0] + ',' + g[1] + ')">' +
-            (QY.CATEGORIES[c] ? QY.CATEGORIES[c].emoji : '📦') + '</div>' +
+            QY.catOf(c, data).emoji + '</div>' +
           '<div class="row-main">' +
-            '<div class="row-title">' + c + '</div>' +
+            '<div class="row-title">' + esc(c) + '</div>' +
             '<div class="track" style="margin-top:8px"><i style="width:' + pct + '%"></i></div>' +
           '</div>' +
           '<div class="row-side"><div class="row-value">' + QY.fmtMoney(byCat[c]) + '</div></div>' +
@@ -455,7 +459,7 @@
       pageHead('我的', '数据全部存在本机 · 无需注册、不联网') +
 
       '<div class="group">' +
-        kv('在用物品', s.count + ' 件') +
+        kv('在用物品', s.count + ' 件' + (s.archived ? '（另有 ' + s.archived + ' 件归档）' : '')) +
         kv('累计投入', QY.fmtMoney(s.totalSpend)) +
         kv('当前持有成本', QY.fmtRate(s.daily) + ' / 天') +
         kv('已浪费', QY.fmtMoney(s.wasted)) +
@@ -464,6 +468,18 @@
       '<div class="section">' +
         '<div class="section-head"><h2>分类投入</h2><span>按购买价合计</span></div>' +
         '<div class="group">' + (catRows || '<div class="empty"><p>还没有数据</p></div>') + '</div>' +
+      '</div>' +
+
+      '<div class="section">' +
+        '<div class="section-head"><h2>物品分类</h2><span>可自定义</span></div>' +
+        '<div class="group">' +
+          '<div class="row" data-action="i-cat-manage">' +
+            '<div class="tl-dot">🏷</div>' +
+            '<div class="row-main"><div class="row-title">管理分类</div>' +
+              '<div class="row-sub">新增 / 改名 / 删除，并设置默认是否算日均成本</div></div>' +
+            '<div class="row-side"><span class="chev">›</span></div>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
 
       '<div class="section">' +
@@ -685,8 +701,10 @@
     else if (raw.indexOf('dark') >= 0) document.documentElement.setAttribute('data-theme', 'dark');
     if (!h) return;
     if (h.indexOf('detail=') === 0) {
-      state.detailId = h.slice(7);
       state.tab = 'items';
+      state.detailId = null;
+      if (window.QYI) QYI.openDetail(h.slice(7));
+      else state.detailId = h.slice(7);
     } else if (h.indexOf('cdetail=') === 0) {
       state.tab = 'collect';
       state.detailId = null;
@@ -700,9 +718,12 @@
   function mount() {
     const view = $('#view');
     const QYV = window.QYV;
+    const QYI = window.QYI;
     let html;
     if (state.tab === 'collect' && QYV) {
       html = QYV.renderDetailIfAny() || QYV.renderList();
+    } else if (state.tab === 'items' && QYI) {
+      html = QYI.renderDetailIfAny() || QYI.renderList();
     } else if (state.detailId) {
       html = viewDetail(itemById(state.detailId));
     } else if (state.tab === 'home') {
@@ -717,8 +738,10 @@
     view.innerHTML = html;
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
+    const itemDetail = !!(window.QYI && QYI.hasDetail());
     $('#tabbar').innerHTML = TABS.map(function (t) {
-      return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail ? 'active' : '') +
+      return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail &&
+        !(itemDetail && t.id === 'items') ? 'active' : '') +
         '" data-action="tab" data-tab="' + t.id + '">' + t.icon + '<span>' + t.label + '</span></button>';
     }).join('');
 
@@ -770,11 +793,14 @@
     if (window.QYV && QYV.handleAction(action, el)) return;
     // 备份模块处理 b- 开头的动作
     if (window.QYB && QYB.handleAction(action, el)) return;
+    // 物品模块处理 i- 开头的动作
+    if (window.QYI && QYI.handleAction(action, el)) return;
 
     if (action === 'tab') {
       state.tab = el.getAttribute('data-tab');
       state.detailId = null;
       if (window.QYV) QYV.clearDetail();
+      if (window.QYI) QYI.clearDetail();
       mount();
     } else if (action === 'detail') {
       state.detailId = id;
@@ -786,8 +812,9 @@
       state.category = el.getAttribute('data-cat');
       mount();
     } else if (action === 'add') {
-      openSheet(itemFormHTML());
-      setTimeout(function () { const n = $('#f-name'); if (n) n.focus(); }, 320);
+      // 物品新增统一走 items.js 的表单
+      if (window.QYI) QYI.openForm(null);
+      else openSheet(itemFormHTML());
     } else if (action === 'reading') {
       openSheet(readingFormHTML(id || (data.meters[0] && data.meters[0].id)));
     } else if (action === 'close-sheet') {
@@ -829,6 +856,7 @@
 
   document.addEventListener('input', function (e) {
     if (window.QYV && QYV.handleInput(e)) return;
+    if (window.QYI && QYI.handleInput(e)) return;
     if (e.target.id === 'search') {
       state.query = e.target.value;
       const list = $('#item-list');
@@ -838,6 +866,11 @@
 
   document.addEventListener('change', function (e) {
     if (window.QYV && QYV.handleChange(e)) return;
+    // 用户手动改过"计入日均成本"之后，切换分类就不再覆盖它
+    if (e.target.id === 'f-costtrack' && window.QYI) {
+      const ev = new CustomEvent('qy-costtouch');
+      document.dispatchEvent(ev);
+    }
   });
 
   document.addEventListener('keydown', function (e) {
@@ -845,6 +878,15 @@
   });
 
   /* ---------------- 给收藏模块的桥接接口 ---------------- */
+
+  // 跳到某个物品的详情（首页的临期/最近列表也用它）
+  function goItem(id) {
+    state.tab = 'items';
+    state.detailId = null;
+    if (window.QYV) QYV.clearDetail();
+    if (window.QYI) QYI.openDetail(id);
+    mount();
+  }
 
   window.QYUI = {
     I: I,
@@ -856,6 +898,8 @@
     openSheet: openSheet,
     closeSheet: closeSheet,
     mount: mount,
+    goItem: goItem,
+    itemById: function (id) { return itemById(id); },
     data: function () { return data; },
     save: save
   };
@@ -874,7 +918,10 @@
   // 允许用 URL 直接打开表单 / 详情，方便截图与演示：
   // #items?bare&add | #energy?bare&reading | #collect?bare&cform
   // #cdetail=c_diary1?bare&light | ...&clong（生成长图）
-  if (bootHash.indexOf('add') >= 0) openSheet(itemFormHTML());
+  if (bootHash.indexOf('add') >= 0) {
+    if (window.QYI) QYI.openForm(null);
+    else openSheet(itemFormHTML());
+  }
   if (bootHash.indexOf('reading') >= 0) openSheet(readingFormHTML(data.meters[0] && data.meters[0].id));
   if (bootHash.indexOf('cform') >= 0) {
     const addBtn = document.querySelector('[data-action="c-add"]');

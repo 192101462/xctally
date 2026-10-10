@@ -17,16 +17,54 @@
 
   /* ---------------- 字典 ---------------- */
 
-  const CATEGORIES = {
-    '食品': { emoji: '🥛', g: ['#FFE7C2', '#FFC46B'] },
-    '药品': { emoji: '💊', g: ['#FFD9DC', '#FF9AA2'] },
-    '日用': { emoji: '🧺', g: ['#D9E8FF', '#9CC2FF'] },
-    '服饰': { emoji: '🧣', g: ['#E6DEFF', '#B6A4FF'] },
-    '电子': { emoji: '💻', g: ['#D6F3EA', '#84DCC0'] },
-    '表具': { emoji: '⚡️', g: ['#FFF1C9', '#FFD666'] },
-    '其他': { emoji: '📦', g: ['#ECECF1', '#CFCFD8'] }
-  };
-  const CATEGORY_NAMES = Object.keys(CATEGORIES);
+  /* ---------------- 分类（用户可自定义，存在数据里） ---------------- */
+
+  // 默认分类。costTrack 决定"这个分类下的物品默认是否算日均成本"：
+  // 食物、药品是消耗品，按天摊价格没有意义；耐用品才有意义。
+  const DEFAULT_CATS = [
+    { name: '食品', emoji: '🥛', g: ['#FFE7C2', '#FFC46B'], costTrack: false },
+    { name: '药品', emoji: '💊', g: ['#FFD9DC', '#FF9AA2'], costTrack: false },
+    { name: '日用', emoji: '🧺', g: ['#D9E8FF', '#9CC2FF'], costTrack: true },
+    { name: '服饰', emoji: '🧣', g: ['#E6DEFF', '#B6A4FF'], costTrack: true },
+    { name: '电子', emoji: '💻', g: ['#D6F3EA', '#84DCC0'], costTrack: true },
+    { name: '表具', emoji: '⚡️', g: ['#FFF1C9', '#FFD666'], costTrack: true },
+    { name: '其他', emoji: '📦', g: ['#ECECF1', '#CFCFD8'], costTrack: true }
+  ];
+  const FALLBACK_CAT = { name: '未分类', emoji: '📦', g: ['#ECECF1', '#CFCFD8'], costTrack: true };
+  const EMOJI_POOL = ['📦', '🏷', '🎁', '🧩', '🔧', '🧴', '🪥', '🧸', '📚', '🎨', '🎵', '⌚️', '🔌', '🪴', '🧯'];
+  const GRAD_POOL = [
+    ['#FFE7C2', '#FFC46B'], ['#FFD9DC', '#FF9AA2'], ['#D9E8FF', '#9CC2FF'],
+    ['#E6DEFF', '#B6A4FF'], ['#D6F3EA', '#84DCC0'], ['#FFF1C9', '#FFD666'],
+    ['#FFE3EA', '#F2A6BC'], ['#DCE4FF', '#93A6F0'], ['#E7ECF5', '#C9D6E8']
+  ];
+
+  function catList(data) {
+    if (data && data.itemCats && data.itemCats.length) return data.itemCats;
+    return DEFAULT_CATS;
+  }
+  function catOf(name, data) {
+    const list = catList(data);
+    for (let i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return FALLBACK_CAT;
+  }
+  function nextCatStyle(data) {
+    const n = catList(data).length;
+    return { emoji: EMOJI_POOL[n % EMOJI_POOL.length], g: GRAD_POOL[n % GRAD_POOL.length] };
+  }
+
+  // 是否计算日均成本：物品上的开关优先，否则跟随分类默认值
+  function tracksCost(item, data) {
+    if (item && typeof item.costTrack === 'boolean') return item.costTrack;
+    return catOf(item && item.category, data).costTrack !== false;
+  }
+
+  /* ---------------- 归档 ----------------
+   * 在用/闲置/借出/已开封 都算"在用"；已用完/已处置 归入归档，
+   * 默认不在列表里出现（但可以随时切回去，不是删除）。
+   */
+  const ARCHIVED_STATUS = { '已用完': 1, '已处置': 1 };
+  function isArchived(item) { return !!ARCHIVED_STATUS[item.status]; }
+  function isActive(item) { return !isArchived(item); }
 
   const SOURCES = ['商店购买', '网购', '超市', '菜市场', '他人赠送', '中奖获得', '积分兑换', '二手购入', '自制'];
 
@@ -146,19 +184,26 @@
   }
   function isExpired(item) {
     const d = daysLeft(item);
-    return d != null && d < 0 && item.status !== '已处置' && item.status !== '已用完';
+    return d != null && d < 0 && !isArchived(item);
   }
-  function isActive(item) {
-    return item.status !== '已处置' && item.status !== '已用完';
+  function iconOf(item, data) {
+    return item.icon || catOf(item.category, data).emoji;
   }
-  function iconOf(item) {
-    return item.icon || (CATEGORIES[item.category] || CATEGORIES['其他']).emoji;
-  }
-  function colorOf(item) {
-    return (CATEGORIES[item.category] || CATEGORIES['其他']).g;
+  function colorOf(item, data) {
+    return catOf(item.category, data).g;
   }
   function titleOf(item) {
     return item.sub ? item.category + ' · ' + item.sub : item.category;
+  }
+  // 列表/详情用的方形缩略图：有照片用照片，否则用中性底 + 名称首字（不再是 emoji 图标）
+  function thumbStyle(item) {
+    if (item.photo) {
+      return 'background-image:url(' + item.photo + ');background-size:cover;background-position:center';
+    }
+    return '';
+  }
+  function thumbChar(item) {
+    return String(item.name || '?').trim().charAt(0) || '?';
   }
   function eventsOf(data, itemId) {
     return data.events
@@ -172,15 +217,17 @@
     const items = data.items;
     const active = items.filter(isActive);
 
-    // 已经浪费掉的钱：过期且未处置的物品成本合计
+    // 已经浪费掉的钱：过期且未归档的物品成本合计
     const expired = items.filter(isExpired);
     const wasted = expired.reduce(function (s, it) { return s + (it.cost || 0); }, 0);
 
-    // 全部在用物品的日均成本合计
+    // 持有成本合计：只统计"计入日均成本"的物品（食品、药品这类不算）
     let daily = 0;
+    let dailyCount = 0;
     active.forEach(function (it) {
+      if (!tracksCost(it, data)) return;
       const p = perDay(it, data);
-      if (p) daily += p;
+      if (p) { daily += p; dailyCount++; }
     });
 
     // 能源本月支出
@@ -204,9 +251,11 @@
 
     return {
       count: active.length,
+      archived: items.length - active.length,
       wasted: wasted,
       wastedCount: expired.length,
       daily: daily,
+      dailyCount: dailyCount,
       energy: energy,
       energyTrend: energyTrend,
       expiring: expiring,
@@ -362,7 +411,7 @@
       }
     ];
 
-    return { version: 1, items: items, events: events, meters: meters };
+    return { version: 2, itemCats: DEFAULT_CATS.map(function (c) { return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack }; }), items: items, events: events, meters: meters };
   }
 
   /* ---------------- 本地存储 ---------------- */
@@ -370,15 +419,28 @@
   const KEY = 'xctally.prototype.v1';
 
   function load() {
+    let d = null;
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) return seed();
-      const d = JSON.parse(raw);
-      if (!d || !d.items) return seed();
-      return d;
+      if (raw) d = JSON.parse(raw);
     } catch (err) {
-      return seed();
+      d = null;
     }
+    if (!d || !d.items) d = seed();
+
+    // 迁移：老数据没有 itemCats（分类原本是写死的），补上默认分类
+    if (!d.itemCats || !d.itemCats.length) {
+      d.itemCats = DEFAULT_CATS.map(function (c) {
+        return { name: c.name, emoji: c.emoji, g: c.g.slice(), costTrack: c.costTrack };
+      });
+    }
+    // 归一化：补齐新字段，避免各处判空
+    d.items.forEach(function (it) {
+      if (it.photo === undefined) it.photo = null;
+      if (it.sub === undefined) it.sub = '';
+      if (it.status === undefined) it.status = '在用';
+    });
+    return d;
   }
   function save(data) {
     try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (err) { /* 忽略 */ }
@@ -393,8 +455,7 @@
 
   global.QY = {
     DAY: DAY,
-    CATEGORIES: CATEGORIES,
-    CATEGORY_NAMES: CATEGORY_NAMES,
+    DEFAULT_CATS: DEFAULT_CATS,
     SOURCES: SOURCES,
     STATUSES: STATUSES,
     UNITS: UNITS,
@@ -417,8 +478,15 @@
     expiryLevel: expiryLevel,
     isExpired: isExpired,
     isActive: isActive,
+    isArchived: isArchived,
+    catList: catList,
+    catOf: catOf,
+    nextCatStyle: nextCatStyle,
+    tracksCost: tracksCost,
     iconOf: iconOf,
     colorOf: colorOf,
+    thumbStyle: thumbStyle,
+    thumbChar: thumbChar,
     titleOf: titleOf,
     eventsOf: eventsOf,
     summaries: summaries,
