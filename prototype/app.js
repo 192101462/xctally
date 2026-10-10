@@ -501,6 +501,11 @@
               '<div class="row-main"><div class="row-title">从截图识别</div>' +
                 '<div class="row-sub">淘宝/京东/拼多多订单截图、购物小票</div></div>' +
               '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
+            (aiReady ? '<div class="row" data-action="i-ball-show">' +
+              '<div class="tl-dot">💬</div>' +
+              '<div class="row-main"><div class="row-title">对话助手</div>' +
+                '<div class="row-sub">右下角悬浮球，可拖动，位置会记住</div></div>' +
+              '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
             '<div class="row" data-action="i-ai-cfg">' +
               '<div class="tl-dot">🔑</div>' +
               '<div class="row-main"><div class="row-title">DeepSeek 配置</div>' +
@@ -750,6 +755,8 @@
     const view = $('#view');
     const QYV = window.QYV;
     const QYI = window.QYI;
+    // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
+    if (window.QYO && QYO.syncBall) QYO.syncBall();
     let html;
     if (state.tab === 'collect' && QYV) {
       html = QYV.renderDetailIfAny() || QYV.renderList();

@@ -14,6 +14,7 @@
 
   function UI() { return window.QYUI; }
   const QY = window.QY;
+  const QYA = window.QYA;      // 显式取，不依赖裸全局
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];

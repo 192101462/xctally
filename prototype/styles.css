@@ -1488,6 +1488,75 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
 .field-note { margin-top: 6px; font-size: 12px; color: var(--label-3); line-height: 1.5; }
 
+/* ---------------- 对话助手 & 悬浮球 ---------------- */
+.ai-ball {
+  position: fixed;
+  z-index: 60;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #4b8dff, #0a6cff);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 23px;
+  box-shadow: 0 10px 26px rgba(10, 108, 255, 0.38);
+  touch-action: none;          /* 拖动时不触发页面滚动 */
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.12s ease;
+}
+.ai-ball.dragging { transform: scale(0.94); cursor: grabbing; }
+.ai-ball-x {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.ai-sheet { display: flex; flex-direction: column; max-height: 76vh; }
+.ai-head { display: flex; align-items: center; justify-content: space-between; }
+.ai-head h3 { margin: 0 0 6px; font-size: 18px; }
+.ai-log {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0 12px;
+  min-height: 140px;
+}
+.ai-msg {
+  max-width: 86%;
+  padding: 10px 13px;
+  border-radius: 16px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.ai-msg.me { align-self: flex-end; background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
+.ai-msg.bot { align-self: flex-start; background: var(--fill-2); border-bottom-left-radius: 5px; }
+.ai-hint { font-size: 13px; color: var(--label-3); line-height: 1.9; padding: 8px 2px; }
+.ai-actions {
+  align-self: stretch;
+  background: var(--fill-2);
+  border-radius: var(--r-md);
+  padding: 12px 14px;
+  font-size: 13.5px;
+}
+.ai-actions.done { opacity: 0.72; }
+.ai-actions-head { font-weight: 650; margin-bottom: 6px; }
+.ai-actions ul { margin: 0 0 10px; padding-left: 18px; line-height: 1.7; }
+.ai-input { display: flex; gap: 8px; align-items: center; padding-top: 4px; }
+.ai-input .input { flex: 1; }
+
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
 body.bare .stage { gap: 0; }
