@@ -37,15 +37,25 @@
     }
   }
 
+  // 单价默认 0：官方价格会调整，与其内置一个可能过期的数字，不如让你按官网填。
+  // 填了才会显示估算费用；token 数是接口原样给的，永远准确。
+  const DEFAULT_PRICES = { in: 0, out: 0, cacheHit: 0 };
+
   function cfg() {
     const c = loadRaw();
-    return {
+    // 注意：这里必须把配置里的【其它字段】一起透传（ball / usage / prices）。
+    // 之前只返回白名单字段，把悬浮球的位置和开关过滤掉了，
+    // 导致"关不掉悬浮球、切页面位置跳回原位"。
+    return Object.assign({}, DEFAULTS, c, {
       baseUrl: String(c.baseUrl || DEFAULTS.baseUrl).replace(/\/+$/, ''),
       model: c.model || DEFAULTS.model,
       visionModel: c.visionModel || c.model || DEFAULTS.model,
       key: c.key || '',
-      enabled: c.enabled !== false
-    };
+      enabled: c.enabled !== false,
+      ball: c.ball || {},
+      usage: c.usage || { calls: 0, in: 0, out: 0, cacheHit: 0 },
+      prices: Object.assign({}, DEFAULT_PRICES, c.prices || {})
+    });
   }
 
   function update(patch) {
@@ -75,7 +85,75 @@
     return m;
   }
 
-  /* 一次 chat/completions 调用，返回助手回复的纯文本 */
+  /* ---------------- 用量统计 ----------------
+   * 只记 token（接口原样给的），金额在展示时按单价现算 —— 这样改单价不用重算历史。
+   * 存在 xctally.ai.v1 里，和 Key 同一个键，所以【不会进备份】。
+   */
+  function addUsage(u) {
+    if (!u) return;
+    const cur = loadRaw().usage || { calls: 0, in: 0, out: 0, cacheHit: 0 };
+    cur.calls = (cur.calls || 0) + 1;
+    cur.in = (cur.in || 0) + (u.prompt_tokens || 0);
+    cur.out = (cur.out || 0) + (u.completion_tokens || 0);
+    // DeepSeek 会额外给缓存命中量，命中部分便宜很多
+    cur.cacheHit = (cur.cacheHit || 0) + (u.prompt_cache_hit_tokens || 0);
+    update({ usage: cur });
+  }
+
+  function usage() {
+    const c = cfg();
+    const u = c.usage;
+    const p = c.prices;
+    const missIn = Math.max(0, (u.in || 0) - (u.cacheHit || 0));
+    const cost = (missIn * p.in + (u.cacheHit || 0) * p.cacheHit + (u.out || 0) * p.out) / 1e6;
+    return {
+      calls: u.calls || 0,
+      in: u.in || 0,
+      out: u.out || 0,
+      cacheHit: u.cacheHit || 0,
+      missIn: missIn,
+      total: (u.in || 0) + (u.out || 0),
+      cost: cost,
+      priced: !!(p.in || p.out || p.cacheHit),
+      prices: p
+    };
+  }
+
+  function usageReset() {
+    update({ usage: { calls: 0, in: 0, out: 0, cacheHit: 0 } });
+  }
+
+  /* 查询账号余额：GET /user/balance（余额、赠送、充值、币种） */
+  async function balance() {
+    const c = cfg();
+    if (!c.key) throw new Error('还没填 API Key');
+    let res;
+    try {
+      res = await fetch(c.baseUrl + '/user/balance', {
+        headers: { 'Authorization': 'Bearer ' + c.key }
+      });
+    } catch (err) {
+      throw new Error(friendly(err));
+    }
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(res.status === 404
+        ? '这个 Key（或代理地址）不支持查询余额'
+        : friendly(new Error('HTTP ' + res.status + ' ' + text.slice(0, 200))));
+    }
+    let j;
+    try { j = JSON.parse(text); } catch (err) { throw new Error('余额接口返回的不是 JSON'); }
+    const info = (j.balance_infos && j.balance_infos[0]) || {};
+    return {
+      available: j.is_available !== false,
+      currency: info.currency || 'CNY',
+      total: info.total_balance,
+      granted: info.granted_balance,
+      toppedUp: info.topped_up_balance
+    };
+  }
+
+  /* 一次 chat/completions 调用，返回助手回复的纯文本（同时记账） */
   async function call(messages, opts) {
     const c = cfg();
     if (!c.enabled) throw new Error('AI 功能已关闭');
@@ -126,6 +204,7 @@
     const msg = data.choices && data.choices[0] && data.choices[0].message;
     const content = msg && msg.content;
     if (content == null) throw new Error('返回里没有内容');
+    addUsage(data.usage);          // 记账：token 由接口原样给出
     return String(content);
   }
 
@@ -159,6 +238,7 @@
   window.QYA = {
     KEY: KEY,
     DEFAULTS: DEFAULTS,
+    DEFAULT_PRICES: DEFAULT_PRICES,
     cfg: cfg,
     update: update,
     ready: ready,
@@ -166,6 +246,9 @@
     vision: vision,
     parseJson: parseJson,
     test: test,
-    friendly: friendly
+    friendly: friendly,
+    usage: usage,
+    usageReset: usageReset,
+    balance: balance
   };
 })();

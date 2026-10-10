@@ -506,6 +506,17 @@
               '<div class="row-main"><div class="row-title">对话助手</div>' +
                 '<div class="row-sub">右下角悬浮球，可拖动，位置会记住</div></div>' +
               '<div class="row-side"><span class="chev">›</span></div></div>' : '') +
+            (aiReady ? (function () {
+              const u = window.QYA ? QYA.usage() : null;
+              return '<div class="row" data-action="i-ai-usage">' +
+                '<div class="tl-dot">📊</div>' +
+                '<div class="row-main"><div class="row-title">用量与额度</div>' +
+                  '<div class="row-sub">' + (u && u.calls
+                    ? u.calls + ' 次调用 · ' + u.total.toLocaleString() + ' token' +
+                      (u.priced ? ' · 约 ¥' + u.cost.toFixed(3) : '')
+                    : '还没有调用过') + '</div></div>' +
+                '<div class="row-side"><span class="chev">›</span></div></div>';
+            })() : '') +
             '<div class="row" data-action="i-ai-cfg">' +
               '<div class="tl-dot">🔑</div>' +
               '<div class="row-main"><div class="row-title">DeepSeek 配置</div>' +

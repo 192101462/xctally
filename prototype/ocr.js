@@ -261,13 +261,83 @@
     });
   }
 
+  /* ---------------- 用量与额度 ---------------- */
+
+  function kvRow(k, v, strong) {
+    return '<div class="kv"><span class="k">' + esc(k) + '</span><span class="v"' +
+      (strong ? ' style="font-weight:650"' : '') + '>' + v + '</span></div>';
+  }
+
+  function priceField(id, label, val) {
+    return '<div class="field"><label>' + esc(label) + '</label>' +
+      '<input id="' + id + '" class="input" type="number" step="0.01" min="0" value="' +
+        (Number(val) || 0) + '" />' +
+      '<div class="field-note">元 / 百万 token</div></div>';
+  }
+
+  function openAiUsage() {
+    const u = QYA.usage();
+    const p = u.prices;
+    const n = function (v) { return Number(v || 0).toLocaleString(); };
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>用量与额度</h3>' +
+        '<p class="hint">token 数是接口原样返回的；金额按下面单价估算。' +
+        '单价请按官网现价填（本 App 不内置可能过期的价格）。</p>' +
+        '<div class="group">' +
+          kvRow('调用次数', u.calls + ' 次') +
+          kvRow('输入 token', n(u.in)) +
+          kvRow('　其中缓存命中', u.cacheHit ? n(u.cacheHit) + '（更便宜）' : '0') +
+          kvRow('输出 token', n(u.out)) +
+          kvRow('合计 token', n(u.total), true) +
+          kvRow('估算费用', u.priced ? '¥' + u.cost.toFixed(4) : '<span style="color:var(--label-3)">未填单价</span>', true) +
+        '</div>' +
+        '<div class="section"><div class="section-head"><h2>单价设置</h2>' +
+          '<span>改完点保存</span></div>' +
+          priceField('price-in', '输入单价', p.in) +
+          priceField('price-out', '输出单价', p.out) +
+          priceField('price-cache', '缓存命中单价', p.cacheHit) +
+        '</div>' +
+        '<div class="notice" id="ai-balance">账号余额：点「刷新余额」查询（需要该 Key 支持查询）</div>' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="i-ai-usage-reset" style="color:var(--red)">清空统计</button>' +
+          '<button class="btn plain" data-action="i-ai-usage-refresh">刷新余额</button>' +
+          '<button class="btn primary" data-action="i-ai-price-save">保存单价</button>' +
+        '</div>' +
+      '</div>');
+  }
+
+  function refreshBalance() {
+    const box = document.getElementById('ai-balance');
+    if (box) box.textContent = '正在查询余额…';
+    QYA.balance().then(function (b) {
+      if (!box) return;
+      box.innerHTML = '账号余额：<b>' + esc(b.currency) + ' ' + esc(b.total) + '</b>' +
+        '<br>赠送 ' + esc(b.granted) + ' · 充值 ' + esc(b.toppedUp) +
+        (b.available ? '' : '<br><span style="color:var(--red)">账户余额不足</span>');
+    }).catch(function (err) {
+      if (box) box.textContent = '余额查询失败：' + ((err && err.message) || '未知错误');
+    });
+  }
+
+  function savePrices() {
+    const num = function (id) { return Number(document.getElementById(id).value) || 0; };
+    QYA.update({ prices: { in: num('price-in'), out: num('price-out'), cacheHit: num('price-cache') } });
+    openAiUsage();
+    UI().toast('单价已保存');
+  }
+
   /* ---------------- 动作 & 输入 ---------------- */
+
+  const ACTIONS = ['i-ocr', 'i-ocr-pick', 'i-ocr-again', 'i-ocr-add',
+    'i-ai-cfg', 'i-ai-save', 'i-ai-test',
+    'i-ai-usage', 'i-ai-usage-refresh', 'i-ai-usage-reset', 'i-ai-price-save'];
 
   document.addEventListener('click', function (e) {
     const el = e.target.closest && e.target.closest('[data-action]');
     if (!el) return;
     const act = el.getAttribute('data-action');
-    if (['i-ocr', 'i-ocr-pick', 'i-ocr-again', 'i-ocr-add', 'i-ai-cfg', 'i-ai-save', 'i-ai-test'].indexOf(act) < 0) return;
+    if (ACTIONS.indexOf(act) < 0) return;
     e.stopPropagation();
     if (act === 'i-ocr') openOcr();
     else if (act === 'i-ocr-pick') recognize(el.getAttribute('data-src'));
@@ -276,6 +346,10 @@
     else if (act === 'i-ai-cfg') openAiConfig();
     else if (act === 'i-ai-save') saveAiConfig();
     else if (act === 'i-ai-test') testAiConfig();
+    else if (act === 'i-ai-usage') openAiUsage();
+    else if (act === 'i-ai-usage-refresh') refreshBalance();
+    else if (act === 'i-ai-usage-reset') { QYA.usageReset(); openAiUsage(); UI().toast('统计已清空'); }
+    else if (act === 'i-ai-price-save') savePrices();
   }, true);
 
   function syncFromInput(t) {
