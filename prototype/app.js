@@ -43,6 +43,53 @@
     plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
   };
 
+  /* ---------------- 界面偏好（标签页显隐 / 三处排序） ----------------
+   * 单独一个存储键，和业务数据分开：不进备份，清数据也不会顺手清掉。
+   */
+  const UI_KEY = 'xctally.ui.v1';
+  const UI_DEFAULTS = {
+    tabs: { home: true, items: true, collect: true, energy: true },
+    sort: { items: 'date', collect: 'recent', energy: 'amount' }
+  };
+  // 这三个是主要入口（"我的"还是设置的入口），不允许隐藏
+  const FORCED_TABS = { home: 1, items: 1, me: 1 };
+
+  function ui() {
+    let c = {};
+    try { c = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (err) { c = {}; }
+    return {
+      tabs: Object.assign({}, UI_DEFAULTS.tabs, c.tabs || {}),
+      sort: Object.assign({}, UI_DEFAULTS.sort, c.sort || {})
+    };
+  }
+  function uiSet(patch) {
+    const cur = ui();
+    const next = {
+      tabs: Object.assign({}, cur.tabs, (patch && patch.tabs) || {}),
+      sort: Object.assign({}, cur.sort, (patch && patch.sort) || {})
+    };
+    try { localStorage.setItem(UI_KEY, JSON.stringify(next)); } catch (err) { /* 忽略 */ }
+  }
+  function tabVisible(id) { return !!FORCED_TABS[id] || ui().tabs[id] !== false; }
+
+  const ITEMS_SORTS = [
+    { v: 'date', t: '获得日期（新 → 旧）' },
+    { v: 'dateAsc', t: '获得日期（旧 → 新）' },
+    { v: 'price', t: '价格（高 → 低）' },
+    { v: 'daily', t: '日均成本（高 → 低）' },
+    { v: 'expiry', t: '到期日（近 → 远）' },
+    { v: 'name', t: '按名称' }
+  ];
+  const COLLECT_SORTS = [
+    { v: 'recent', t: '最近在前' },
+    { v: 'oldest', t: '最早在前' },
+    { v: 'title', t: '按标题' }
+  ];
+  const ENERGY_SORTS = [
+    { v: 'amount', t: '本月金额（高 → 低）' },
+    { v: 'name', t: '按名称' }
+  ];
+
   const TABS = [
     { id: 'home', label: '首页', icon: I.home },
     { id: 'items', label: '物品', icon: I.items },
@@ -422,7 +469,11 @@
     if (!data.meters.length) {
       return head + '<div class="empty"><div class="emoji">⚡️</div><p>还没有表具，点右下角添加</p></div>';
     }
-    return head + data.meters.map(meterCard).join('');
+    // 表具排序跟随设置
+    const sortedMeters = data.meters.slice();
+    if (ui().sort.energy === 'name') sortedMeters.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
+    else sortedMeters.sort(function (a, b) { return b.current.cost - a.current.cost; });
+    return head + sortedMeters.map(meterCard).join('');
   }
 
   /* ---------------- 我的 ---------------- */
@@ -681,6 +732,8 @@
     const QYI = window.QYI;
     // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
     if (window.QYO && QYO.syncBall) QYO.syncBall();
+    // 当前页被隐藏了就回首页（"我的"永远可见，不受影响）
+    if (!state.setting && state.tab !== 'me' && !tabVisible(state.tab)) state.tab = 'home';
     let html;
     if (state.setting) {
       html = settingsView();
@@ -703,7 +756,9 @@
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
-    $('#tabbar').innerHTML = state.setting ? '' : TABS.map(function (t) {
+    $('#tabbar').innerHTML = state.setting ? '' : TABS.filter(function (t) {
+      return tabVisible(t.id);
+    }).map(function (t) {
       return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail &&
         !(itemDetail && t.id === 'items') ? 'active' : '') +
         '" data-action="tab" data-tab="' + t.id + '">' + t.icon + '<span>' + t.label + '</span></button>';
@@ -814,6 +869,17 @@
     } else if (action === 'set-theme') {
       const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
       document.documentElement.setAttribute('data-theme', nowDark ? 'light' : 'dark');
+      mount();
+    } else if (action === 'set-tab-collect' || action === 'set-tab-energy') {
+      const key = action === 'set-tab-collect' ? 'collect' : 'energy';
+      const tabsPatch = {};
+      tabsPatch[key] = !!el.checked;
+      uiSet({ tabs: tabsPatch });
+      mount();
+    } else if (action === 'set-sort') {
+      const sortPatch = {};
+      sortPatch[el.getAttribute('data-g')] = el.getAttribute('data-v');
+      uiSet({ sort: sortPatch });
       mount();
     } else if (action === 'clear-data') {
       clearAllData();
@@ -977,6 +1043,17 @@
       (on ? ' checked' : '') + ' /><i></i></label></div>';
   }
 
+  function sortGroup(label, key, opts, cur) {
+    return '<div class="set-group-title">' + esc(label) + '</div><div class="group">' +
+      opts.map(function (o) {
+        return '<div class="set-row" data-action="set-sort" data-g="' + key +
+          '" data-v="' + o.v + '">' +
+          '<span class="set-title">' + esc(o.t) + '</span>' +
+          (cur === o.v ? '<span class="chev" style="color:var(--blue)">✓</span>' : '') +
+          '</div>';
+      }).join('') + '</div>';
+  }
+
   function setNav(backAction, backLabel, title, sub) {
     return '<div class="navbar"><button class="back" data-action="' + backAction + '">‹ ' +
       esc(backLabel) + '</button></div>' + pageHead(title, sub || '');
@@ -1002,8 +1079,8 @@
         '</div>';
     }
 
-    const top = path[0];
-    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存' };
+    const top = path[path.length - 1];
+    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序' };
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {
@@ -1024,10 +1101,32 @@
         '</div>';
     }
     if (top === 'look') {
+      const t0 = ui().tabs;
+      const hidden = ['collect', 'energy'].filter(function (k) { return t0[k] === false; }).length;
       return nav + '<div class="group" style="margin-top:16px">' +
         switchRow('set-theme', '深色模式', dark) +
-        setRow('noop', '界面', { side: '下一版', chev: true }) +
+        setRow('set-go', '界面', { k: 'tabs', side: hidden ? '隐藏 ' + hidden + ' 个' : '全部显示', chev: true }) +
+        setRow('set-go', '排序', { k: 'sort', chev: true }) +
         '</div>';
+    }
+    if (top === 'tabs') {
+      const t = ui().tabs;
+      return nav + '<div class="group" style="margin-top:16px">' +
+        setRow('noop', '首页', { side: '必需' }) +
+        setRow('noop', '物品', { side: '必需' }) +
+        switchRow('set-tab-collect', '收藏', t.collect !== false) +
+        switchRow('set-tab-energy', '能源', t.energy !== false) +
+        setRow('noop', '我的', { side: '必需' }) +
+        '</div>' +
+        '<div class="notice" style="margin-top:12px">首页、物品、我的不能隐藏：' +
+        '它们是主要入口，「我的」还是设置的入口。</div>';
+    }
+    if (top === 'sort') {
+      const s = ui().sort;
+      return nav +
+        sortGroup('物品列表', 'items', ITEMS_SORTS, s.items) +
+        sortGroup('收藏列表', 'collect', COLLECT_SORTS, s.collect) +
+        sortGroup('能源列表', 'energy', ENERGY_SORTS, s.energy);
     }
     if (top === 'mem') {
       return nav + '<div class="group" style="margin-top:16px">' +
@@ -1052,6 +1151,8 @@
     closeSheet: closeSheet,
     mount: mount,
     goItem: goItem,
+    ui: ui,
+    uiSet: uiSet,
     itemById: function (id) { return itemById(id); },
     data: function () { return data; },
     save: save

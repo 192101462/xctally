@@ -194,8 +194,21 @@
       return ((it.name || '') + ' ' + (it.sub || '') + ' ' + (it.location || '') + ' ' + (it.source || ''))
         .toLowerCase().indexOf(q) >= 0;
     }).sort(function (a, b) {
-      // 置顶的排最前，其余按获得日期倒序
+      // 置顶永远最前，其余按设置里的排序
       if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+      const k = (UI().ui && UI().ui()) ? UI().ui().sort.items : 'date';
+      if (k === 'dateAsc') return a.acquiredAt < b.acquiredAt ? -1 : 1;
+      if (k === 'price') return (b.cost || 0) - (a.cost || 0);
+      if (k === 'daily') return (QY.perDay(b, data()) || 0) - (QY.perDay(a, data()) || 0);
+      if (k === 'name') return String(a.name || '').localeCompare(String(b.name || ''), 'zh');
+      if (k === 'expiry') {
+        const la = QY.daysLeft(a);
+        const lb = QY.daysLeft(b);
+        if (la == null && lb == null) return a.acquiredAt < b.acquiredAt ? 1 : -1;
+        if (la == null) return 1;          // 没有到期日的排最后
+        if (lb == null) return -1;
+        return la - lb;                    // 快到期的在前
+      }
       return a.acquiredAt < b.acquiredAt ? 1 : -1;
     });
   }

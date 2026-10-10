@@ -251,7 +251,12 @@
       if (!q) return true;
       const hay = (e.title || '') + ' ' + plainText(e.bodyHtml) + ' ' + (e.tags || []).join(' ');
       return hay.toLowerCase().indexOf(q) >= 0;
-    }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    }).sort(function (a, b) {
+      const k = (window.QYUI && QYUI.ui) ? QYUI.ui().sort.collect : 'recent';
+      if (k === 'oldest') return a.date < b.date ? -1 : 1;
+      if (k === 'title') return String(a.title || '').localeCompare(String(b.title || ''), 'zh');
+      return a.date < b.date ? 1 : -1;
+    });
   }
 
   function tileStyle(e) {
