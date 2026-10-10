@@ -58,10 +58,6 @@
     if (item.location) bits.push(item.location);
     return '' +
       '<div class="swipe" data-id="' + item.id + '">' +
-        '<div class="swipe-act left">' +
-          '<button class="sw-btn pin" data-action="i-pin" data-id="' + item.id + '">' +
-            (item.pinned ? '取消置顶' : '置顶') + '</button>' +
-        '</div>' +
         '<div class="swipe-body">' +
           '<div class="row" data-action="i-open" data-id="' + item.id + '">' +
             thumb(item) +
@@ -74,7 +70,10 @@
           '</div>' +
         '</div>' +
         '<div class="swipe-act right">' +
-          '<button class="sw-btn arch" data-action="i-archive" data-id="' + item.id + '">归档</button>' +
+          '<button class="sw-btn pin" data-action="i-pin" data-id="' + item.id + '">' +
+            (item.pinned ? '取消置顶' : '置顶') + '</button>' +
+          '<button class="sw-btn arch" data-action="i-archive" data-id="' + item.id + '">' +
+            (item.archived ? '取消归档' : '归档') + '</button>' +
           '<button class="sw-btn del" data-action="i-del" data-id="' + item.id + '">删除</button>' +
         '</div>' +
       '</div>';
@@ -85,11 +84,9 @@
    * 都是"先露出、再点确认"，不做划过去就触发——误触的代价太大。
    * touch-action: pan-y 交给浏览器处理竖向滚动，只接管横向。
    */
-  const OPEN_LEFT = 104;    // 置顶按钮宽度
-  const OPEN_RIGHT = 156;   // 归档 + 删除
+  const OPEN_RIGHT = 236;   // 置顶 + 归档 + 删除
 
   function shiftOf(wrap, dx) {
-    if (dx > 0) return Math.min(dx, OPEN_LEFT + 12);
     return Math.max(dx, -(OPEN_RIGHT + 12));
   }
   function setShift(wrap, dx) {
@@ -97,7 +94,7 @@
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
   }
   function closeSwipe(wrap, instant) {
-    wrap.classList.remove('open-left', 'open-right');
+    wrap.classList.remove('open-right');
     const body = wrap.querySelector('.swipe-body');
     if (!body) return;
     if (instant) body.style.transition = 'none';
@@ -105,7 +102,7 @@
     if (instant) requestAnimationFrame(function () { body.style.transition = ''; });
   }
   function closeAllSwipes(except) {
-    const all = document.querySelectorAll('#view .swipe.open-left, #view .swipe.open-right');
+    const all = document.querySelectorAll('#view .swipe.open-right');
     Array.prototype.forEach.call(all, function (w) { if (w !== except) closeSwipe(w); });
   }
 
@@ -118,11 +115,11 @@
       if (!wrap) { closeAllSwipes(null); return; }
       // 点的是露出来的按钮，交给 click 处理
       if (e.target.closest('.sw-btn')) return;
-      const wasOpen = wrap.classList.contains('open-left') || wrap.classList.contains('open-right');
+      const wasOpen = wrap.classList.contains('open-right');
       active = { wrap: wrap, x: e.clientX, y: e.clientY, dx: 0, dir: '', wasOpen: wasOpen };
       if (wasOpen) {
         active.dir = 'x';
-        active.dx = wrap.classList.contains('open-left') ? OPEN_LEFT : -OPEN_RIGHT;
+        active.dx = -OPEN_RIGHT;
         setShift(wrap, active.dx);
       }
     }, { passive: true });
@@ -150,10 +147,7 @@
       active = null;
       a.wrap.classList.remove('swiping');
       if (a.dir !== 'x') return;
-      if (a.dx > 44) {
-        a.wrap.classList.add('open-left');
-        setShift(a.wrap, OPEN_LEFT);
-      } else if (a.dx < -44) {
+      if (a.dx < -44) {
         a.wrap.classList.add('open-right');
         setShift(a.wrap, -OPEN_RIGHT);
       } else {
@@ -178,10 +172,11 @@
         UI().mount();
         UI().toast(item.pinned ? '已置顶' : '已取消置顶');
       } else if (act === 'i-archive') {
-        item.status = item.status === '已处置' ? '在用' : '已处置';
+        // 归档只动归档标记，不改物品状态
+        item.archived = !QY.isArchived(item);
         UI().save();
         UI().mount();
-        UI().toast(item.status === '已处置' ? '已归档，可在「归档」里回看' : '已取消归档');
+        UI().toast(item.archived ? '已归档，可在「归档」里回看' : '已取消归档');
       } else if (act === 'i-del') {
         deleteItem(id);
       }
@@ -282,7 +277,9 @@
     const dl = QY.daysLeft(item);
 
     const hero = item.photo
-      ? '<div class="hero-cover" style="background-image:url(' + item.photo + ');background-size:cover;background-position:center"></div>'
+      ? '<div class="hero-cover" data-action="i-zoom" data-id="' + item.id + '" style="background-image:url(' +
+        item.photo + ');background-size:cover;background-position:center"></div>' +
+        '<div class="hero-hint">点一下看大图</div>'
       : '<div class="hero-cover hero-plain">' + esc(QY.thumbChar(item)) + '</div>';
 
     const metrics = [
@@ -719,35 +716,62 @@
     UI().toast('已删除');
   }
 
+  /* 覆盖层：盖在当前面板之上，不销毁它。
+   * 表单里要弹东西（选图片、选分类）必须用它——直接 openSheet 会把表单 DOM 冲掉，
+   * 于是"选完图片直接被弹回详情页"。
+   */
+  function openOverlay(html) {
+    const sheet = document.querySelector('#sheet-root .sheet');
+    if (!sheet) { UI().openSheet(html); return; }
+    closeOverlay();
+    const layer = document.createElement('div');
+    layer.className = 'picker-layer';
+    layer.id = 'picker-layer';
+    layer.innerHTML = html;
+    sheet.appendChild(layer);
+  }
+
+  function closeOverlay() {
+    const el = document.getElementById('picker-layer');
+    if (el) el.remove();
+  }
+
+  /* 看大图 */
+  function openLightbox(src) {
+    const box = document.createElement('div');
+    box.className = 'lightbox';
+    box.innerHTML = '<img src="' + src + '" alt="" />';
+    box.addEventListener('click', function () { box.remove(); });
+    document.body.appendChild(box);
+  }
+
   function pickPhoto() {
     if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
-    // 用 App 自己的底部面板选来源，不用安卓原生弹窗（那样和整体设计不搭）
-    UI().openSheet('' +
-      '<div class="sheet"><div class="grabber"></div>' +
-        '<h3>添加图片</h3>' +
-        '<p class="hint">可以拍照，也可以从相册选；动图（GIF）会保留动画</p>' +
-        '<div class="group">' +
-          '<div class="row" data-action="i-photo-from" data-src="camera">' +
-            '<div class="tl-dot">📷</div>' +
-            '<div class="row-main"><div class="row-title">拍照</div></div>' +
-            '<div class="row-side"><span class="chev">›</span></div></div>' +
-          '<div class="row" data-action="i-photo-from" data-src="gallery">' +
-            '<div class="tl-dot">🖼</div>' +
-            '<div class="row-main"><div class="row-title">从相册选择</div></div>' +
-            '<div class="row-side"><span class="chev">›</span></div></div>' +
-        '</div>' +
-        '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-close">取消</button>' +
-        '</div>' +
+    openOverlay('' +
+      '<div class="picker-head"><b>添加图片</b>' +
+        '<button class="btn plain" data-action="i-photo-cancel" style="padding:6px 14px">关闭</button></div>' +
+      '<div class="picker-list">' +
+        '<div class="row" data-action="i-photo-from" data-src="camera">' +
+          '<div class="tl-dot">📷</div>' +
+          '<div class="row-main"><div class="row-title">拍照</div>' +
+            '<div class="row-sub">用系统相机拍一张</div></div>' +
+          '<div class="row-side"><span class="chev">›</span></div></div>' +
+        '<div class="row" data-action="i-photo-from" data-src="gallery">' +
+          '<div class="tl-dot">🖼</div>' +
+          '<div class="row-main"><div class="row-title">从相册选择</div>' +
+            '<div class="row-sub">支持动图（GIF 会保留动画）</div></div>' +
+          '<div class="row-side"><span class="chev">›</span></div></div>' +
       '</div>');
   }
 
   function takePhoto(source) {
     if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
+    closeOverlay();
     QYV.pickImage(function (dataUrl, info) {
       if (!dataUrl) return;
       // 动图不重编码，所以体积可能很大，而本机存储总共只有 5MB 左右
-      const bytes = info && info.bytes ? info.bytes : Math.round((dataUrl.length - dataUrl.indexOf(',')) * 0.75);
+      const bytes = info && info.bytes ? info.bytes
+        : Math.round((dataUrl.length - dataUrl.indexOf(',')) * 0.75);
       const isGif = /^data:image\/gif/i.test(dataUrl);
       if (isGif && bytes > 1.5 * 1024 * 1024) {
         const mb = (bytes / 1024 / 1024).toFixed(1);
@@ -799,6 +823,11 @@
       closePicker();
     } else if (action === 'i-photo') {
       pickPhoto();
+    } else if (action === 'i-photo-cancel') {
+      closeOverlay();
+    } else if (action === 'i-zoom') {
+      const it = byId(id);
+      if (it && it.photo) openLightbox(it.photo);
     } else if (action === 'i-photo-from') {
       takePhoto(el.getAttribute('data-src'));
     } else if (action === 'i-photo-clear') {

@@ -59,11 +59,16 @@
   }
 
   /* ---------------- 归档 ----------------
-   * 在用/闲置/借出/已开封 都算"在用"；已用完/已处置 归入归档，
-   * 默认不在列表里出现（但可以随时切回去，不是删除）。
+   * 归档是【独立于物品状态】的一个标记：东西用完了/处理掉了，但记录要留着回看。
+   * 所以归档不再改动物品状态（status 描述的是物品本身处在什么阶段）。
+   * 兼容老数据：过去把"已处置/已用完"当状态用，这里认出它们并升级成归档标记。
    */
-  const ARCHIVED_STATUS = { '已用完': 1, '已处置': 1 };
-  function isArchived(item) { return !!ARCHIVED_STATUS[item.status]; }
+  const LEGACY_ARCHIVED_STATUS = { '已用完': 1, '已处置': 1 };
+  function isArchived(item) {
+    if (!item) return false;
+    if (typeof item.archived === 'boolean') return item.archived;
+    return !!LEGACY_ARCHIVED_STATUS[item.status];
+  }
   function isActive(item) { return !isArchived(item); }
 
   const SOURCES = ['商店购买', '网购', '超市', '菜市场', '他人赠送', '中奖获得', '积分兑换', '二手购入', '自制'];
