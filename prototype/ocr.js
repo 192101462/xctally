@@ -220,12 +220,9 @@
           '<input id="ai-key" class="input" type="password" placeholder="sk-..." value="' +
             esc(raw.key || '') + '" autocomplete="off" /></div>' +
         '<div class="field"><label>模型</label>' +
-          '<input id="ai-model" class="input" value="' + esc(raw.model || QYA.DEFAULTS.model) + '" />' +
-          '<div class="field-note">默认 ' + esc(QYA.DEFAULTS.model) +
-            '；若报「模型不存在」，到官方更新日志查当前 id 后填这里</div></div>' +
+          '<input id="ai-model" class="input" value="' + esc(raw.model || QYA.DEFAULTS.model) + '" /></div>' +
         '<div class="field"><label>Base URL</label>' +
-          '<input id="ai-base" class="input" value="' + esc(raw.baseUrl || QYA.DEFAULTS.baseUrl) + '" />' +
-          '<div class="field-note">换千问就改这里（百炼的 OpenAI 兼容地址）+ 上面的模型名</div></div>' +
+          '<input id="ai-base" class="input" value="' + esc(raw.baseUrl || QYA.DEFAULTS.baseUrl) + '" /></div>' +
         '<div class="notice" id="ai-test-out" style="display:none"></div>' +
         '<div class="sheet-actions" style="margin-top:14px">' +
           '<button class="btn plain" data-action="i-ai-test">测试连接</button>' +

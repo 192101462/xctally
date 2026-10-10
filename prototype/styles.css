@@ -650,21 +650,39 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* 底部标签栏 */
+/* 底部标签栏：悬浮的圆角长条（不再是贴到底边的整宽栏） */
 .tabbar {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 78px;
+  left: 14px;
+  right: 14px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  height: 62px;
   display: flex;
-  align-items: flex-start;
-  padding: 9px 8px 0;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 31px;
   background: var(--tabbar);
   backdrop-filter: saturate(180%) blur(22px);
   -webkit-backdrop-filter: saturate(180%) blur(22px);
-  box-shadow: 0 -1px 0 var(--hairline);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.13), 0 0 0 0.5px var(--hairline);
   z-index: 3;
+  transition: opacity 0.28s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* 滑列表时淡出，停手后淡回 */
+html.scrolling .tabbar {
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+}
+/* 平板/宽屏：长条别拉满，居中并限宽 */
+@media (min-width: 640px) {
+  .tabbar {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(430px, calc(100% - 28px));
+  }
+  html.scrolling .tabbar { transform: translateX(-50%) translateY(16px); }
 }
 .tab {
   flex: 1;
@@ -1504,9 +1522,15 @@ html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
   touch-action: none;          /* 拖动时不触发页面滚动 */
   cursor: grab;
   user-select: none;
-  transition: transform 0.12s ease;
+  transition: transform 0.2s ease, opacity 0.28s ease;
 }
 .ai-ball.dragging { transform: scale(0.94); cursor: grabbing; }
+/* 滑列表时和标签栏一起淡出 */
+html.scrolling .ai-ball {
+  opacity: 0;
+  transform: scale(0.86);
+  pointer-events: none;
+}
 .ai-ball-x {
   position: absolute;
   top: -3px;
@@ -1678,6 +1702,15 @@ html[data-theme="dark"] .ocr-row.low .ocr-note { color: #ffb340; }
 }
 .switch input:checked + i { background: #34c759; }
 .switch input:checked + i::after { transform: translateX(20px); }
+
+/* 设置 → AI：标题下方的余额（在分组框外） */
+.ai-balance {
+  margin: 6px 4px 0;
+  font-size: 13.5px;
+  color: var(--label-2);
+  cursor: pointer;
+}
+.ai-balance:active { opacity: 0.55; }
 
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }

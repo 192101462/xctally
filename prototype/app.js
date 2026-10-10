@@ -753,6 +753,8 @@
       html = viewMe();
     }
     view.innerHTML = html;
+    // 设置 → AI：有 Key 就自动拉一次余额
+    if (state.setting && state.setting[state.setting.length - 1] === 'ai') loadAiBalance();
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
@@ -881,6 +883,8 @@
       sortPatch[el.getAttribute('data-g')] = el.getAttribute('data-v');
       uiSet({ sort: sortPatch });
       mount();
+    } else if (action === 'set-balance-refresh') {
+      loadAiBalance();
     } else if (action === 'clear-data') {
       clearAllData();
     } else if (action === 'set-ball') {
@@ -1059,6 +1063,20 @@
       esc(backLabel) + '</button></div>' + pageHead(title, sub || '');
   }
 
+  /* 设置 → AI：余额直接显示在标题下方（框外），点一下刷新 */
+  function loadAiBalance() {
+    const box = document.getElementById('ai-balance-top');
+    if (!box) return;
+    if (!window.QYA || !QYA.cfg().key) { box.textContent = '未配置 Key'; return; }
+    box.textContent = '余额查询中…';
+    QYA.balance().then(function (b) {
+      box.textContent = '余额 ' + b.currency + ' ' + b.total +
+        ' · 赠送 ' + b.granted + ' · 充值 ' + b.toppedUp;
+    }).catch(function (err) {
+      box.textContent = '余额查询失败：' + ((err && err.message) || '未知错误');
+    });
+  }
+
   function settingsView() {
     const path = state.setting || [];
     const aiCfg = window.QYA ? QYA.cfg() : null;
@@ -1084,16 +1102,14 @@
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {
-      return nav + '<div class="group" style="margin-top:16px">' +
-        setRow('i-ai-cfg', 'DeepSeek 配置', { side: (aiCfg && aiCfg.key) ? '已填 Key' : '未填', chev: true }) +
-        setRow('i-ai-usage', '用量与额度', { side: (u && u.calls) ? u.calls + ' 次' : '未使用', chev: true }) +
-        switchRow('set-ball', '对话助手悬浮球', ballOn) +
-        '</div>' +
-        (aiReady
-          ? '<div class="notice" style="margin-top:12px">识图和对话都在悬浮球里：' +
-            '点右下角的气泡，可以直接发订单截图让它帮你记。</div>'
-          : '<div class="notice" style="margin-top:12px">填了 API Key 才能用助手；' +
-            '在此之前 App 保持完全离线。</div>');
+      return nav +
+        '<div class="ai-balance" id="ai-balance-top" data-action="set-balance-refresh">' +
+        ((aiCfg && aiCfg.key) ? '点这里查看余额' : '未配置 Key') + '</div>' +
+        '<div class="group">' +
+          setRow('i-ai-cfg', 'DeepSeek 配置', { side: (aiCfg && aiCfg.key) ? '已填 Key' : '未填', chev: true }) +
+          setRow('i-ai-usage', '用量与额度', { side: (u && u.calls) ? u.calls + ' 次' : '未使用', chev: true }) +
+          switchRow('set-ball', '对话助手悬浮球', ballOn) +
+        '</div>';
     }
     if (top === 'data') {
       return nav + '<div class="group" style="margin-top:16px">' +
@@ -1164,6 +1180,18 @@
 
   const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+
+  /* 滑动列表时淡出底部标签栏与悬浮球，停手后再淡入 */
+  let scrollIdle = null;
+  document.addEventListener('scroll', function (e) {
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains('view')) return;
+    document.documentElement.classList.add('scrolling');
+    if (scrollIdle) clearTimeout(scrollIdle);
+    scrollIdle = setTimeout(function () {
+      document.documentElement.classList.remove('scrolling');
+    }, 520);
+  }, true);
 
   // 先记下原始 hash：mount() 会把它改写成规范形式
   const bootHash = location.hash || '';
