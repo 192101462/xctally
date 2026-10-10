@@ -1426,6 +1426,22 @@
     armSettle(140);
   }, true);
 
+  /* 键盘弹出时把聚焦的输入框滚进可视区域。
+     原生侧已经按键盘高度缩了 WebView，这里是第二道保险（尤其是长表单）。 */
+  document.addEventListener('focusin', function (e) {
+    const t = e.target;
+    if (!t || !t.tagName) return;
+    const tag = t.tagName.toLowerCase();
+    if (tag !== 'input' && tag !== 'textarea') return;
+    setTimeout(function () {
+      try {
+        t.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      } catch (err) {
+        t.scrollIntoView();
+      }
+    }, 280);
+  });
+
   // 先记下原始 hash：mount() 会把它改写成规范形式
   const bootHash = location.hash || '';
   applyHash();

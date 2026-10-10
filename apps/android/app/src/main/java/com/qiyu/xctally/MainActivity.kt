@@ -23,6 +23,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
 import org.json.JSONObject
@@ -261,6 +263,16 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(webView)
 
+        // 键盘弹出时把 WebView 的可见区域缩上去，否则聚焦的输入框会被键盘挡住。
+        // targetSdk 35+ 强制 edge-to-edge 之后 adjustResize 不再自动生效，
+        // 必须自己读 ime insets 给底部加内边距（键盘收起时 ime.bottom 为 0）。
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { v, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(0, 0, 0, ime.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(webView)
+
         // 返回键：先关面板 → 再回上一层 → 都没有才退出
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -403,21 +415,51 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         /**
-         * 网页里统一的"返回上一层"逻辑。
-         * 注意：这里避免在常量字符串里写 `$`，所以关闭按钮是显式列举的，
+         * 网页里统一的"返回上一层"逻辑，按层级从最上层往下试：
+         *   1. 选择器 / 确认框这类覆盖层
+         *   2. 底部面板（新增物品、设置项、回收站…）
+         *   3. 设置页（先回上一级，再退出设置）
+         *   4. 详情页
+         * 都没东西可退时才返回 'exit'，让系统退出应用。
+         *
+         * 注意：这里避免在常量字符串里写 `$`，所以关闭按钮都是显式列举的，
          * 而不是用 CSS 的 [data-action$="-close"] 结尾匹配。
          */
         private const val BACK_JS = """
         (function () {
-          var sheet = document.getElementById('sheet-root');
-          if (sheet && sheet.classList.contains('open')) {
-            var close = sheet.querySelector('[data-action="c-close"],[data-action="b-close"]');
-            if (close) { close.click(); return 'handled'; }
-          }
-          var back = document.querySelector('[data-action="back"],[data-action="c-back"]');
-          if (back) { back.click(); return 'handled'; }
-          if (location.hash && location.hash !== '#home') { location.hash = '#home'; return 'handled'; }
-          return 'exit';
+          try {
+            var el;
+            // 1) 覆盖层：分类/来源选择器、确认框
+            var layer = document.getElementById('picker-layer');
+            if (layer) {
+              var lb = layer.querySelector('[data-action="i-pick-close"],[data-action="i-photo-cancel"]');
+              if (lb) { lb.click(); } else { layer.remove(); }
+              return 'handled';
+            }
+            var cf = document.getElementById('qy-confirm');
+            if (cf) {
+              var cb = cf.querySelector('[data-c="0"]');
+              if (cb) { cb.click(); } else { cf.remove(); }
+              return 'handled';
+            }
+            // 2) 底部面板
+            var sheet = document.getElementById('sheet-root');
+            if (sheet && sheet.classList.contains('open')) {
+              var scrim = sheet.querySelector('.scrim');
+              if (scrim) { scrim.click(); return 'handled'; }
+              var close = sheet.querySelector('[data-action="c-close"],[data-action="b-close"],[data-action="close-sheet"]');
+              if (close) { close.click(); return 'handled'; }
+            }
+            // 3) 设置：先回上一级，再退出设置
+            var s1 = document.querySelector('[data-action="set-back"]');
+            if (s1) { s1.click(); return 'handled'; }
+            var s2 = document.querySelector('[data-action="set-close"]');
+            if (s2) { s2.click(); return 'handled'; }
+            // 4) 详情页
+            var back = document.querySelector('[data-action="i-back"],[data-action="back"],[data-action="c-back"]');
+            if (back) { back.click(); return 'handled'; }
+            return 'exit';
+          } catch (e) { return 'exit'; }
         })()
         """
     }

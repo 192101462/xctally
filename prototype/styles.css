@@ -1315,12 +1315,15 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .picker-field:active { background: var(--fill); }
 .chev { color: var(--label-3); font-size: 17px; line-height: 1; }
 
-/* 覆盖在表单之上的选择面板（表单 DOM 不会被销毁，输入不丢） */
+/* 覆盖在表单之上的选择面板（表单 DOM 不会被销毁，输入不丢）
+   必须用 fixed：面板自己会滚动，absolute 会跟着内容滚走 —— 用户往下滑之后
+   再点"来源"，面板会顶到表单最上方（视口外），看起来就是一片空白。
+   而且从面板顶部开始还要让出状态栏。 */
 .picker-layer {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--sheet);
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
   display: flex;
   flex-direction: column;
   z-index: 5;
