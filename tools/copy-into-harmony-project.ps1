@@ -57,22 +57,39 @@ if (Test-Path $resRoot) {
 }
 
 # ---------------------------------------------------------------- 1. web app
-$webFiles = @(
-    'index.html', 'styles.css', 'platform.js', 'data.js',
-    'collect.js', 'backup.js', 'selftest.js', 'app.js'
-)
+# Do not hardcode the file list: sync every web asset in prototype/.
+# (Hardcoding it once dropped items.js, and the app silently fell back to old code.)
+$webFiles = Get-ChildItem $prototype -File | Where-Object {
+    $_.Extension -in '.js', '.css', '.html'
+}
 $wwwDst = Join-Path $entryMain 'resources\rawfile\www'
 if (Test-Path $wwwDst) { Remove-Item $wwwDst -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $wwwDst | Out-Null
 
 $copied = 0
 foreach ($f in $webFiles) {
-    $from = Join-Path $prototype $f
-    if (-not (Test-Path $from)) { throw "Missing in prototype/: $f" }
-    Copy-Item $from (Join-Path $wwwDst $f) -Force
+    Copy-Item $f.FullName (Join-Path $wwwDst $f.Name) -Force
     $copied++
 }
 Write-Host ("  [web]  entry\src\main\resources\rawfile\www  ({0} files)" -f $copied) -ForegroundColor Green
+
+# Safety net: every <script src> in index.html must actually exist in the target,
+# otherwise the packaged app silently falls back to old code paths.
+$htmlPath = Join-Path $wwwDst 'index.html'
+if (Test-Path $htmlPath) {
+    $html = [System.IO.File]::ReadAllText($htmlPath, [System.Text.Encoding]::UTF8)
+    $missingRefs = @()
+    foreach ($m in [regex]::Matches($html, 'src="([^"]+\.js)"')) {
+        $name = $m.Groups[1].Value
+        if ($name -notmatch '^https?:' -and -not (Test-Path (Join-Path $wwwDst $name))) {
+            $missingRefs += $name
+        }
+    }
+    if ($missingRefs.Count) {
+        throw ("index.html references files that are not in rawfile\www: " + ($missingRefs -join ', '))
+    }
+    Write-Host "  [web]  all <script> referenced by index.html are present" -ForegroundColor Green
+}
 
 # ---------------------------------------------------------------- 2. ArkTS sources
 $pairs = @(

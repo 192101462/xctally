@@ -22,17 +22,27 @@ TARGETS = [
     ("HarmonyOS", os.path.join(ROOT, "apps", "harmony", "entry", "src", "main", "resources", "rawfile", "www")),
 ]
 
-# 顺序即加载顺序，platform.js 必须最先
-FILES = [
-    "index.html",
-    "styles.css",
-    "platform.js",
-    "data.js",
-    "collect.js",
-    "backup.js",
-    "selftest.js",
-    "app.js",
-]
+# 不再写死文件名清单：prototype 下的网页资源全部同步。
+# 写死清单踩过坑——新增 items.js 时忘了加，App 少模块且静默回退旧路径。
+FILES = sorted(
+    f for f in os.listdir(SRC)
+    if f.endswith((".js", ".css", ".html"))
+)
+
+
+def check_script_refs(dst):
+    """index.html 引用的每个 js 都必须真的复制过去了"""
+    index = os.path.join(dst, "index.html")
+    if not os.path.exists(index):
+        return
+    import re
+    html = open(index, encoding="utf-8").read()
+    missing = [
+        name for name in re.findall(r'src="([^"]+\.js)"', html)
+        if not name.startswith("http") and not os.path.exists(os.path.join(dst, name))
+    ]
+    if missing:
+        sys.exit("index.html 引用了不存在的文件：" + ", ".join(missing))
 
 
 def main():
@@ -51,7 +61,8 @@ def main():
         for f in FILES:
             shutil.copy2(os.path.join(SRC, f), os.path.join(dst, f))
             total += os.path.getsize(os.path.join(dst, f))
-        print("OK  %-10s → %s  (%d 个文件, %.0f KB)" % (
+        check_script_refs(dst)
+        print("OK  %-10s -> %s  (%d files, %.0f KB)" % (
             label, os.path.relpath(dst, ROOT), len(FILES), total / 1024))
 
     print("\n提示：改完 prototype/ 里的网页应用后，重新跑一次本脚本即可。")
