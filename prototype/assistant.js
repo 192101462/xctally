@@ -53,7 +53,7 @@
     const el = document.createElement('div');
     el.className = 'ai-ball';
     el.id = 'ai-ball';
-    el.innerHTML = '<span class="ai-ball-icon">💬</span><span class="ai-ball-x" data-ai="close">×</span>';
+    el.innerHTML = '<span class="ai-ball-icon">💬</span>';
     document.body.appendChild(el);
     return el;
   }
@@ -271,7 +271,6 @@
     return '<div class="sheet ai-sheet"><div class="grabber"></div>' +
       '<div class="ai-head">' +
         '<div><h3>助手</h3><div class="ai-sub">' + esc(usageLine()) + '</div></div>' +
-        '<button class="btn plain" data-ai="hide" style="padding:6px 12px;font-size:13px">关闭悬浮球</button>' +
       '</div>' +
       '<div class="ai-log" id="ai-log">' + body + '</div>' +
       (pendingImage
@@ -290,14 +289,14 @@
   function openChat() {
     if (!window.QYA || !QYA.ready()) { UI().toast('先在「我的 → 设置 → AI」里填 DeepSeek API Key'); return; }
     pending = null;
-    UI().openSheet(renderChat(), { keepBall: true });
+    UI().openSheet(renderChat());      // 开面板时球隐去；关面板后球自己回来
     scrollLog();
     const t = document.getElementById('ai-text');
     if (t) t.focus();
   }
 
   function rerenderChat() {
-    UI().openSheet(renderChat(), { keepBall: true });
+    UI().openSheet(renderChat());
     scrollLog();
   }
 
