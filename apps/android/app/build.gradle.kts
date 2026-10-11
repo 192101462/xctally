@@ -36,10 +36,15 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
-            }
+            // 这个实验性的 R8 全局优化【不要开】：
+            // 打开后 release 包在卓易通（鸿蒙的安卓兼容层）里一启动就闪退，而 debug 正常。
+            // 典型原因就是"只被 WebView / JS 反射调用"的成员被裁掉
+            // （@JavascriptInterface 桥接方法、WebViewClient 回调等）。
+            // 真要重新打开：先接上 proguard-rules.pro，再在真机上把每条 JS 桥接都点一遍。
+            // optimization {
+            //     enable = true
+            //     packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+            // }
         }
     }
     compileOptions {
