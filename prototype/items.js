@@ -75,7 +75,6 @@
             (item.pinned ? '取消置顶' : '置顶') + '</button>' +
           '<button class="sw-btn arch" data-action="i-archive" data-id="' + item.id + '">' +
             (item.archived ? '取消归档' : '归档') + '</button>' +
-          '<button class="sw-btn del" data-action="i-del" data-id="' + item.id + '">删除</button>' +
         '</div>' +
       '</div>';
   }
@@ -85,7 +84,7 @@
    * 都是"先露出、再点确认"，不做划过去就触发——误触的代价太大。
    * touch-action: pan-y 交给浏览器处理竖向滚动，只接管横向。
    */
-  const OPEN_RIGHT = 236;   // 置顶 + 归档 + 删除（要和 CSS 里的 236px 保持一致）
+  const OPEN_RIGHT = 158;   // 置顶 + 归档（删除已只留在详情页）—— 要和 CSS 的 158px 一致
   const COMPACT_AT = 90;    // 滑过这么多就换成紧凑排版（名称在上、价格/每日在下）
   const CONTENT_STOP = 72;  // 文字往左走到这里就停（约等于缩略图 + 间距的宽度）
 
@@ -114,12 +113,13 @@
     const body = wrap.querySelector('.swipe-body');
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
 
-    // 两步动画：
-    //   第一步 图标和文字一起左移，直到图标滑出可视区；
-    //   第二步 文字用等量反向位移"钉住"，正好停在内容左边界（留出和圆角的距离），
-    //          同时结构切成上下两行，保证名称和金额始终看得见。
+    // 两步动画（关键是 stop 与"切换紧凑排版"用同一个阈值，否则文字会跳或被按钮盖住）：
+    //   第一步 |dx| < stop：缩略图和文字一起左移；
+    //   第二步 |dx| >= stop：缩略图隐藏，文字正好落到"行的内容左边界"并停住。
+    //   两段的绝对位置是连续的：缩略图消失让出的距离 == 停止补偿的距离。
     const stop = stopDistance(wrap);
-    const over = Math.max(0, -dx - stop);
+    const compact = -dx >= stop;
+    const over = Math.max(0, -dx - (compact ? 0 : stop));
     const shift = over ? 'translateX(' + over + 'px)' : '';
     const main = wrap.querySelector('.row-main');
     const side = wrap.querySelector('.row-side');
@@ -132,7 +132,7 @@
       row.style.minHeight = Math.round(row.getBoundingClientRect().height) + 'px';
     }
 
-    wrap.classList.toggle('compact', dx <= -COMPACT_AT);
+    wrap.classList.toggle('compact', compact);
   }
   function closeSwipe(wrap, instant) {
     wrap.classList.remove('open-right', 'compact');

@@ -796,8 +796,7 @@
       html = viewMe();
     }
     view.innerHTML = html;
-    // 设置 → AI：有 Key 就自动拉一次余额
-    if (state.setting && state.setting[state.setting.length - 1] === 'ai') loadAiBalance();
+    // 余额在首页卡片上查，这里不再自动拉取
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
     updateTopPill();
@@ -1256,9 +1255,8 @@
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {
+      // 余额只在首页那张 DeepSeek 卡片上查（点一下就刷新），这里不再重复显示
       return nav +
-        '<div class="ai-balance" id="ai-balance-top" data-action="set-balance-refresh">' +
-        ((aiCfg && aiCfg.key) ? '点这里查看余额' : '未配置 Key') + '</div>' +
         '<div class="group">' +
           setRow('i-ai-cfg', 'DeepSeek 配置', { side: (aiCfg && aiCfg.key) ? '已填 Key' : '未填', chev: true }) +
           setRow('i-ai-usage', '用量与额度', { side: (u && u.calls) ? u.calls + ' 次' : '未使用', chev: true }) +

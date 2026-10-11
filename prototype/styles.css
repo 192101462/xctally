@@ -1425,7 +1425,7 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
   will-change: transform;
 }
 .swipe.swiping .swipe-body { transition: none; }
-.swipe.open-right .swipe-body { transform: translateX(-236px); }
+.swipe.open-right .swipe-body { transform: translateX(-158px); }
 .swipe-act { position: absolute; top: 0; bottom: 0; display: flex; z-index: 0; }
 /* 操作按钮平时完全透明：只有真的在横滑或已划开时才出现。
    这样无论圆角/行高怎么算，静止和竖滑时都不可能露出一点蓝/灰/红。 */
@@ -1434,9 +1434,9 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .swipe.open-right .swipe-act { opacity: 1; }
 .swipe-act.right {
   right: 0;
-  /* 和 JS 里的 OPEN_RIGHT 一致：三个按钮正好铺满露出的宽度，
-     否则按钮右边会空出一条，看起来像"留了取消置顶的位置" */
-  width: 236px;
+  /* 和 JS 里的 OPEN_RIGHT 一致（置顶 + 归档两个按钮）。
+     删除已经只留在详情页，减少露出宽度 → 名称能显示更多字。 */
+  width: 158px;
 }
 .sw-btn {
   border: 0;
