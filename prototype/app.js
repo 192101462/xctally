@@ -1450,21 +1450,11 @@
     armSettle(140);
   }, true);
 
-  /* 键盘弹出时把聚焦的输入框滚进可视区域。
-     原生侧已经按键盘高度缩了 WebView，这里是第二道保险（尤其是长表单）。 */
-  document.addEventListener('focusin', function (e) {
-    const t = e.target;
-    if (!t || !t.tagName) return;
-    const tag = t.tagName.toLowerCase();
-    if (tag !== 'input' && tag !== 'textarea') return;
-    setTimeout(function () {
-      try {
-        t.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      } catch (err) {
-        t.scrollIntoView();
-      }
-    }, 280);
-  });
+  /* 键盘遮挡输入框：这里【故意不做】任何 scrollIntoView。
+     WebView 自己有"聚焦时把输入框滚进可视区"的行为，而且是贴合键盘动画的；
+     我曾经在这里加了 scrollIntoView({block:'center', behavior:'smooth'}) 加 280ms 延迟，
+     结果抢在系统行为前面滚动，和键盘动画打架 —— 原生安卓原本正常，加了之后就不正常了。
+     键盘高度由原生侧按 ime insets 缩 WebView 解决（见 MainActivity）。 */
 
   // 先记下原始 hash：mount() 会把它改写成规范形式
   const bootHash = location.hash || '';

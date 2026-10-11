@@ -263,12 +263,19 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(webView)
 
-        // 键盘弹出时把 WebView 的可见区域缩上去，否则聚焦的输入框会被键盘挡住。
-        // targetSdk 35+ 强制 edge-to-edge 之后 adjustResize 不再自动生效，
-        // 必须自己读 ime insets 给底部加内边距（键盘收起时 ime.bottom 为 0）。
+        // 键盘弹出时把 WebView 的可见区域抬起来，否则聚焦的输入框会被键盘挡住。
+        //
+        // 两种机制可能同时存在，必须避免"顶两次"：
+        //   a) manifest 里的 adjustResize：窗口自己变矮（部分设备/系统版本仍生效）
+        //   b) 这里按 ime insets 补底部内边距（edge-to-edge 下必须自己来）
+        // 所以先记录"无键盘时的高度"，如果发现窗口已经明显变矮，就不再补内边距。
+        var baseHeight = 0
         ViewCompat.setOnApplyWindowInsetsListener(webView) { v, insets ->
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            v.setPadding(0, 0, 0, ime.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val shrunk = baseHeight > 0 && v.height < baseHeight - 60
+            val pad = if (shrunk) 0 else ime
+            if (v.paddingBottom != pad) v.setPadding(0, 0, 0, pad)
+            if (ime == 0) baseHeight = v.height
             insets
         }
         ViewCompat.requestApplyInsets(webView)
