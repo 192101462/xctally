@@ -1432,14 +1432,20 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .swipe-act { opacity: 0; transition: opacity 0.12s ease; }
 .swipe.swiping .swipe-act,
 .swipe.open-right .swipe-act { opacity: 1; }
-.swipe-act.right { right: 0; }
+.swipe-act.right {
+  right: 0;
+  /* 和 JS 里的 OPEN_RIGHT 一致：三个按钮正好铺满露出的宽度，
+     否则按钮右边会空出一条，看起来像"留了取消置顶的位置" */
+  width: 236px;
+}
 .sw-btn {
   border: 0;
   color: #fff;
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  padding: 0 16px;
+  padding: 0 8px;
+  flex: 1;                    /* 三个按钮平分露出的宽度，不留空隙 */
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1946,6 +1952,23 @@ input[readonly][data-action] { cursor: pointer; }
   padding: 0 6px;
   cursor: grab;
 }
+
+/* 滑动中的紧凑排版：名称在上，价格与每日金额在下，图标藏起来。
+   这样露出操作按钮时，右侧的数字仍然看得清。 */
+.swipe.compact .tile { display: none; }
+.swipe.compact .row { display: block; }
+.swipe.compact .row-sub { display: none; }
+.swipe.compact .row-side {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-align: left;
+  margin-top: 2px;
+  animation: fade 0.18s ease;
+}
+.swipe.compact .row-value { font-size: 14px; }
+.swipe.compact .row-note { font-size: 12px; }
+.swipe.compact .row-title { font-size: 15px; }
 
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }

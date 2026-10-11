@@ -84,17 +84,23 @@
    * 都是"先露出、再点确认"，不做划过去就触发——误触的代价太大。
    * touch-action: pan-y 交给浏览器处理竖向滚动，只接管横向。
    */
-  const OPEN_RIGHT = 236;   // 置顶 + 归档 + 删除
+  const OPEN_RIGHT = 236;   // 置顶 + 归档 + 删除（要和 CSS 里的 236px 保持一致）
+  const COMPACT_AT = 90;    // 滑过这么多就换成紧凑排版（名称在上、价格/每日在下）
 
+  // 只允许往左滑（露出右侧操作按钮）；往右滑完全不动
   function shiftOf(wrap, dx) {
+    if (dx > 0) return 0;
     return Math.max(dx, -(OPEN_RIGHT + 12));
   }
   function setShift(wrap, dx) {
     const body = wrap.querySelector('.swipe-body');
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
+    // 滑到一定距离：把行内容变成两行（名称 / 价格+每日金额）并藏起图标，
+    // 否则露出的操作按钮会盖住右边的数字，看不清
+    wrap.classList.toggle('compact', dx <= -COMPACT_AT);
   }
   function closeSwipe(wrap, instant) {
-    wrap.classList.remove('open-right');
+    wrap.classList.remove('open-right', 'compact');
     const body = wrap.querySelector('.swipe-body');
     if (!body) return;
     if (instant) body.style.transition = 'none';
