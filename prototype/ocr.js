@@ -52,8 +52,7 @@
     if (!draft) {
       return '<div class="sheet"><div class="grabber"></div>' +
         '<h3>从截图识别</h3>' +
-        '<p class="hint">支持淘宝/天猫、京东、拼多多的订单截图，也支持购物小票。<br>' +
-        '建议先裁掉收货地址和手机号再识别。</p>' +
+        '<p class="hint">建议先裁掉收货地址和手机号</p>' +
         (lastError ? '<div class="notice">上次失败：' + esc(lastError) + '</div>' : '') +
         '<div class="group">' +
           '<div class="row" data-action="i-ocr-pick" data-src="gallery">' +
@@ -102,8 +101,7 @@
 
     return '<div class="sheet"><div class="grabber"></div>' +
       '<h3>核对识别结果</h3>' +
-      '<p class="hint">识别到 ' + draft.items.length + ' 件，勾选 ' + picked + ' 件，合计 ¥' +
-        total.toFixed(2) + '。数字请重点核对，改完再添加。</p>' +
+      '<p class="hint">' + draft.items.length + ' 件 · 合计 ¥' + total.toFixed(2) + '</p>' +
       '<div class="group ocr-list">' + (rows || '<div class="empty"><p>没有识别到商品</p></div>') + '</div>' +
       '<div class="sheet-actions" style="margin-top:14px">' +
         '<button class="btn plain" data-action="i-ocr-again">重新识别</button>' +
@@ -211,8 +209,7 @@
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
         '<h3>DeepSeek 配置</h3>' +
-        '<p class="hint">填了 Key 才会出现「从截图识别」和对话助手。Key 只存在本机，' +
-        '也不会写进备份文件。</p>' +
+        '<p class="hint">Key 只存在本机，不会写进备份。</p>' +
         '<label class="check-row"><input type="checkbox" id="ai-enabled"' +
           (c.enabled ? ' checked' : '') + ' />' +
           '<span>启用 AI 功能</span><b>关闭后 App 完全离线</b></label>' +

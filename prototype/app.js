@@ -558,10 +558,9 @@
       '</div>' +
 
       '<div class="section">' +
-        '<div class="section-head"><h2>物品分类</h2>' +
-          '<button class="head-btn" data-action="i-cat-sort">排序</button></div>' +
+        '<div class="section-head"><h2>物品分类</h2><span>可自定义</span></div>' +
         '<div class="group">' +
-          setRow('i-cat-manage', '管理分类', { side: '新增 / 改名 / 删除', chev: true }) +
+          setRow('i-cat-manage', '管理分类', { chev: true }) +
         '</div>' +
       '</div>';
   }
@@ -1206,7 +1205,9 @@
     if (!window.QYA || !QYA.cfg().key) { money.textContent = '未配置'; return; }
     money.textContent = '查询中…';
     QYA.balance().then(function (b) {
-      money.textContent = b.currency + ' ' + b.total;
+      // 窄屏放不下 "CNY"，退化成 ￥ 符号
+      const sym = window.innerWidth < 380 ? '¥' : (b.currency + ' ');
+      money.textContent = sym + b.total;
     }).catch(function (err) {
       money.textContent = '查询失败';
       if (note) note.textContent = (err && err.message) || '未知错误';
@@ -1241,7 +1242,7 @@
     const memImg = window.QYV ? QYV.imageBytes() : 0;
 
     if (!path.length || path[path.length - 1] === 'root') {
-      return setNav('set-close', '我的', '设置', '该开的开，该关的关') +
+      return setNav('set-close', '我的', '设置', '') +
         '<div class="group" style="margin-top:16px">' +
           setRow('set-go', 'AI', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
@@ -1281,8 +1282,7 @@
         '</div>';
     }
     if (top === 'theme') {
-      return nav + sortGroup('深色模式', 'theme', THEME_MODES, ui().theme || 'auto', 'set-theme-mode') +
-        '<div class="notice" style="margin-top:12px">"跟随系统"会跟着手机的深色开关走。</div>';
+      return nav + sortGroup('深色模式', 'theme', THEME_MODES, ui().theme || 'auto', 'set-theme-mode');
     }
     if (top === 'tabs') {
       const t = ui().tabs;
@@ -1293,8 +1293,7 @@
         switchRow('set-tab-energy', '能源', t.energy !== false) +
         setRow('noop', '我的', { side: '必需' }) +
         '</div>' +
-        '<div class="notice" style="margin-top:12px">首页、物品、我的不能隐藏：' +
-        '它们是主要入口，「我的」还是设置的入口。</div>';
+        '<div class="notice" style="margin-top:12px">首页、物品、我的不能隐藏</div>';
     }
     if (top === 'sort') {
       const s = ui().sort;
@@ -1308,9 +1307,7 @@
         setRow('noop', '本地占用', { side: humanBytes(memBytes) }) +
         setRow('noop', '其中随笔图片', { side: humanBytes(memImg) }) +
         setRow('clear-data', '清空数据', { chev: true }) +
-        '</div>' +
-        '<div class="notice" style="margin-top:12px">清空会删除物品、随笔、能源读数，' +
-        '并需要连续确认三次。</div>';
+        '</div>';
     }
     return nav;
   }

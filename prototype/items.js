@@ -40,15 +40,16 @@
   }
 
   function sideOf(item) {
-    // 不计入日均成本的（食品/药品等）只显示价格，不显示"每天多少钱"
+    // 不计入日均成本的（食品/药品等）只显示价格，不显示"每天多少钱"。
+    // rate / cost 两个类名给窄屏媒体查询用：宽度不够时优先丢掉"每日"这一项。
     if (QY.tracksCost(item, data())) {
       const p = QY.perDay(item, data());
-      return '<div class="row-value">' + (p != null ? QY.fmtRate(p) + '<span class="per">/天</span>' : '—') + '</div>' +
-        '<div class="row-note">' + (item.cost != null ? QY.fmtMoney(item.cost) : '价格未知') + '</div>';
+      return '<div class="row-value rate">' +
+        (p != null ? QY.fmtRate(p) + '<span class="per">/天</span>' : '—') + '</div>' +
+        '<div class="row-note cost">' + (item.cost != null ? QY.fmtMoney(item.cost) : '价格未知') + '</div>';
     }
-    return '<div class="row-value" style="font-size:14px">' +
-      (item.cost != null ? QY.fmtMoney(item.cost) : '—') + '</div>' +
-      '<div class="row-note">' + (QY.isArchived(item) ? esc(item.status) : '') + '</div>';
+    return '<div class="row-value cost">' +
+      (item.cost != null ? QY.fmtMoney(item.cost) : '—') + '</div>';
   }
 
   function rowItem(item) {
@@ -86,6 +87,7 @@
    */
   const OPEN_RIGHT = 236;   // 置顶 + 归档 + 删除（要和 CSS 里的 236px 保持一致）
   const COMPACT_AT = 90;    // 滑过这么多就换成紧凑排版（名称在上、价格/每日在下）
+  const CONTENT_STOP = 72;  // 文字往左走到这里就停（约等于缩略图 + 间距的宽度）
 
   // 只允许往左滑（露出右侧操作按钮）；往右滑完全不动
   function shiftOf(wrap, dx) {
@@ -95,12 +97,26 @@
   function setShift(wrap, dx) {
     const body = wrap.querySelector('.swipe-body');
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
-    // 滑到一定距离：把行内容变成两行（名称 / 价格+每日金额）并藏起图标，
-    // 否则露出的操作按钮会盖住右边的数字，看不清
+
+    // 两步动画：
+    //   第一步 图标和文字一起左移，直到图标滑出可视区；
+    //   第二步 文字用等量反向位移"钉住"（不再跟着往左跑），
+    //          同时结构切成上下两行，保证名称和金额始终看得见。
+    const over = Math.max(0, -dx - CONTENT_STOP);
+    const shift = over ? 'translateX(' + over + 'px)' : '';
+    const main = wrap.querySelector('.row-main');
+    const side = wrap.querySelector('.row-side');
+    if (main) main.style.transform = shift;
+    if (side) side.style.transform = shift;
+
     wrap.classList.toggle('compact', dx <= -COMPACT_AT);
   }
   function closeSwipe(wrap, instant) {
     wrap.classList.remove('open-right', 'compact');
+    const main = wrap.querySelector('.row-main');
+    const side = wrap.querySelector('.row-side');
+    if (main) main.style.transform = '';
+    if (side) side.style.transform = '';
     const body = wrap.querySelector('.swipe-body');
     if (!body) return;
     if (instant) body.style.transition = 'none';
@@ -457,7 +473,6 @@
       '<div class="sheet">' +
         '<div class="grabber"></div>' +
         '<h3>' + (item ? '编辑物品' : '新增物品') + '</h3>' +
-        '<p class="hint">' + (item ? '改完点保存，状态和时间线都保留' : '名称、分类、价格、日期四项就够') + '</p>' +
 
         '<div class="field"><label>名称</label>' +
           '<input id="f-name" class="input" placeholder="例如：发卡" value="' + esc(e.name) + '" autocomplete="off" /></div>' +
@@ -500,7 +515,7 @@
           pickerField('status', '状态', e.status) +
           '<div class="field"><label>二级分类</label>' +
             '<input id="f-sub" class="input" placeholder="装饰 / 生鲜 / 家电…" value="' + esc(e.sub || '') + '" /></div>' +
-          '<div class="field"><label>到期日（保质期 / 保修，可留空）</label>' +
+          '<div class="field"><label>到期日（可留空）</label>' +
             '<input id="f-exp" class="input" type="date" readonly data-action="i-date"' +
               ' data-target="f-exp" value="' + (e.expiresAt || '') + '" /></div>' +
           '<div class="field"><label>存放位置</label>' +
@@ -620,15 +635,14 @@
           '<h3>' + (isNew ? '新增分类' : '编辑分类') + '</h3>' +
           '<div class="field"><label>名称</label>' +
             '<input id="cat-name" class="input" value="' + esc(isNew ? '' : catEdit) + '" placeholder="例如：文具" /></div>' +
-          '<div class="field"><label>图标（仅用于选择器，列表里不再显示图标）</label>' +
+          '<div class="field"><label>图标</label>' +
             '<div class="emoji-row" id="cat-emoji">' + emojis + '</div></div>' +
           '<label class="check-row"><input type="checkbox" id="cat-track"' + (c.costTrack !== false ? ' checked' : '') + ' />' +
             '<span>默认计入日均成本</span><b>该分类下新物品的默认值</b></label>' +
-          '<div class="field"><label>这个分类的状态（用逗号分隔，按先后顺序）</label>' +
+          '<div class="field"><label>这个分类的状态</label>' +
             '<input id="cat-statuses" class="input" value="' +
               esc((c.statuses || QY.FALLBACK_STATUSES).join('，')) + '" placeholder="未开封，使用中，已用完" />' +
-            '<div class="field-note">新增/编辑物品时，状态下拉就按这里的顺序列出。' +
-              '例如电子可以写「新购，使用中，已损坏，已丢弃」</div></div>' +
+            '<div class="field-note">用逗号分隔，按先后顺序</div></div>' +
           (used ? '<div class="notice">有 ' + used + ' 件物品在用这个分类</div>' : '') +
           '<div class="sheet-actions">' +
             (isNew ? '' : '<button class="btn plain" data-action="i-cat-del" style="color:var(--red)">删除</button>') +
@@ -650,8 +664,8 @@
 
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
-        '<h3>物品分类</h3>' +
-        '<p class="hint">新增、改名、删除，或者调整某个分类默认要不要算日均成本</p>' +
+        '<div class="sheet-head"><h3>物品分类</h3>' +
+          '<button class="head-btn" data-action="i-cat-sort">排序</button></div>' +
         '<div class="group">' + rows +
           '<div class="row" data-action="i-cat-new">' +
             '<div class="tl-dot">＋</div>' +
@@ -862,14 +876,14 @@
   }
 
   /* ---------------- 分类排序（按住手柄拖动） ----------------
-   * 顺序就是分类选择器与筛选条里显示的顺序。
+   * 主流 App 的手感：被拖的行跟手浮起（阴影+轻微放大），
+   * 其它行平滑让位（位移动画），松手才提交顺序。
    */
-  let catDrag = null;
+  let catDrag = null;   // { name, el, from, to, startY, h, tops:[] }
 
   function catSortRows() {
     return QY.catList(data()).map(function (c) {
-      return '<div class="set-row cat-sort-row' + (catDrag === c.name ? ' dragging' : '') +
-        '" data-cat="' + esc(c.name) + '">' +
+      return '<div class="set-row cat-sort-row" data-cat="' + esc(c.name) + '">' +
         '<span class="set-title">' + c.emoji + '　' + esc(c.name) + '</span>' +
         '<span class="cat-handle">☰</span></div>';
     }).join('');
@@ -877,48 +891,89 @@
 
   function openCatSort() {
     UI().openSheet('<div class="sheet"><div class="grabber"></div>' +
-      '<h3>物品分类排序</h3>' +
-      '<p class="hint">按住右侧 ☰ 上下拖动，顺序立即保存</p>' +
+      '<h3>分类排序</h3>' +
+      '<p class="hint">按住右侧 ☰ 拖动，松手保存</p>' +
       '<div class="group" id="cat-sort-list">' + catSortRows() + '</div>' +
       '<div class="sheet-actions" style="margin-top:14px">' +
         '<button class="btn primary" data-action="i-cat-sort-done">完成</button>' +
       '</div></div>');
   }
 
+  /* 其它行让位：被拖行从 from 移到 to 时，中间的行整体上/下挪一格 */
+  function paintCatShift() {
+    const rows = document.querySelectorAll('.cat-sort-row');
+    Array.prototype.forEach.call(rows, function (r, i) {
+      if (catDrag && r === catDrag.el) return;
+      let dy = 0;
+      if (catDrag) {
+        if (i > catDrag.from && i <= catDrag.to) dy = -catDrag.h;
+        else if (i < catDrag.from && i >= catDrag.to) dy = catDrag.h;
+      }
+      r.style.transform = dy ? 'translateY(' + dy + 'px)' : '';
+    });
+  }
+
   document.addEventListener('pointerdown', function (e) {
     const row = e.target.closest && e.target.closest('.cat-sort-row');
     if (!row) return;
-    catDrag = row.getAttribute('data-cat');
+    const rows = Array.prototype.slice.call(document.querySelectorAll('.cat-sort-row'));
+    const from = rows.indexOf(row);
+    if (from < 0) return;
+    catDrag = {
+      name: row.getAttribute('data-cat'),
+      el: row,
+      from: from,
+      to: from,
+      startY: e.clientY,
+      h: row.getBoundingClientRect().height,
+      tops: rows.map(function (r) { return r.getBoundingClientRect().top; })
+    };
     row.classList.add('dragging');
+    paintCatShift();
   }, { passive: true });
 
   document.addEventListener('pointermove', function (e) {
     if (!catDrag) return;
-    const rows = document.querySelectorAll('.cat-sort-row');
-    let target = -1;
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i].getBoundingClientRect();
-      if (e.clientY >= r.top && e.clientY <= r.bottom) { target = i; break; }
+    const dy = e.clientY - catDrag.startY;
+    catDrag.el.style.transform = 'translateY(' + dy + 'px) scale(1.02)';
+
+    // 目标位置：用拖动前记录的原始位置算，避免被 transform 干扰
+    const center = catDrag.tops[catDrag.from] + dy + catDrag.h / 2;
+    let to = catDrag.from;
+    for (let i = 0; i < catDrag.tops.length; i++) {
+      if (i === catDrag.from) continue;
+      const mid = catDrag.tops[i] + catDrag.h / 2;
+      if (i < catDrag.from && center < mid) { to = i; break; }
+      if (i > catDrag.from && center > mid) to = i;
     }
-    if (target < 0) return;
-    const d = data();
-    const list = QY.catList(d).slice();
-    let from = -1;
-    for (let i = 0; i < list.length; i++) if (list[i].name === catDrag) from = i;
-    if (from < 0 || from === target) return;
-    const moved = list.splice(from, 1)[0];
-    list.splice(target, 0, moved);
-    d.itemCats = list;
-    UI().save();
-    const box = document.getElementById('cat-sort-list');
-    if (box) box.innerHTML = catSortRows();      // 重绘时保留 dragging 高亮
+    if (to !== catDrag.to) {
+      catDrag.to = to;
+      paintCatShift();
+    }
   }, { passive: true });
 
   document.addEventListener('pointerup', function () {
     if (!catDrag) return;
+    const d = data();
+    const drag = catDrag;
     catDrag = null;
-    const row = document.querySelector('.cat-sort-row.dragging');
-    if (row) row.classList.remove('dragging');
+    drag.el.classList.remove('dragging');
+    const list = QY.catList(d).slice();
+    const from = list.map(function (c) { return c.name; }).indexOf(drag.name);
+    if (from >= 0 && drag.to !== from) {
+      const moved = list.splice(from, 1)[0];
+      list.splice(drag.to, 0, moved);
+      d.itemCats = list;
+      UI().save();
+    }
+    // 复位并重绘（顺序已写入数据）
+    const box = document.getElementById('cat-sort-list');
+    if (box) {
+      box.innerHTML = catSortRows();
+      Array.prototype.forEach.call(box.querySelectorAll('.cat-sort-row'), function (r) {
+        r.style.transform = '';
+      });
+    }
   }, { passive: true });
 
   /* ---------------- 回收站 ----------------
