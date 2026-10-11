@@ -618,6 +618,11 @@
             '<div class="emoji-row" id="cat-emoji">' + emojis + '</div></div>' +
           '<label class="check-row"><input type="checkbox" id="cat-track"' + (c.costTrack !== false ? ' checked' : '') + ' />' +
             '<span>默认计入日均成本</span><b>该分类下新物品的默认值</b></label>' +
+          '<div class="field"><label>这个分类的状态（用逗号分隔，按先后顺序）</label>' +
+            '<input id="cat-statuses" class="input" value="' +
+              esc((c.statuses || QY.FALLBACK_STATUSES).join('，')) + '" placeholder="未开封，使用中，已用完" />' +
+            '<div class="field-note">新增/编辑物品时，状态下拉就按这里的顺序列出。' +
+              '例如电子可以写「新购，使用中，已损坏，已丢弃」</div></div>' +
           (used ? '<div class="notice">有 ' + used + ' 件物品在用这个分类</div>' : '') +
           '<div class="sheet-actions">' +
             (isNew ? '' : '<button class="btn plain" data-action="i-cat-del" style="color:var(--red)">删除</button>') +
@@ -662,10 +667,20 @@
     const track = document.getElementById('cat-track').checked;
     const isNew = catEdit === '';
 
+    // 状态词表：按中英文逗号/顿号切分，去空白去重；空的话退回通用词表
+    const raw = (document.getElementById('cat-statuses') || {}).value || '';
+    const seen = {};
+    const statuses = raw.split(/[,，、]/).map(function (s) { return s.trim(); })
+      .filter(function (s) { if (!s || seen[s]) return false; seen[s] = 1; return true; });
+    if (!statuses.length) {
+      UI().toast('至少写一个状态');
+      return;
+    }
+
     if (isNew) {
       if (QY.catList(d).some(function (c) { return c.name === name; })) { UI().toast('已经有这个分类了'); return; }
       const style = QY.nextCatStyle(d);
-      d.itemCats.push({ name: name, emoji: emoji, g: style.g.slice(), costTrack: track });
+      d.itemCats.push({ name: name, emoji: emoji, g: style.g.slice(), costTrack: track, statuses: statuses });
     } else {
       const c = QY.catOf(catEdit, d);
       const renamed = name !== catEdit;
@@ -674,6 +689,12 @@
       }
       c.emoji = emoji;
       c.costTrack = track;
+      c.statuses = statuses;
+      // 词表改了之后，把已经不在词表里的物品状态纠正回第一个
+      d.items.forEach(function (it) {
+        if (it.category !== catEdit) return;
+        if (statuses.indexOf(it.status) < 0) it.status = statuses[0];
+      });
       if (renamed) {
         d.items.forEach(function (i) { if (i.category === catEdit) i.category = name; });
         c.name = name;
@@ -833,6 +854,66 @@
     const host = document.getElementById('picker-layer');
     if (host) host.classList.add('center');
   }
+
+  /* ---------------- 分类排序（按住手柄拖动） ----------------
+   * 顺序就是分类选择器与筛选条里显示的顺序。
+   */
+  let catDrag = null;
+
+  function catSortRows() {
+    return QY.catList(data()).map(function (c) {
+      return '<div class="set-row cat-sort-row' + (catDrag === c.name ? ' dragging' : '') +
+        '" data-cat="' + esc(c.name) + '">' +
+        '<span class="set-title">' + c.emoji + '　' + esc(c.name) + '</span>' +
+        '<span class="cat-handle">☰</span></div>';
+    }).join('');
+  }
+
+  function openCatSort() {
+    UI().openSheet('<div class="sheet"><div class="grabber"></div>' +
+      '<h3>物品分类排序</h3>' +
+      '<p class="hint">按住右侧 ☰ 上下拖动，顺序立即保存</p>' +
+      '<div class="group" id="cat-sort-list">' + catSortRows() + '</div>' +
+      '<div class="sheet-actions" style="margin-top:14px">' +
+        '<button class="btn primary" data-action="i-cat-sort-done">完成</button>' +
+      '</div></div>');
+  }
+
+  document.addEventListener('pointerdown', function (e) {
+    const row = e.target.closest && e.target.closest('.cat-sort-row');
+    if (!row) return;
+    catDrag = row.getAttribute('data-cat');
+    row.classList.add('dragging');
+  }, { passive: true });
+
+  document.addEventListener('pointermove', function (e) {
+    if (!catDrag) return;
+    const rows = document.querySelectorAll('.cat-sort-row');
+    let target = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (e.clientY >= r.top && e.clientY <= r.bottom) { target = i; break; }
+    }
+    if (target < 0) return;
+    const d = data();
+    const list = QY.catList(d).slice();
+    let from = -1;
+    for (let i = 0; i < list.length; i++) if (list[i].name === catDrag) from = i;
+    if (from < 0 || from === target) return;
+    const moved = list.splice(from, 1)[0];
+    list.splice(target, 0, moved);
+    d.itemCats = list;
+    UI().save();
+    const box = document.getElementById('cat-sort-list');
+    if (box) box.innerHTML = catSortRows();      // 重绘时保留 dragging 高亮
+  }, { passive: true });
+
+  document.addEventListener('pointerup', function () {
+    if (!catDrag) return;
+    catDrag = null;
+    const row = document.querySelector('.cat-sort-row.dragging');
+    if (row) row.classList.remove('dragging');
+  }, { passive: true });
 
   /* ---------------- 回收站 ----------------
    * 删除 = 进回收站（30 天），不是真删。恢复时物品和它的时间线一起回来。
@@ -1110,6 +1191,11 @@
       deleteItem(id);
     } else if (action === 'i-cat-manage') {
       openCatManager();
+    } else if (action === 'i-cat-sort') {
+      openCatSort();
+    } else if (action === 'i-cat-sort-done') {
+      UI().closeSheet();
+      UI().mount();
     } else if (action === 'i-trash') {
       openTrash();
     } else if (action === 'i-cat-new') {

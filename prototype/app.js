@@ -558,7 +558,8 @@
       '</div>' +
 
       '<div class="section">' +
-        '<div class="section-head"><h2>物品分类</h2><span>可自定义</span></div>' +
+        '<div class="section-head"><h2>物品分类</h2>' +
+          '<button class="head-btn" data-action="i-cat-sort">排序</button></div>' +
         '<div class="group">' +
           setRow('i-cat-manage', '管理分类', { side: '新增 / 改名 / 删除', chev: true }) +
         '</div>' +
