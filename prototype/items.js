@@ -794,7 +794,8 @@
     return new Promise(function (resolve) {
       const layer = document.createElement('div');
       layer.id = 'qy-confirm';
-      layer.className = 'picker-layer';
+      // center：确认框必须居中。.picker-layer 默认是"底部弹出"，不加这个会被推到屏幕下方
+      layer.className = 'picker-layer center';
       layer.innerHTML =
         '<div class="confirm-box">' +
           '<h3>' + esc(o.title || '确认') + '</h3>' +
@@ -880,7 +881,8 @@
    * 主流 App 的手感：被拖的行跟手浮起（阴影+轻微放大），
    * 其它行平滑让位（位移动画），松手才提交顺序。
    */
-  let catDrag = null;   // { name, el, from, to, startY, h, tops:[] }
+  let catDrag = null;   // { name, el, from, to, startY, h, tops:[], moved }
+  let catJustDragged = false;   // 刚拖完，挡住浏览器补发的那个 click
 
   function catSortRows() {
     return QY.catList(data()).map(function (c) {
@@ -926,6 +928,7 @@
       from: from,
       to: from,
       startY: e.clientY,
+      moved: false,
       h: row.getBoundingClientRect().height,
       tops: rows.map(function (r) { return r.getBoundingClientRect().top; })
     };
@@ -936,6 +939,7 @@
   document.addEventListener('pointermove', function (e) {
     if (!catDrag) return;
     const dy = e.clientY - catDrag.startY;
+    if (Math.abs(dy) > 6) catDrag.moved = true;
     catDrag.el.style.transform = 'translateY(' + dy + 'px) scale(1.02)';
 
     // 目标位置：用拖动前记录的原始位置算，避免被 transform 干扰
@@ -959,6 +963,12 @@
     const drag = catDrag;
     catDrag = null;
     drag.el.classList.remove('dragging');
+    // 拖完浏览器会补一个 click。松手时手指若在面板之外，
+    // 这个 click 会点到遮罩上 → 面板被关掉 → 看起来就像"排完序直接跳回我的"
+    if (drag.moved) {
+      catJustDragged = true;
+      setTimeout(function () { catJustDragged = false; }, 360);
+    }
     const list = QY.catList(d).slice();
     const from = list.map(function (c) { return c.name; }).indexOf(drag.name);
     if (from >= 0 && drag.to !== from) {
@@ -1302,6 +1312,13 @@
     handleAction: handleAction,
     handleInput: handleInput
   };
+
+  /* 拖动刚结束时，吃掉浏览器补发的 click（否则会点到遮罩/按钮上） */
+  document.addEventListener('click', function (e) {
+    if (!catJustDragged) return;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
 
   // 点覆盖层的暗色背景即关闭（点内容不会）
   document.addEventListener('click', function (e) {
