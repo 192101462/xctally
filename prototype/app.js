@@ -802,9 +802,12 @@
 
     const collectDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
-    document.documentElement.classList.toggle('in-settings', !!state.setting);
-    document.documentElement.classList.toggle('in-detail', inDetail());
-    $('#tabbar').innerHTML = state.setting ? '' : TABS.filter(function (t) {
+    const inSettings = !!state.setting;
+    const detail = inDetail();
+    document.documentElement.classList.toggle('in-settings', inSettings);
+    document.documentElement.classList.toggle('in-detail', detail);
+    // 双保险：标签栏的渲染条件与 CSS 类保持一致，避免类没摘干净就一直空着
+    $('#tabbar').innerHTML = (inSettings || detail) ? '' : TABS.filter(function (t) {
       return tabVisible(t.id);
     }).map(function (t) {
       return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail &&
@@ -1010,19 +1013,21 @@
     return PAGE_TITLES[from] || '物品';
   }
 
-  /* 从物品详情返回：哪来的回哪去（首页 -> 首页，物品 -> 物品列表） */
+  /* 从物品详情返回：哪来的回哪去（首页 -> 首页，物品 -> 物品列表）。
+     一律在这里把两个详情状态都清干净 —— 之前让调用方在"来源是物品页"时自己兜底，
+     那句兜底只清了 state.detailId，QYI 内部仍认为在详情里，
+     于是 html.in-detail 没被摘掉，底部标签栏一直藏着。 */
   function backFromDetail() {
     const from = state.detailFrom;
     state.detailFrom = null;
+    state.detailId = null;
     if (window.QYI) QYI.clearDetail();
-    if (from && from !== 'items') {
-      state.tab = from;
-      resetScrollUi();
-      mount();
-      restoreScroll();
-      return true;
-    }
-    return false;
+    if (window.QYV) QYV.clearDetail();
+    if (from && from !== 'items') state.tab = from;
+    resetScrollUi();
+    mount();
+    restoreScroll();
+    return true;
   }
 
   /* ---------------- 设置面板 ---------------- */

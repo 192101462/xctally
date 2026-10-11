@@ -1315,21 +1315,43 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .picker-field:active { background: var(--fill); }
 .chev { color: var(--label-3); font-size: 17px; line-height: 1; }
 
-/* 覆盖在表单之上的选择面板（表单 DOM 不会被销毁，输入不丢）
-   必须用 fixed：面板自己会滚动，absolute 会跟着内容滚走 —— 用户往下滑之后
-   再点"来源"，面板会顶到表单最上方（视口外），看起来就是一片空白。
-   而且从面板顶部开始还要让出状态栏。 */
+/* 覆盖层：暗底 + 内容从底部推上来（短列表也不会显得"上面一小块、下面一片空白"）
+   必须用 fixed 且挂在 body 上：面板自己会滚动，absolute 会跟着内容滚走。 */
 .picker-layer {
   position: fixed;
   inset: 0;
-  padding-top: env(safe-area-inset-top, 0px);
-  background: var(--sheet);
+  background: rgba(0, 0, 0, 0.34);
   display: flex;
   flex-direction: column;
-  /* 必须高于 #sheet-root（60）：覆盖层挂在 body 上，
-     层级低于它就会被整个面板盖住，看不见也点不到 */
+  justify-content: flex-end;
   z-index: 200;
   animation: fade 0.18s ease;
+}
+.picker-layer .picker-head {
+  flex: none;
+  background: var(--sheet);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 16px 18px 10px;
+}
+.picker-layer .picker-list {
+  flex: none;
+  max-height: 58vh;
+  overflow-y: auto;
+  background: var(--sheet);
+  padding: 0 12px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+/* 居中的卡片形态（确认框、日期选择这类小内容） */
+.picker-layer.center {
+  justify-content: center;
+  align-items: center;
+}
+.picker-layer.center .picker-card {
+  width: min(92vw, 360px);
+  background: var(--card);
+  border-radius: var(--r-xl);
+  padding: 18px 18px 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+  animation: pop 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 .picker-head {
   flex: none;
@@ -1863,6 +1885,42 @@ html.sheet-open .ai-ball {
   transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .ball-hint.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 自定义日期选择（居中卡片里的月历） */
+.cal-card { padding: 16px 14px 12px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cal-head b { font-size: 16px; }
+.cal-nav {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fill-2);
+  color: var(--label);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cal-nav:active { background: var(--fill); }
+.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+.cal-week span { text-align: center; font-size: 11.5px; color: var(--label-3); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-cell {
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14.5px;
+  height: 38px;
+  border-radius: 50%;
+  color: var(--label);
+  cursor: pointer;
+}
+.cal-cell.blank { pointer-events: none; }
+.cal-cell.today { color: var(--blue); font-weight: 650; }
+.cal-cell.on { background: var(--blue); color: #fff; font-weight: 650; }
+.cal-cell:active:not(.blank):not(.on) { background: var(--fill-2); }
+/* 日期输入框改成点开自己的月历 */
+input[readonly][data-action] { cursor: pointer; }
 
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }

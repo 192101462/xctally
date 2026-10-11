@@ -467,7 +467,8 @@
         '</div>' +
 
         '<div class="field"><label>获得日期</label>' +
-          '<input id="f-date" class="input" type="date" value="' + e.acquiredAt + '" /></div>' +
+          '<input id="f-date" class="input" type="date" readonly data-action="i-date"' +
+            ' data-target="f-date" value="' + e.acquiredAt + '" /></div>' +
 
         '<label class="check-row"><input type="checkbox" id="f-costtrack"' + (costOn ? ' checked' : '') + ' />' +
           '<span>计入日均成本</span><b></b></label>' +
@@ -494,7 +495,8 @@
           '<div class="field"><label>二级分类</label>' +
             '<input id="f-sub" class="input" placeholder="装饰 / 生鲜 / 家电…" value="' + esc(e.sub || '') + '" /></div>' +
           '<div class="field"><label>到期日（保质期 / 保修，可留空）</label>' +
-            '<input id="f-exp" class="input" type="date" value="' + (e.expiresAt || '') + '" /></div>' +
+            '<input id="f-exp" class="input" type="date" readonly data-action="i-date"' +
+              ' data-target="f-exp" value="' + (e.expiresAt || '') + '" /></div>' +
           '<div class="field"><label>存放位置</label>' +
             '<input id="f-loc" class="input" placeholder="卧室抽屉" value="' + esc(e.location || '') + '" /></div>' +
           '<div class="field"><label>备注</label>' +
@@ -777,6 +779,61 @@
     });
   }
 
+  /* ---------------- 自定义日期选择 ----------------
+   * 不用 <input type="date"> 的原生弹窗：样式和 App 不搭，确认键还叫"设置"。
+   * 自己画一个月历，居中卡片显示，按钮是 今天 / 取消 / 确定。
+   */
+  let calState = null;    // { inputId, view:'YYYY-MM', picked:'YYYY-MM-DD' }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function calHtml() {
+    const st = calState;
+    const y = Number(st.view.split('-')[0]);
+    const m = Number(st.view.split('-')[1]);
+    const firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7;   // 周一当第一列
+    const days = new Date(y, m, 0).getDate();
+    const todayIso = QY.iso(QY.today());
+    let cells = '';
+    for (let i = 0; i < firstDow; i++) cells += '<span class="cal-cell blank"></span>';
+    for (let d = 1; d <= days; d++) {
+      const iso = y + '-' + pad2(m) + '-' + pad2(d);
+      cells += '<button type="button" class="cal-cell' + (iso === st.picked ? ' on' : '') +
+        (iso === todayIso ? ' today' : '') + '" data-action="i-cal-pick" data-v="' + iso + '">' + d + '</button>';
+    }
+    return '<div class="picker-card cal-card">' +
+      '<div class="cal-head">' +
+        '<button type="button" class="cal-nav" data-action="i-cal-move" data-d="-1">‹</button>' +
+        '<b>' + y + ' 年 ' + m + ' 月</b>' +
+        '<button type="button" class="cal-nav" data-action="i-cal-move" data-d="1">›</button>' +
+      '</div>' +
+      '<div class="cal-week"><span>一</span><span>二</span><span>三</span><span>四</span>' +
+        '<span>五</span><span>六</span><span>日</span></div>' +
+      '<div class="cal-grid">' + cells + '</div>' +
+      '<div class="sheet-actions" style="margin-top:12px">' +
+        '<button type="button" class="btn plain" data-action="i-cal-today">今天</button>' +
+        '<button type="button" class="btn plain" data-action="i-cal-cancel">取消</button>' +
+        '<button type="button" class="btn primary" data-action="i-cal-ok">确定</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderCal() {
+    const host = document.getElementById('picker-layer');
+    if (!host) return;
+    host.className = 'picker-layer center';
+    host.innerHTML = calHtml();
+  }
+
+  function openDatePicker(inputId) {
+    const el = document.getElementById(inputId);
+    const cur = (el && el.value) ? el.value : QY.iso(QY.today());
+    calState = { inputId: inputId, view: cur.slice(0, 7), picked: cur };
+    openOverlay(calHtml());
+    const host = document.getElementById('picker-layer');
+    if (host) host.classList.add('center');
+  }
+
   /* ---------------- 回收站 ----------------
    * 删除 = 进回收站（30 天），不是真删。恢复时物品和它的时间线一起回来。
    */
@@ -987,11 +1044,10 @@
       else { state.detailId = id; UI().mount(); }
     }
     else if (action === 'i-back') {
-      // 从首页点进来的，返回要回首页，而不是甩到物品列表
-      if (!(UI().backFromDetail && UI().backFromDetail())) {
-        state.detailId = null;
-        UI().mount();
-      }
+      // 从首页点进来的要回首页；从列表点进来的回列表。
+      // 全部交给 backFromDetail 处理（它一定会把详情状态清干净）
+      if (UI().backFromDetail) UI().backFromDetail();
+      else { state.detailId = null; UI().mount(); }
     }
     else if (action === 'i-filter') { state.filter = el.getAttribute('data-k'); UI().mount(); }
     else if (action === 'i-cat') { state.category = el.getAttribute('data-cat'); UI().mount(); }
@@ -1009,6 +1065,31 @@
       applyPick(el.getAttribute('data-k'), el.getAttribute('data-v'));
     } else if (action === 'i-pick-close') {
       closePicker();
+    } else if (action === 'i-date') {
+      openDatePicker(el.getAttribute('data-target'));
+    } else if (action === 'i-cal-pick') {
+      if (calState) { calState.picked = el.getAttribute('data-v'); renderCal(); }
+    } else if (action === 'i-cal-move') {
+      if (calState) {
+        const p = calState.view.split('-');
+        const d2 = new Date(Number(p[0]), Number(p[1]) - 1 + Number(el.getAttribute('data-d')), 1);
+        calState.view = d2.getFullYear() + '-' + pad2(d2.getMonth() + 1);
+        renderCal();
+      }
+    } else if (action === 'i-cal-today') {
+      if (calState) {
+        calState.picked = QY.iso(QY.today());
+        calState.view = calState.picked.slice(0, 7);
+        renderCal();
+      }
+    } else if (action === 'i-cal-ok') {
+      if (calState) {
+        const inp = document.getElementById(calState.inputId);
+        if (inp) inp.value = calState.picked;
+      }
+      closeOverlay();
+    } else if (action === 'i-cal-cancel') {
+      closeOverlay();
     } else if (action === 'i-photo') {
       pickPhoto();
     } else if (action === 'i-photo-cancel') {
@@ -1073,6 +1154,12 @@
     handleAction: handleAction,
     handleInput: handleInput
   };
+
+  // 点覆盖层的暗色背景即关闭（点内容不会）
+  document.addEventListener('click', function (e) {
+    const l = document.getElementById('picker-layer');
+    if (l && e.target === l) l.remove();
+  }, true);
 
   // 供其它模块复用（收藏、助手等）：别再用 window.confirm —— 安卓 WebView 默认
   // 不显示 JS 对话框，而且原生样式和 App 不搭
