@@ -1266,8 +1266,10 @@
     } else if (action === 'i-cat-sort') {
       openCatSort();
     } else if (action === 'i-cat-sort-done') {
-      UI().closeSheet();
-      UI().mount();
+      // 回到「管理分类」，而不是关掉面板退回「我的」：
+      // 排序面板是替换管理分类面板打开的，closeSheet 会把整层一起关掉。
+      // 这里重新打开管理分类——它按当前数据渲染，所以能看到新顺序。
+      openCatManager();
     } else if (action === 'i-trash') {
       openTrash();
     } else if (action === 'i-cat-new') {
