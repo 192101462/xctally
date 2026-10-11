@@ -24,6 +24,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewClientCompat
@@ -263,21 +264,17 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(webView)
 
-        // 键盘弹出时把 WebView 的可见区域抬起来，否则聚焦的输入框会被键盘挡住。
+        // 键盘遮挡输入框：回到"系统窗口给键盘让位"的经典行为。
         //
-        // 两种机制可能同时存在，必须避免"顶两次"：
-        //   a) manifest 里的 adjustResize：窗口自己变矮（部分设备/系统版本仍生效）
-        //   b) 这里按 ime insets 补底部内边距（edge-to-edge 下必须自己来）
-        // 所以先记录"无键盘时的高度"，如果发现窗口已经明显变矮，就不再补内边距。
-        var baseHeight = 0
-        ViewCompat.setOnApplyWindowInsetsListener(webView) { v, insets ->
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val shrunk = baseHeight > 0 && v.height < baseHeight - 60
-            val pad = if (shrunk) 0 else ime
-            if (v.paddingBottom != pad) v.setPadding(0, 0, 0, pad)
-            if (ime == 0) baseHeight = v.height
-            insets
-        }
+        // 走过两次弯路，结论记在这里：
+        //   - targetSdk 35+ 强制 edge-to-edge 后，manifest 的 adjustResize 不再缩小窗口，
+        //     页面底部一直延伸到键盘下面，所以输入框被挡住。
+        //   - 我试过自己按 ime insets 给 WebView 加底部内边距：在多数设备/兼容层上
+        //     insets 不上报或与窗口缩小相互抵消，结果是"完全没变化"。
+        // 所以直接退出 edge-to-edge：窗口重新为系统栏和键盘让位，
+        // adjustResize 就会正常把 WebView 缩小，WebView 自己的"聚焦即滚入可视区"也就能工作了。
+        WindowCompat.setDecorFitsSystemWindows(window, true)
+
         ViewCompat.requestApplyInsets(webView)
 
         // 返回键：先关面板 → 再回上一层 → 都没有才退出

@@ -98,16 +98,27 @@
     const body = wrap.querySelector('.swipe-body');
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
 
+    // 文字要停在哪里：让缩略图正好滑出可视区所需的距离。
+    // 实测宽度而不是写死常数 —— 写死的话不同字号/密度下会停错位置。
+    const tile = wrap.querySelector('.tile');
+    const stop = tile ? Math.round(tile.getBoundingClientRect().width + 18) : CONTENT_STOP;
+
     // 两步动画：
     //   第一步 图标和文字一起左移，直到图标滑出可视区；
     //   第二步 文字用等量反向位移"钉住"（不再跟着往左跑），
     //          同时结构切成上下两行，保证名称和金额始终看得见。
-    const over = Math.max(0, -dx - CONTENT_STOP);
+    const over = Math.max(0, -dx - stop);
     const shift = over ? 'translateX(' + over + 'px)' : '';
     const main = wrap.querySelector('.row-main');
     const side = wrap.querySelector('.row-side');
     if (main) main.style.transform = shift;
     if (side) side.style.transform = shift;
+
+    // 收紧排版后行高会和原来不同，导致整个列表在滑动时上下跳 —— 先钉住原高度
+    const row = wrap.querySelector('.row');
+    if (row && !row.style.minHeight) {
+      row.style.minHeight = Math.round(row.getBoundingClientRect().height) + 'px';
+    }
 
     wrap.classList.toggle('compact', dx <= -COMPACT_AT);
   }
@@ -115,8 +126,10 @@
     wrap.classList.remove('open-right', 'compact');
     const main = wrap.querySelector('.row-main');
     const side = wrap.querySelector('.row-side');
+    const row = wrap.querySelector('.row');
     if (main) main.style.transform = '';
     if (side) side.style.transform = '';
+    if (row) row.style.minHeight = '';
     const body = wrap.querySelector('.swipe-body');
     if (!body) return;
     if (instant) body.style.transition = 'none';

@@ -284,25 +284,20 @@
           kvRow('合计 token', n(u.total), true) +
           kvRow('估算费用', u.priced ? '¥' + u.cost.toFixed(4) : '<span style="color:var(--label-3)">未填单价</span>', true) +
         '</div>' +
-        '<div class="section"><div class="section-head"><h2>单价设置</h2>' +
-          '<span>元 / 百万 token</span></div>' +
-          '<div class="section-head" style="margin-top:8px">' +
-            '<h2 style="font-size:13px">高峰时段</h2>' +
-            '<span>周一至周五 9-12、14-18</span></div>' +
-          priceField('price-hit', '百万tokens输入（缓存命中）', p.cacheHit) +
-          priceField('price-miss', '百万tokens输入（缓存未命中）', p.in) +
-          priceField('price-out', '百万tokens输出', p.out) +
-          '<div class="section-head" style="margin-top:10px">' +
-            '<h2 style="font-size:13px">空闲时段</h2>' +
-            '<span>其余时间，是高峰价的一半</span></div>' +
-          priceField('price-hit-off', '百万tokens输入（缓存命中）', p.cacheHitOff) +
-          priceField('price-miss-off', '百万tokens输入（缓存未命中）', p.inOff) +
-          priceField('price-out-off', '百万tokens输出', p.outOff) +
+        '<div class="section"><div class="section-head"><h2>单价</h2>' +
+          '<button class="head-btn" data-action="i-ai-price-sync">同步价格</button></div>' +
+          '<div class="mini-foot" style="padding:2px 4px 8px">元 / 百万 token</div>' +
+          kvRow('高峰 · 缓存命中', p.cacheHit) +
+          kvRow('高峰 · 缓存未命中', p.in) +
+          kvRow('高峰 · 输出', p.out, true) +
+          kvRow('空闲 · 缓存命中', p.cacheHitOff) +
+          kvRow('空闲 · 缓存未命中', p.inOff) +
+          kvRow('空闲 · 输出', p.outOff, true) +
+          '<div class="mini-foot" style="padding:10px 4px 0">高峰：周一至周五 9-12、14-18；' +
+            '其余时间（含周末）为空闲，空闲价是高峰的一半</div>' +
         '</div>' +
-        '<div class="notice" id="ai-balance">账号余额：点「刷新余额」查询（需要该 Key 支持查询）</div>' +
         '<div class="sheet-actions" style="margin-top:14px">' +
           '<button class="btn plain" data-action="i-ai-usage-refresh">刷新余额</button>' +
-          '<button class="btn primary" data-action="i-ai-price-save">保存单价</button>' +
         '</div>' +
         '<div class="danger-zone">' +
           '<button class="danger-btn" data-action="i-ai-usage-reset">清空用量统计</button>' +
@@ -359,7 +354,7 @@
     else if (act === 'i-ai-usage') openAiUsage();
     else if (act === 'i-ai-usage-refresh') refreshBalance();
     else if (act === 'i-ai-usage-reset') { QYA.usageReset(); openAiUsage(); UI().toast('统计已清空'); }
-    else if (act === 'i-ai-price-save') savePrices();
+    else if (act === 'i-ai-price-sync') syncPrices();
   }, true);
 
   function syncFromInput(t) {
