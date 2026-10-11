@@ -265,8 +265,7 @@
   function priceField(id, label, val) {
     return '<div class="field"><label>' + esc(label) + '</label>' +
       '<input id="' + id + '" class="input" type="number" step="0.01" min="0" value="' +
-        (Number(val) || 0) + '" />' +
-      '<div class="field-note">元 / 百万 token</div></div>';
+        (Number(val) || 0) + '" /></div>';
   }
 
   function openAiUsage() {
@@ -276,8 +275,7 @@
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
         '<h3>用量与额度</h3>' +
-        '<p class="hint">token 数是接口原样返回的；金额按下面单价估算。' +
-        '单价请按官网现价填（本 App 不内置可能过期的价格）。</p>' +
+        '<p class="hint">金额按每次请求发生时的时段计价（高峰 / 空闲）</p>' +
         '<div class="group">' +
           kvRow('调用次数', u.calls + ' 次') +
           kvRow('输入 token', n(u.in)) +
@@ -287,16 +285,27 @@
           kvRow('估算费用', u.priced ? '¥' + u.cost.toFixed(4) : '<span style="color:var(--label-3)">未填单价</span>', true) +
         '</div>' +
         '<div class="section"><div class="section-head"><h2>单价设置</h2>' +
-          '<span>改完点保存</span></div>' +
-          priceField('price-in', '输入单价', p.in) +
-          priceField('price-out', '输出单价', p.out) +
-          priceField('price-cache', '缓存命中单价', p.cacheHit) +
+          '<span>元 / 百万 token</span></div>' +
+          '<div class="section-head" style="margin-top:8px">' +
+            '<h2 style="font-size:13px">高峰时段</h2>' +
+            '<span>周一至周五 9-12、14-18</span></div>' +
+          priceField('price-hit', '百万tokens输入（缓存命中）', p.cacheHit) +
+          priceField('price-miss', '百万tokens输入（缓存未命中）', p.in) +
+          priceField('price-out', '百万tokens输出', p.out) +
+          '<div class="section-head" style="margin-top:10px">' +
+            '<h2 style="font-size:13px">空闲时段</h2>' +
+            '<span>其余时间，是高峰价的一半</span></div>' +
+          priceField('price-hit-off', '百万tokens输入（缓存命中）', p.cacheHitOff) +
+          priceField('price-miss-off', '百万tokens输入（缓存未命中）', p.inOff) +
+          priceField('price-out-off', '百万tokens输出', p.outOff) +
         '</div>' +
         '<div class="notice" id="ai-balance">账号余额：点「刷新余额」查询（需要该 Key 支持查询）</div>' +
         '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-ai-usage-reset" style="color:var(--red)">清空统计</button>' +
           '<button class="btn plain" data-action="i-ai-usage-refresh">刷新余额</button>' +
           '<button class="btn primary" data-action="i-ai-price-save">保存单价</button>' +
+        '</div>' +
+        '<div class="danger-zone">' +
+          '<button class="danger-btn" data-action="i-ai-usage-reset">清空用量统计</button>' +
         '</div>' +
       '</div>');
   }
@@ -316,7 +325,14 @@
 
   function savePrices() {
     const num = function (id) { return Number(document.getElementById(id).value) || 0; };
-    QYA.update({ prices: { in: num('price-in'), out: num('price-out'), cacheHit: num('price-cache') } });
+    QYA.update({ prices: {
+      cacheHit: num('price-hit'),
+      in: num('price-miss'),
+      out: num('price-out'),
+      cacheHitOff: num('price-hit-off'),
+      inOff: num('price-miss-off'),
+      outOff: num('price-out-off')
+    } });
     openAiUsage();
     UI().toast('单价已保存');
   }

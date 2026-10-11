@@ -2013,6 +2013,28 @@ input[readonly][data-action] { cursor: pointer; }
   .tabbar { left: 10px; right: 10px; }
 }
 
+/* 危险操作单独放一块，绝不和"保存"并排（避免误触）。
+   一块浅红底 + 居中红字按钮，视觉上明显远离主操作区。 */
+.danger-zone {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  justify-content: center;
+}
+.danger-btn {
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.danger-btn:active { background: rgba(255, 59, 48, 0.12); }
+
 /* 只显示手机（截图 / 单屏预览用）：在 URL 后加 ?bare */
 body.bare .panel { display: none; }
 body.bare .stage { gap: 0; }

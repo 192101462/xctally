@@ -20,6 +20,21 @@
     enabled: true
   };
 
+  /* 单价：DeepSeek 分高峰/空闲两套价（空闲价 = 高峰价的一半）。
+     in/out/cacheHit 沿用为高峰价，*Off 为空闲价。
+     默认值取自官网（deepseek-flash），可在设置里改。 */
+  const PRICE_OFF_DEFAULTS = { inOff: 1, outOff: 4, cacheHitOff: 0.02 };
+
+  /* 高峰时段：北京时间周一至周五 9:00-12:00、14:00-18:00
+     （不含法定节假日 —— 这里没有节假日表，节假日会按高峰算，偏高一点） */
+  function isPeakNow() {
+    const bj = new Date(Date.now() + (new Date().getTimezoneOffset() + 480) * 60000);
+    const day = bj.getDay();
+    if (day === 0 || day === 6) return false;
+    const h = bj.getHours() + bj.getMinutes() / 60;
+    return (h >= 9 && h < 12) || (h >= 14 && h < 18);
+  }
+
   function loadRaw() {
     try {
       return JSON.parse(localStorage.getItem(KEY) || '{}') || {};
@@ -54,7 +69,7 @@
       enabled: c.enabled !== false,
       ball: c.ball || {},
       usage: c.usage || { calls: 0, in: 0, out: 0, cacheHit: 0 },
-      prices: Object.assign({}, DEFAULT_PRICES, c.prices || {})
+      prices: Object.assign({}, DEFAULT_PRICES, PRICE_OFF_DEFAULTS, c.prices || {})
     });
   }
 
@@ -91,12 +106,23 @@
    */
   function addUsage(u) {
     if (!u) return;
-    const cur = loadRaw().usage || { calls: 0, in: 0, out: 0, cacheHit: 0 };
+    const p = cfg().prices;
+    const cur = loadRaw().usage || { calls: 0, in: 0, out: 0, cacheHit: 0, cost: 0 };
+    const hit = u.prompt_cache_hit_tokens || 0;
+    const miss = Math.max(0, (u.prompt_tokens || 0) - hit);
+    const out = u.completion_tokens || 0;
+    // 按【这一次请求发生时的时段】计价：高峰/空闲价不同，
+    // 事后再按总量估算是算不准的，所以直接把钱累加进去
+    const peak = isPeakNow();
+    const unit = peak
+      ? { hit: p.cacheHit, miss: p.in, out: p.out }
+      : { hit: p.cacheHitOff, miss: p.inOff, out: p.outOff };
     cur.calls = (cur.calls || 0) + 1;
     cur.in = (cur.in || 0) + (u.prompt_tokens || 0);
-    cur.out = (cur.out || 0) + (u.completion_tokens || 0);
-    // DeepSeek 会额外给缓存命中量，命中部分便宜很多
-    cur.cacheHit = (cur.cacheHit || 0) + (u.prompt_cache_hit_tokens || 0);
+    cur.out = (cur.out || 0) + out;
+    cur.cacheHit = (cur.cacheHit || 0) + hit;
+    cur.cost = (cur.cost || 0) + (miss * unit.miss + hit * unit.hit + out * unit.out) / 1e6;
+    if (peak) cur.peakCalls = (cur.peakCalls || 0) + 1;
     update({ usage: cur });
   }
 
@@ -105,7 +131,7 @@
     const u = c.usage;
     const p = c.prices;
     const missIn = Math.max(0, (u.in || 0) - (u.cacheHit || 0));
-    const cost = (missIn * p.in + (u.cacheHit || 0) * p.cacheHit + (u.out || 0) * p.out) / 1e6;
+    const est = (missIn * p.in + (u.cacheHit || 0) * p.cacheHit + (u.out || 0) * p.out) / 1e6;
     return {
       calls: u.calls || 0,
       in: u.in || 0,
@@ -113,14 +139,17 @@
       cacheHit: u.cacheHit || 0,
       missIn: missIn,
       total: (u.in || 0) + (u.out || 0),
-      cost: cost,
-      priced: !!(p.in || p.out || p.cacheHit),
+      // 有累计值就用累计值（按时段算过），老记录退回按高峰价估算
+      cost: typeof u.cost === 'number' ? u.cost : est,
+      estimated: typeof u.cost !== 'number',
+      peakCalls: u.peakCalls || 0,
+      priced: !!(p.in || p.out || p.cacheHit || p.inOff || p.outOff || p.cacheHitOff),
       prices: p
     };
   }
 
   function usageReset() {
-    update({ usage: { calls: 0, in: 0, out: 0, cacheHit: 0 } });
+    update({ usage: { calls: 0, in: 0, out: 0, cacheHit: 0, cost: 0, peakCalls: 0 } });
   }
 
   /* 查询账号余额：GET /user/balance（余额、赠送、充值、币种） */

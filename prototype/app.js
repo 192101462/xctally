@@ -1072,7 +1072,7 @@
 
     openSheet('<div class="sheet"><div class="grabber"></div>' +
       '<h3>设置</h3>' +
-      head('AI') +
+      head('AI助手') +
       '<div class="group">' +
         row('i-ai-cfg', '🔑', 'DeepSeek 配置',
           aiCfg && aiCfg.key ? '模型 ' + aiCfg.model : '填 API Key 后开启识图与对话', chev) +
@@ -1244,7 +1244,7 @@
     if (!path.length || path[path.length - 1] === 'root') {
       return setNav('set-close', '我的', '设置', '') +
         '<div class="group" style="margin-top:16px">' +
-          setRow('set-go', 'AI', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
+          setRow('set-go', 'AI助手', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
           setRow('set-go', '外观', { k: 'look', chev: true }) +
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
@@ -1252,7 +1252,7 @@
     }
 
     const top = path[path.length - 1];
-    const titles = { ai: 'AI', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序', theme: '深色模式' };
+    const titles = { ai: 'AI助手', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序', theme: '深色模式' };
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {

@@ -645,10 +645,11 @@
             '<div class="field-note">用逗号分隔，按先后顺序</div></div>' +
           (used ? '<div class="notice">有 ' + used + ' 件物品在用这个分类</div>' : '') +
           '<div class="sheet-actions">' +
-            (isNew ? '' : '<button class="btn plain" data-action="i-cat-del" style="color:var(--red)">删除</button>') +
             '<button class="btn plain" data-action="i-cat-cancel">取消</button>' +
             '<button class="btn primary" data-action="i-cat-save">保存</button>' +
           '</div>' +
+          (isNew ? '' : '<div class="danger-zone">' +
+            '<button class="danger-btn" data-action="i-cat-del">删除这个分类</button></div>') +
         '</div>');
       return;
     }
