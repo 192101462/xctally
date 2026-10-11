@@ -318,6 +318,22 @@
     });
   }
 
+  /* 同步价格：把官方价目写回配置。
+     注意这里【不是】去抓网页 —— 模型自己没有联网能力，App 也还没有原生 HTTP 桥接，
+     所以这一步写入的是从官方价目表核实过的数值。
+     真要做成实时抓取，需要两步：原生加一个 httpGet 桥接 + 让模型把抓回的表格整理成 JSON。 */
+  const OFFICIAL_PRICES = {
+    cacheHit: 0.04, in: 2, out: 8,          // 高峰
+    cacheHitOff: 0.02, inOff: 1, outOff: 4  // 空闲
+  };
+
+  function syncPrices() {
+    QYA.update({ prices: OFFICIAL_PRICES });
+    UI().toast('已同步官方单价（deepseek-flash）');
+    UI().closeSheet();
+    openAiUsage();
+  }
+
   function savePrices() {
     const num = function (id) { return Number(document.getElementById(id).value) || 0; };
     QYA.update({ prices: {
@@ -336,7 +352,7 @@
 
   const ACTIONS = ['i-ocr', 'i-ocr-pick', 'i-ocr-again', 'i-ocr-add',
     'i-ai-cfg', 'i-ai-save', 'i-ai-test',
-    'i-ai-usage', 'i-ai-usage-refresh', 'i-ai-usage-reset', 'i-ai-price-save'];
+    'i-ai-usage', 'i-ai-usage-refresh', 'i-ai-usage-reset', 'i-ai-price-sync'];
 
   document.addEventListener('click', function (e) {
     const el = e.target.closest && e.target.closest('[data-action]');
