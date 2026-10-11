@@ -94,19 +94,31 @@
     if (dx > 0) return 0;
     return Math.max(dx, -(OPEN_RIGHT + 12));
   }
+  /* 文字需要往左走多远才正好停在"行的内容左边界"（原来是缩略图占的位置）。
+     实测而不是写死：以前写死 72，文字会落到 12px 处，被卡片圆角切掉。
+     只在拖动开始时量一次（此时还没有 transform），之后复用，避免量到已经位移过的位置。 */
+  function stopDistance(wrap) {
+    if (wrap.__stop != null) return wrap.__stop;
+    const rowEl = wrap.querySelector('.row');
+    const main = wrap.querySelector('.row-main');
+    let d = CONTENT_STOP;
+    if (rowEl && main) {
+      const padLeft = parseFloat(getComputedStyle(rowEl).paddingLeft) || 18;
+      d = Math.round(main.getBoundingClientRect().left - rowEl.getBoundingClientRect().left - padLeft);
+    }
+    wrap.__stop = Math.max(24, d);
+    return wrap.__stop;
+  }
+
   function setShift(wrap, dx) {
     const body = wrap.querySelector('.swipe-body');
     if (body) body.style.transform = 'translateX(' + dx + 'px)';
 
-    // 文字要停在哪里：让缩略图正好滑出可视区所需的距离。
-    // 实测宽度而不是写死常数 —— 写死的话不同字号/密度下会停错位置。
-    const tile = wrap.querySelector('.tile');
-    const stop = tile ? Math.round(tile.getBoundingClientRect().width + 18) : CONTENT_STOP;
-
     // 两步动画：
     //   第一步 图标和文字一起左移，直到图标滑出可视区；
-    //   第二步 文字用等量反向位移"钉住"（不再跟着往左跑），
+    //   第二步 文字用等量反向位移"钉住"，正好停在内容左边界（留出和圆角的距离），
     //          同时结构切成上下两行，保证名称和金额始终看得见。
+    const stop = stopDistance(wrap);
     const over = Math.max(0, -dx - stop);
     const shift = over ? 'translateX(' + over + 'px)' : '';
     const main = wrap.querySelector('.row-main');
@@ -130,6 +142,7 @@
     if (main) main.style.transform = '';
     if (side) side.style.transform = '';
     if (row) row.style.minHeight = '';
+    wrap.__stop = null;
     const body = wrap.querySelector('.swipe-body');
     if (!body) return;
     if (instant) body.style.transition = 'none';

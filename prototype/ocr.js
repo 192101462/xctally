@@ -296,9 +296,6 @@
           '<div class="mini-foot" style="padding:10px 4px 0">高峰：周一至周五 9-12、14-18；' +
             '其余时间（含周末）为空闲，空闲价是高峰的一半</div>' +
         '</div>' +
-        '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-ai-usage-refresh">刷新余额</button>' +
-        '</div>' +
         '<div class="danger-zone">' +
           '<button class="danger-btn" data-action="i-ai-usage-reset">清空用量统计</button>' +
         '</div>' +
@@ -352,7 +349,7 @@
 
   const ACTIONS = ['i-ocr', 'i-ocr-pick', 'i-ocr-again', 'i-ocr-add',
     'i-ai-cfg', 'i-ai-save', 'i-ai-test',
-    'i-ai-usage', 'i-ai-usage-refresh', 'i-ai-usage-reset', 'i-ai-price-sync'];
+    'i-ai-usage', 'i-ai-usage-reset', 'i-ai-price-sync'];
 
   document.addEventListener('click', function (e) {
     const el = e.target.closest && e.target.closest('[data-action]');
