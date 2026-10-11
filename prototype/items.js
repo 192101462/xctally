@@ -1161,9 +1161,85 @@
     if (l && e.target === l) l.remove();
   }, true);
 
-  // 供其它模块复用（收藏、助手等）：别再用 window.confirm —— 安卓 WebView 默认
-  // 不显示 JS 对话框，而且原生样式和 App 不搭
-  window.QYDialog = { confirm: confirmSheet };
+  /* ---------------- 通用浮层 API ----------------
+   * 全 App 只有这一套：底部弹出的选择器、居中卡片的确认/输入/日期。
+   * 之前每个模块各写各的（原生 select / window.prompt / window.confirm），
+   * 结果样式不统一、安卓 WebView 里还会出现"点不动、位置错"的各种问题。
+   */
+  function mountLayer(html, center) {
+    const old = document.getElementById('picker-layer');
+    if (old) old.remove();
+    const layer = document.createElement('div');
+    layer.className = 'picker-layer' + (center ? ' center' : '');
+    layer.id = 'picker-layer';
+    layer.innerHTML = html;
+    layer.addEventListener('click', function (e) {
+      if (e.target === layer) layer.remove();       // 点暗背景关闭
+    });
+    document.body.appendChild(layer);
+    return layer;
+  }
+
+  /* { title, options:[{v,t,e}], current, onPick } */
+  function openChooser(opts) {
+    opts = opts || {};
+    const list = (opts.options || []).map(function (o) {
+      return '<div class="picker-opt' + (o.v === opts.current ? ' on' : '') +
+        '" data-choose="' + esc(o.v) + '">' +
+        (o.e ? '<span style="font-size:17px">' + o.e + '</span>' : '') +
+        '<span>' + esc(o.t) + '</span>' +
+        (o.v === opts.current ? '<span class="tick">✓</span>' : '') + '</div>';
+    }).join('');
+    const layer = mountLayer(
+      '<div class="picker-head"><b>' + esc(opts.title || '选择') + '</b>' +
+        '<button class="btn plain" data-choose-close="1" style="padding:6px 14px">关闭</button></div>' +
+      '<div class="picker-list">' + list + '</div>');
+    layer.addEventListener('click', function (e) {
+      const c = e.target.closest && e.target.closest('[data-choose]');
+      if (c) {
+        const v = c.getAttribute('data-choose');
+        layer.remove();
+        if (opts.onPick) opts.onPick(v);
+        return;
+      }
+      if (e.target.closest && e.target.closest('[data-choose-close]')) layer.remove();
+    });
+  }
+
+  /* 文本输入对话框：{ title, value, placeholder, onOk } */
+  function textDialog(opts) {
+    opts = opts || {};
+    const layer = mountLayer(
+      '<div class="picker-card">' +
+        '<h3>' + esc(opts.title || '输入') + '</h3>' +
+        '<input id="qy-text-input" class="input" value="' + esc(opts.value || '') +
+          '" placeholder="' + esc(opts.placeholder || '') + '" />' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-choose-close="1">取消</button>' +
+          '<button class="btn primary" data-qy-text-ok="1">确定</button>' +
+        '</div>' +
+      '</div>', true);
+    const inp = layer.querySelector('#qy-text-input');
+    if (inp) { inp.focus(); inp.select(); }
+    layer.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-choose-close]')) { layer.remove(); return; }
+      if (e.target.closest && e.target.closest('[data-qy-text-ok]')) {
+        const v = inp ? inp.value : '';
+        layer.remove();
+        if (opts.onOk) opts.onOk(String(v).trim());
+      }
+    });
+  }
+
+  /* 供其它模块复用（收藏、助手等）
+   * choose(选择器) / confirm(确认) / text(文本输入) / date(日期) */
+  window.QYDialog = {
+    confirm: confirmSheet,
+    choose: openChooser,
+    text: textDialog,
+    date: openDatePicker,
+    mount: mountLayer
+  };
 
   // 用户手动动过"计入日均成本"开关后，切换分类不再覆盖它
   document.addEventListener('qy-costtouch', function () { formCostTouched = true; });

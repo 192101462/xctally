@@ -612,9 +612,10 @@
     } else if (k === 'link') {
       inner = '<input class="input" id="p-link" placeholder="https://" value="' + esc(v || '') + '" />';
     } else if (k === 'mood') {
-      inner = '<select class="select" id="p-mood">' + MOODS.map(function (m) {
-        return '<option' + (m === v ? ' selected' : '') + '>' + m + '</option>';
-      }).join('') + '</select>';
+      inner = '<button type="button" class="picker-field" data-action="c-pick" data-target="p-mood"' +
+        ' data-list="moods" data-label="pf-p-mood" data-title="心情">' +
+        '<span id="pf-p-mood">' + esc(v || MOODS[0]) + '</span><span class="chev">›</span></button>' +
+        '<input type="hidden" id="p-mood" value="' + esc(v || MOODS[0]) + '" />';
     }
     return '<div class="field plugin-field" data-plugin="' + k + '">' +
       '<label>' + p.icon + ' ' + p.name +
@@ -654,9 +655,13 @@
 
         '<div class="field-row">' +
           '<div class="field"><label>分类</label>' +
-            '<select id="c-cat" class="select">' + catOptions(e.cat) + '</select></div>' +
+            '<button type="button" class="picker-field" data-action="c-pick" data-target="c-cat"' +
+              ' data-list="cats" data-label="pf-c-cat" data-title="分类">' +
+              '<span id="pf-c-cat">' + esc(e.cat || '') + '</span><span class="chev">›</span></button>' +
+            '<input type="hidden" id="c-cat" value="' + esc(e.cat || '') + '" /></div>' +
           '<div class="field"><label>日期</label>' +
-            '<input id="c-date" class="input" type="date" value="' + e.date + '" /></div>' +
+            '<input id="c-date" class="input" type="date" readonly data-action="i-date"' +
+              ' data-target="c-date" value="' + e.date + '" /></div>' +
         '</div>' +
 
         '<div class="field"><label>插件</label>' +
@@ -1261,6 +1266,33 @@
     }
     return false;
   }
+
+  /* 统一的选择器入口：和物品表单用同一套浮层（QYDialog.choose）
+     data-target = 隐藏输入 id，data-list = 选项来源（cats / moods），
+     data-label = 选完要更新的文字元素 id */
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest && e.target.closest('[data-action="c-pick"]');
+    if (!el) return;
+    e.stopPropagation();
+    const target = el.getAttribute('data-target');
+    const list = el.getAttribute('data-list');
+    const labelId = el.getAttribute('data-label');
+    const input = document.getElementById(target);
+    const options = list === 'cats'
+      ? db.cats.map(function (c) { return { v: c.name, t: c.name, e: c.emoji }; })
+      : MOODS.map(function (m) { return { v: m, t: m }; });
+    if (!window.QYDialog) return;
+    window.QYDialog.choose({
+      title: el.getAttribute('data-title') || '选择',
+      options: options,
+      current: input ? input.value : '',
+      onPick: function (v) {
+        if (input) input.value = v;
+        const lbl = document.getElementById(labelId);
+        if (lbl) lbl.textContent = v;
+      }
+    });
+  }, true);
 
   window.QYV = {
     renderList: renderList,

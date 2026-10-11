@@ -633,16 +633,18 @@
   }
 
   function readingFormHTML(meterId) {
-    const opts = data.meters.map(function (m) {
-      return '<option value="' + m.id + '"' + (m.id === meterId ? ' selected' : '') + '>' +
-        m.name + '（' + m.unit + '）</option>';
-    }).join('');
+    const meters = data.meters || [];
+    const cur = meters.filter(function (m) { return m.id === meterId; })[0] || meters[0] || {};
     return '' +
       '<div class="sheet">' +
         '<div class="grabber"></div>' +
         '<h3>抄表 / 记一笔</h3>' +
         '<p class="hint">记下读数，阶梯价和趋势自动算</p>' +
-        '<div class="field"><label>表具</label><select id="f-meter" class="select">' + opts + '</select></div>' +
+        '<div class="field"><label>表具</label>' +
+          '<button type="button" class="picker-field" data-action="pick-meter">' +
+            '<span id="pf-meter">' + esc(cur.name ? cur.name + '（' + cur.unit + '）' : '选择表具') + '</span>' +
+            '<span class="chev">›</span></button>' +
+          '<input type="hidden" id="f-meter" value="' + (cur.id || '') + '" /></div>' +
         '<div class="field"><label>本月用量</label>' +
           '<input id="f-usage" class="input" type="number" step="0.1" placeholder="例如：236" /></div>' +
         '<div class="sheet-actions">' +
@@ -907,6 +909,22 @@
       closeSheet();
     } else if (action === 'save-item') {
       saveItem();
+    } else if (action === 'pick-meter') {
+      const cur = ($('#f-meter') || {}).value;
+      window.QYDialog.choose({
+        title: '选择表具',
+        current: cur,
+        options: (data.meters || []).map(function (m) {
+          return { v: m.id, t: m.name + '（' + m.unit + '）' };
+        }),
+        onPick: function (v) {
+          const box = $('#f-meter');
+          if (box) box.value = v;
+          const lbl = $('#pf-meter');
+          const m = (data.meters || []).filter(function (x) { return x.id === v; })[0];
+          if (lbl && m) lbl.textContent = m.name + '（' + m.unit + '）';
+        }
+      });
     } else if (action === 'save-reading') {
       saveReading();
     } else if (action === 'toggle-more') {
