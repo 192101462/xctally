@@ -1016,6 +1016,25 @@
   /* ---------------- 交互 ---------------- */
 
   function newCategory() {
+    // 用 App 自己的输入框，不用 window.prompt（安卓 WebView 里原生弹窗样式不搭）
+    if (window.QYDialog) {
+      window.QYDialog.text({
+        title: '新分类的名字',
+        placeholder: '例如：咖啡',
+        onOk: function (name) {
+          const clean = String(name || '').trim();
+          if (!clean) return;
+          if (!db.cats.some(function (c) { return c.name === clean; })) {
+            db.cats.push({ name: clean, emoji: '📁' });
+            save();
+          }
+          UI().toast('已添加分类「' + clean + '」');
+          UI().closeSheet();
+          UI().mount();
+        }
+      });
+      return null;
+    }
     const name = window.prompt('新分类的名字？', '');
     if (!name) return null;
     const clean = name.trim();
@@ -1134,12 +1153,19 @@
     } else if (action === 'c-del') {
       const e = byId(id);
       if (!e) return true;
-      if (!window.confirm('删除「' + e.title + '」？此操作不可撤销。')) return true;
-      db.entries = db.entries.filter(function (x) { return x.id !== id; });
-      save();
-      state.detailId = null;
-      UI().mount();
-      UI().toast('已删除');
+      const doDel = function () {
+        db.entries = db.entries.filter(function (x) { return x.id !== id; });
+        save();
+        state.detailId = null;
+        UI().mount();
+        UI().toast('已删除');
+      };
+      if (window.QYDialog) {
+        window.QYDialog.confirm('删除「' + e.title + '」？此操作不可撤销。',
+          { title: '删除随笔', ok: '删除', danger: true }).then(function (ok) { if (ok) doDel(); });
+      } else if (window.confirm('删除「' + e.title + '」？此操作不可撤销。')) {
+        doDel();
+      }
     }
     return true;
   }
