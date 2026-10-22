@@ -53,7 +53,8 @@ keyPassword=你刚设的口令
 2. 新建一个**公开**仓库（名字随意，如 `xctally`；公开仓库 Actions 不限时）
 3. 生成 GitHub 私人令牌（给 gitee 镜像推送用）：头像 → Settings → Developer settings →
    Personal access tokens → **Tokens (classic)** → Generate new token
-   - 权限只勾一个大项：**`repo`**（推送代码必需；它包含读改仓库的完整权限）
+   - 权限勾两项：**`repo`** 和 **`workflow`**（repo=读写代码；workflow=允许推送
+     含 `.github/workflows/` 的提交，少勾会报 refusing to allow ... without workflow scope）
    - 有效期建议设 No expiration 或 90 天以上，到期换了再更新 gitee 镜像密码
    - 生成后**立即复制**（只显示一次），这就是下一步填进 gitee 镜像的密码
 
