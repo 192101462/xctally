@@ -16,9 +16,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 1.1），留空则只构建不发布'
+        description: '版本号（如 1.2），留空则只构建不发布'
         required: false
         default: ''
+      notes:
+        description: '更新说明（每行一条）。同一份文字会显示在 gitee 发行版说明和 App 内"检查更新"弹窗'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build-and-release:
@@ -43,14 +48,24 @@ jobs:
 
       - name: Set version from tag
         id: ver
+        env:
+          INPUT_NOTES: ${{ github.event.inputs.notes }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             VER="${GITHUB_REF_NAME#v}"
+            # 标签触发没有输入框：用标签说明当发行版说明
+            NOTES="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | tr -d '\r')"
           else
             VER="${{ github.event.inputs.version }}"
+            NOTES="$INPUT_NOTES"
           fi
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
-          echo "publish=$( [ -n "$VER" ] && echo yes || echo no )" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$VER"
+            echo "publish=$( [ -n "$VER" ] && echo yes || echo no )"
+            echo "notes<<NOTES_EOF"
+            printf '%s\n' "$NOTES"
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # 版本号处理 + 产出 versionCode：ci_publish.py bump 负责改 build.gradle.kts
       - name: Bump versionCode / versionName
@@ -80,15 +95,17 @@ jobs:
         run: ls -la apps/android/app/build/outputs/apk/release/
 
       # 发布回 gitee：建 Release + 传 APK + 更新 version.json 并推回
+      # （notes 走 env 避免 shell 引号/换行被吃掉）
       - name: Publish to Gitee
         if: steps.ver.outputs.publish == 'yes'
         run: |
           python tools/ci_publish.py publish \
             --version "${{ steps.ver.outputs.version }}" \
             --apk apps/android/app/build/outputs/apk/release/app-release.apk \
-            --notes "见标签说明"
+            --notes "$REL_NOTES"
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          REL_NOTES: ${{ steps.ver.outputs.notes }}
 
       - name: Upload APK artifact (workflow 手动触发/留档)
         uses: actions/upload-artifact@v4

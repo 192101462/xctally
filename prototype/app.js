@@ -1369,6 +1369,21 @@
    * 原生检查完回调 window.QYUpd.onResult(json)：
    *   {code:'update', versionName, notes, apkUrl} | {code:'latest'} | {code:'error'}
    */
+  /* 更新说明排版：发行版说明的每行一条（支持 - / • / 、 开头的清单写法），
+     同一份文字也会出现在 gitee 发行版页面上 */
+  function updNotesHtml(raw) {
+    if (!raw) return '没有填写更新说明。';
+    const lines = String(raw).split(/\r?\n/)
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean)
+      .map(function (s) { return s.replace(/^[-•*、]\s*/, ''); })
+      .filter(Boolean);
+    if (!lines.length) return '没有填写更新说明。';
+    return lines.map(function (s) {
+      return '<div class="upd-note-line">' + esc(s) + '</div>';
+    }).join('');
+  }
+
   window.QYUpd = {
     onResult: function (json) {
       let r;
@@ -1378,9 +1393,7 @@
         openSheet('' +
           '<div class="sheet"><div class="grabber"></div>' +
             '<h3>发现新版本 v' + esc(r.versionName || '') + '</h3>' +
-            '<div class="notice" style="margin:12px 0">' +
-              (r.notes ? esc(r.notes).replace(/\n/g, '<br>') : '没有填写更新说明。') +
-            '</div>' +
+            '<div class="upd-notes">' + updNotesHtml(r.notes) + '</div>' +
             '<div class="sheet-actions">' +
               '<button class="btn plain" data-action="upd-later">以后再说</button>' +
               '<button class="btn primary" data-action="upd-download" data-url="' + esc(r.apkUrl || '') + '">下载并安装</button>' +

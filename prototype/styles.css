@@ -862,6 +862,30 @@ html.no-anim .to-top { transition: none !important; }
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+/* 检查更新弹窗里的更新说明：发行版说明每行一条，前面带个小圆点 */
+.upd-notes {
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: var(--fill);
+  border-radius: var(--r-md);
+  color: var(--label-2);
+  font-size: 14px;
+  line-height: 1.5;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.upd-note-line { position: relative; padding-left: 14px; }
+.upd-note-line + .upd-note-line { margin-top: 6px; }
+.upd-note-line::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--label-3);
+}
 .sheet .hint {
   margin: 0 0 18px;
   font-size: 12.5px;
