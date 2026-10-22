@@ -117,14 +117,16 @@ def api(url, token, data=None, is_json=True, multipart=None):
         fields = dict(data)
         fields["access_token"] = token
         for k, v in fields.items():
-            parts.append(('--%s\r\nContent-Disposition: form-data; name="%s"\r\n\r\n%s'
+            parts.append(('--%s\r\nContent-Disposition: form-data; name="%s"\r\n\r\n%s\r\n'
                           % (bound, k, v)).encode())
         if multipart:
             fn, blob = multipart
             parts.append(('--%s\r\nContent-Disposition: form-data; name="file"; '
                           'filename="%s"\r\nContent-Type: application/octet-stream\r\n\r\n'
                           % (bound, fn)).encode() + blob + b"\r\n")
-        body = b"\r\n".join(parts) + b"\r\n--%s--\r\n" % bound.encode()
+        # 分片自带结尾 CRLF，直接拼接；不要用 \r\n join（会给二进制内容追加字节，
+        # APK 末尾多出 \r\n 会让严格解析器拒装——卓易通"解析包时出现问题"的教训）
+        body = b"".join(parts) + ("--%s--\r\n" % bound).encode()
         req = urllib.request.Request(url, data=body,
                                      headers={"Content-Type": "multipart/form-data; boundary=" + bound})
     try:
