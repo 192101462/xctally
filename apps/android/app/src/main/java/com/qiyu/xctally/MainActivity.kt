@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Base64
+import android.util.DisplayMetrics
 import android.webkit.JavascriptInterface
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
@@ -311,6 +312,16 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.requestApplyInsets(webView)
 
+        // 部分兼容层（如鸿蒙卓易通）不尊重 setDecorFitsSystemWindows(true)，
+        // WebView 会整屏铺开、内容钻到状态栏/导航栏底下。这里【实测】WebView
+        // 与系统栏重叠了多少像素，通过桥推给网页写进 --safe-top/--safe-bottom。
+        // 标准安卓上窗口本来就让位了，重叠量是 0，一切照旧；只有重叠时网页才留白。
+        ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
+            pushInsets()
+            insets
+        }
+        webView.post { pushInsets() }   // 有的兼容层不派发 insets，布局后主动量一次
+
         // 返回键：先关面板 → 再回上一层 → 都没有才退出
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -456,6 +467,61 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread { Toast.makeText(this, msg, Toast.LENGTH_SHORT).show() }
     }
 
+    /* ---------------- 系统栏重叠量 ----------------
+     * 返回 (topPx, bottomPx)：WebView 边缘伸进系统栏区域的像素数。
+     * 让位正常时都是 0；被兼容层忽略时 top = 状态栏高、bottom = 导航栏高。
+     */
+
+    private var lastTopCss = 0.0
+    private var lastBottomCss = 0.0
+
+    private fun realScreenHeight(): Int = if (Build.VERSION.SDK_INT >= 30) {
+        windowManager.currentWindowMetrics.bounds.height()
+    } else {
+        val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        webView.display.getRealMetrics(dm)
+        dm.heightPixels
+    }
+
+    /** 只能在 UI 线程调（要读 View 位置和 rootWindowInsets） */
+    private fun measureBarOverlap(): Pair<Int, Int> {
+        return try {
+            val root = webView.rootWindowInsets
+                ?: return Pair(0, 0)
+            val bars = WindowInsetsCompat.toWindowInsetsCompat(root).getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val loc = IntArray(2)
+            webView.getLocationOnScreen(loc)
+            val top = (bars.top - loc[1]).coerceIn(0, bars.top)
+            val bottom = (loc[1] + webView.height - (realScreenHeight() - bars.bottom))
+                .coerceIn(0, bars.bottom)
+            Pair(top, bottom)
+        } catch (e: Exception) {
+            Pair(0, 0)
+        }
+    }
+
+    private fun cssRound(px: Int): Double {
+        val d = resources.displayMetrics.density
+        return Math.round(px / d * 10.0) / 10.0
+    }
+
+    /** 量一遍重叠量，变了就推给网页（网页没起来时静默跳过，开机时会自己拉） */
+    private fun pushInsets() {
+        val (topPx, bottomPx) = measureBarOverlap()
+        val top = cssRound(topPx)
+        val bottom = cssRound(bottomPx)
+        if (top == lastTopCss && bottom == lastBottomCss) return
+        lastTopCss = top
+        lastBottomCss = bottom
+        webView.evaluateJavascript(
+            "window.QYPlatform && QYPlatform._applyInsets && QYPlatform._applyInsets($top,$bottom)",
+            null
+        )
+    }
+
     /**
      * 暴露给网页的原生能力（网页里是 window.QYAndroid）
      * 注意：@JavascriptInterface 的方法参数只允许基本类型与字符串。
@@ -558,6 +624,44 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             downloadUpdateInternal(url)
+        }
+
+        /**
+         * 系统栏重叠量（css px），开机时网页拉一次做初始布局；
+         * 之后若有变化（旋转、折叠）由 pushInsets 主动推 _applyInsets。
+         * 读的是 UI 线程量好缓存的值，桥线程直接返回。
+         */
+        @JavascriptInterface
+        fun insets(): String =
+            JSONObject().put("top", lastTopCss).put("bottom", lastBottomCss).toString()
+
+        /** 当前安装版本（versionName），网页"检查更新"一行显示用 */
+        @JavascriptInterface
+        fun appVersion(): String = try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+
+        /**
+         * 主题切换时同步系统栏和 WebView 底色：
+         * 兼容层没让网页铺满屏幕时，露出来的边缘用主题色兜底，不会再露白条。
+         */
+        @JavascriptInterface
+        fun setSystemBars(dark: Boolean) {
+            runOnUiThread {
+                val bg = if (dark) 0xFF000000.toInt() else 0xFFF2F2F7.toInt()
+                try {
+                    @Suppress("DEPRECATION")
+                    window.statusBarColor = bg
+                    @Suppress("DEPRECATION")
+                    window.navigationBarColor = bg
+                } catch (e: Exception) {
+                    // Android 15+ 上这两个是空操作，忽略
+                }
+                webView.setBackgroundColor(bg)
+                window.decorView.setBackgroundColor(bg)
+            }
         }
     }
 

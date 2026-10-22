@@ -291,12 +291,12 @@
       '<div class="page-top">' +
         UI().pageHead('物品', s.count + ' 件在用 · 累计投入 ' + QY.fmtMoney(s.totalSpend),
           UI().iconBtn('i-add', '新增')) +
-        '<div class="segmented" style="margin-bottom:10px">' + seg + '</div>' +
+        // 搜索钉在固定区（紧凑样式见 .page-top .search）：列表滚动时也能随时搜
+        '<div class="search">' + UI().I.search +
+          '<input id="i-search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
+        '</div>' +
+        '<div class="segmented" style="margin-bottom:8px;margin-top:10px">' + seg + '</div>' +
         '<div class="chips">' + chips + '</div>' +
-      '</div>' +
-      // 搜索是低频操作，不占固定区 —— 跟随列表滚动，给内容多留高度
-      '<div class="search">' + UI().I.search +
-        '<input id="i-search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
       '</div>' +
       '<div class="group" id="i-list">' + renderListInner() + '</div>';
   }

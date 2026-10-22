@@ -52,7 +52,7 @@ struct Index {
         .javaScriptProxy({
           object: this.bridge,
           name: 'QYHarmony',
-          methodList: ['isApp', 'toast', 'saveFile', 'shareLastFile', 'pickFile', 'pickImage', 'scheduleReminders'],
+          methodList: ['isApp', 'toast', 'appVersion', 'saveFile', 'shareLastFile', 'pickFile', 'pickImage', 'scheduleReminders'],
           controller: this.controller
         })
         .width('100%')

@@ -138,6 +138,55 @@
       if (native && native.shareLastFile) {
         try { native.shareLastFile(); } catch (err) { /* 忽略 */ }
       }
+    },
+
+    /* 系统栏与 WebView 的重叠量（css px）：兼容层（卓易通等）不让位时才非 0。
+     * 拿到后写 --safe-top/--safe-bottom，CSS 据此留白。 */
+    insets: function () {
+      if (native && native.insets) {
+        try {
+          const v = JSON.parse(native.insets());
+          if (isFinite(v.top) && isFinite(v.bottom)) return { top: v.top, bottom: v.bottom };
+        } catch (err) { /* 落到 env() 兜底 */ }
+      }
+      return null;
+    },
+
+    /* 原生侧量到重叠量变化时回调（由原生调用） */
+    _applyInsets: function (top, bottom) {
+      applyInsets(top, bottom);
+    },
+
+    /* 已安装的 App 版本（原生 versionName），没有原生时为空串 */
+    appVersion: function () {
+      if (native && native.appVersion) {
+        try { return String(native.appVersion() || ''); } catch (err) { /* 忽略 */ }
+      }
+      return '';
+    },
+
+    /* 主题变化时让系统栏/窗口底色跟着换，兼容层没铺满的边缘不露白 */
+    setSystemBars: function (dark) {
+      if (native && native.setSystemBars) {
+        try { native.setSystemBars(!!dark); } catch (err) { /* 忽略 */ }
+      }
     }
   };
+
+  /* 把重叠量写成 CSS 变量；原生壳里启动拉一次，之后变化由原生推 _applyInsets */
+  function applyInsets(top, bottom) {
+    const root = document.documentElement;
+    if (isFinite(top)) root.style.setProperty('--safe-top', Math.max(0, top) + 'px');
+    if (isFinite(bottom)) root.style.setProperty('--safe-bottom', Math.max(0, bottom) + 'px');
+    // 页头实测高度依赖安全区，重算一次回顶长条落点
+    if (window.QYApp && QYApp.remeasurePin) QYApp.remeasurePin();
+  }
+  if (native) {
+    const boot = function () {
+      const v = window.QYPlatform.insets();
+      if (v) applyInsets(v.top, v.bottom);
+    };
+    if (document.body) boot();
+    else document.addEventListener('DOMContentLoaded', boot);
+  }
 })();

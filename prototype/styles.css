@@ -7,6 +7,10 @@
  */
 
 :root {
+  /* 安全区：默认用浏览器 env()；原生壳里 JS 会用实测值覆写
+     （有的兼容层 WebView 铺到状态栏底下却报不出 env()，只能靠原生量） */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* 颜色 · 浅色 */
   --bg: #f2f2f7;
   --bg-tint-1: #e8ecf6;
@@ -80,6 +84,11 @@ html[data-theme="dark"] {
 html, body {
   margin: 0;
   height: 100%;
+}
+
+/* WebView 铺不满的边缘（兼容层）用页面底色兜底，不再露白 */
+html {
+  background: var(--bg);
 }
 
 body {
@@ -223,18 +232,18 @@ body {
 .tile .qi { color: rgba(28, 28, 30, 0.68); }
 html[data-theme="dark"] .tile .qi { color: rgba(242, 242, 247, 0.78); }
 
-/* 原生壳的顶部结构条：只负责给状态栏下方留出固定空位
-   （安卓壳 42px；浏览器预览里额外垫 24px 模拟状态栏位）。
-   页面标题本身固定在 .page-top 里，不在这里显示。 */
+/* 原生壳的顶部结构条：高度 = 状态栏安全区。
+   标准安卓窗口自己让位，这里高度为 0；兼容层（卓易通）WebView 铺到状态栏
+   底下时，原生会把实测重叠量写进 --safe-top，这条就变成不透明的"状态栏背板"，
+   滚动内容不可能从它底下透出来。页面标题本身固定在 .page-top 里。 */
 .appbar {
   display: none;              /* 浏览器演示模式不占位 */
 }
 html.app-mode .appbar {
-  display: flex;
+  display: block;
   flex: none;
-  align-items: center;
-  justify-content: center;
-  height: 42px;
+  height: var(--safe-top, 0px);
+  background: var(--bg);
   position: relative;
   z-index: 4;
 }
@@ -493,6 +502,14 @@ html.app-mode .appbar {
   margin-bottom: 14px;
   color: var(--label-3);
 }
+/* 固定页头里的搜索：更矮、圆角稍大，占一行但不吃掉太多内容高度 */
+.page-top .search {
+  padding: 7px 12px;
+  margin: 10px 0 0;
+  border-radius: 12px;
+}
+.page-top .search .qi { width: 15px; height: 15px; }
+.page-top .search input { font-size: 14.5px; }
 .search input {
   flex: 1;
   border: 0;
@@ -679,7 +696,7 @@ html.app-mode .appbar {
   position: absolute;
   left: 16px;
   right: 16px;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(10px + var(--safe-bottom, 0px));
   height: 58px;
   display: flex;
   align-items: center;
@@ -1289,20 +1306,14 @@ html.app-mode .screen { border-radius: 0; }
 html.app-mode .screen::after { display: none; }   /* 灵动岛 */
 html.app-mode .statusbar { display: none; }        /* 假的 9:41 */
 html.app-mode .home-indicator { display: none; }
-/* 安卓壳：MainActivity 用 setDecorFitsSystemWindows(true) 退出了 edge-to-edge，
-   WebView 整体在状态栏下方。env() 仍然保留兜底。 */
+/* 安卓/鸿蒙壳：顶部安全区由 .appbar（--safe-top）占位，.view 只留内容间距；
+   底部把导航条安全区加进滚动余量。浏览器 ?app=1 预览同样走这套。 */
 html.app-mode.shell-android .view,
-html.app-mode.shell-harmony .view {
-  --view-top: 14px;
-  padding-top: calc(var(--view-top) + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
-}
-/* 其余环境（浏览器 ?app=1 预览）：顶部占位与真机一致，
-   预览的意义是看真实 App 效果，不再额外垫"状态栏位" */
+html.app-mode.shell-harmony .view,
 html.app-mode .view {
-  --view-top: 14px;
-  padding-top: calc(var(--view-top) + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  --view-top: 10px;
+  padding-top: var(--view-top);
+  padding-bottom: calc(132px + var(--safe-bottom, 0px));
 }
 /* 页头固定区：大标题（和物品页的筛选控件）钉在滚动区顶部，只有下面的列表动。
    注意：sticky 的吸附约束按 margin box 计算，而我们有负 margin-top（抵掉 .view 的
@@ -1317,10 +1328,10 @@ html.app-mode .view {
   padding: var(--view-top, 22px) 18px 6px;
 }
 html.app-mode .tabbar {
-  height: calc(64px + env(safe-area-inset-bottom, 0px));
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  height: calc(64px + var(--safe-bottom, 0px));
+  padding-bottom: var(--safe-bottom, 0px);
 }
-html.app-mode .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+html.app-mode .toast { bottom: calc(96px + var(--safe-bottom, 0px)); }
 
 /* ---------------- 物品模块（items.js） ---------------- */
 
@@ -1382,7 +1393,7 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
   max-height: 58vh;
   overflow-y: auto;
   background: var(--sheet);
-  padding: 0 12px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding: 0 12px calc(16px + var(--safe-bottom, 0px));
 }
 /* 居中的卡片形态（确认框、日期选择这类小内容） */
 .picker-layer.center {
@@ -1824,7 +1835,7 @@ html.scrolling .ai-ball { transition: none; }
   position: fixed;
   /* 顶部是固定的页头（.page-top），长条要落在它下面：
      --pin-h 由 JS 渲染后按实际页头高度写入 */
-  top: calc(var(--pin-h, 120px) + 12px + env(safe-area-inset-top, 0px));
+  top: calc(var(--pin-h, 120px) + 12px + var(--safe-top, 0px));
   left: 50%;
   transform: translate(-50%, -16px);
   opacity: 0;
@@ -1906,7 +1917,7 @@ html.sheet-open .ai-ball {
 .ball-trash {
   position: fixed;
   left: 50%;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(96px + var(--safe-bottom, 0px));
   transform: translate(-50%, 12px) scale(0.8);
   width: 58px;
   height: 58px;
@@ -1932,7 +1943,7 @@ html.sheet-open .ai-ball {
 .ball-hint {
   position: fixed;
   left: 50%;
-  bottom: calc(96px + 58px + 12px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(96px + 58px + 12px + var(--safe-bottom, 0px));
   transform: translate(-50%, 8px);
   white-space: nowrap;
   padding: 7px 14px;

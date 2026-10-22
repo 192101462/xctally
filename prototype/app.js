@@ -15,9 +15,13 @@
 
   let data = QY.load();
   const state = { tab: 'home', detailId: null, category: '全部', query: '' };
-  // 网页版本号（发版时与 apps/android 的 versionName 一起改；
-  // App 内检查更新走原生比对 versionCode，这里只用于"当前 v?"的展示）
-  const APP_VERSION = '1.0';
+  // 网页版本号只是兜底：优先用原生注入的 versionName（发版后不会再出现
+  // "装的明明是 1.2、设置里却写当前 v1.0"的错位）
+  const APP_VERSION = '1.2';
+  function currentVersion() {
+    const v = (window.QYPlatform && QYPlatform.appVersion && QYPlatform.appVersion()) || '';
+    return v || APP_VERSION;
+  }
 
   function save() { QY.save(data); }
   function itemById(id) {
@@ -95,7 +99,12 @@
   function applyTheme() {
     const mode = ui().theme || 'auto';
     const dark = mode === 'dark' || (mode === 'auto' && systemPrefersDark());
+    setThemeAttr(dark);
+  }
+  function setThemeAttr(dark) {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    // 让原生把系统栏/窗口底色换成主题色：兼容层没让网页铺满时，边缘不露白条
+    if (window.QYPlatform && QYPlatform.setSystemBars) QYPlatform.setSystemBars(dark);
   }
 
   const ITEMS_SORTS = [
@@ -781,11 +790,19 @@
     }
   }
 
+  /* 实测固定页头高度，喂给回顶长条的落点（--pin-h）：
+     物品页的固定区带筛选和搜索，比首页高得多，写死会挡住内容。
+     安全区变化时（原生推 _applyInsets）也要重算一次。 */
+  function remeasurePin() {
+    const pin = $('#view .page-top');
+    document.documentElement.style.setProperty('--pin-h', (pin ? pin.offsetHeight : 0) + 'px');
+  }
+  window.QYApp = { remeasurePin: remeasurePin };
+
   function mount() {
     const view = $('#view');
     const QYV = window.QYV;
-    const QYI = window.QYI;
-    // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
+    const QYI = window.QYI;    // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
     if (window.QYO && QYO.syncBall) QYO.syncBall();
     // 当前页被隐藏了就回首页（"我的"永远可见，不受影响）
     if (!state.setting && state.tab !== 'me' && !tabVisible(state.tab)) state.tab = 'home';
@@ -808,10 +825,7 @@
       html = viewMe();
     }
     view.innerHTML = html;
-    // 实测固定页头高度，喂给回顶长条的落点（--pin-h）：
-    // 物品页的固定区带筛选控件，比首页高得多，写死会挡住内容
-    const pin = view.querySelector('.page-top');
-    document.documentElement.style.setProperty('--pin-h', (pin ? pin.offsetHeight : 0) + 'px');
+    remeasurePin();
     // 余额在首页卡片上查，这里不再自动拉取
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
@@ -969,7 +983,7 @@
       mount();
     } else if (action === 'set-theme') {
       const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      document.documentElement.setAttribute('data-theme', nowDark ? 'light' : 'dark');
+      setThemeAttr(!nowDark);
       mount();
     } else if (action === 'set-tab-collect' || action === 'set-tab-energy') {
       const key = action === 'set-tab-collect' ? 'collect' : 'energy';
@@ -995,7 +1009,7 @@
       else if (window.QYO) QYO.hideBall();
     } else if (action === 'toggle-theme') {
       const cur = document.documentElement.getAttribute('data-theme');
-      document.documentElement.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+      setThemeAttr(cur !== 'dark');
     } else if (action === 'dispose') {
       disposeItem(id);
     } else if (action === 'add-event') {
@@ -1265,7 +1279,7 @@
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
         '</div>' +
         '<div class="group" style="margin-top:14px">' +
-          setRow('upd-check', '检查更新', { side: '当前 v' + APP_VERSION, chev: true }) +
+          setRow('upd-check', '检查更新', { side: '当前 v' + currentVersion(), chev: true }) +
         '</div>';
     }
 

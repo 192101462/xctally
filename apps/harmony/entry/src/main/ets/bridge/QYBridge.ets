@@ -87,6 +87,19 @@ export class QYBridge {
     return true;
   }
 
+  /** 当前安装的版本号：网页"检查更新"一行展示用（鸿蒙侧更新走应用市场） */
+  appVersion(): string {
+    try {
+      const ctx = this.ctx;
+      if (!ctx) {
+        return '';
+      }
+      return ctx.applicationInfo.versionName ?? '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   toast(msg: string): void {
     promptAction.showToast({ message: msg, duration: 2000 });
   }
