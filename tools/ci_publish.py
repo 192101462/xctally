@@ -111,6 +111,56 @@ def cmd_bump(version):
     print("bumped: versionCode=%d versionName=%s" % (new_code, version))
 
 
+def api_get(url, token):
+    sep = "&" if "?" in url else "?"
+    req = urllib.request.Request(url + sep + "access_token=" + token,
+                                 headers={"User-Agent": "xctally-ci"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        die("gitee api %s -> HTTP %s" % (url, e.code))
+
+
+def find_or_create_release(token, tag, notes):
+    """幂等：同名 Release 已存在就复用（上次跑到一半失败的场景重跑不用先删）"""
+    rels = api_get(API + "/releases?per_page=100", token)
+    for r in rels if isinstance(rels, list) else []:
+        if r.get("tag_name") == tag:
+            print("      reusing existing release id=" + str(r.get("id")))
+            return r
+    return api(API + "/releases", token,
+               data={"tag_name": tag, "name": tag, "body": notes,
+                     "target_commitish": "main"})
+
+
+def upload_attachment(token, rel_id, fn, path):
+    """5MB APK 从海外 runner 传 gitee 偶发极慢：Python 的 SSL 单次写会超时，
+    换 curl（自带重试/断流控制）再包一层整体重试"""
+    url = API + "/releases/%s/attach_files" % rel_id
+    last_err = ""
+    for attempt in range(1, 4):
+        r = subprocess.run(
+            ["curl", "-sS", "--retry", "3", "--retry-all-errors",
+             "--connect-timeout", "30", "--max-time", "900",
+             "-w", "\\n%{http_code}",
+             "-F", "access_token=" + token,
+             "-F", "file=@" + path + ";filename=" + fn,
+             url],
+            capture_output=True, text=True)
+        out = (r.stdout or "").strip()
+        http = out.rsplit("\n", 1)[-1] if "\n" in out else ""
+        body = out.rsplit("\n", 1)[0] if "\n" in out else out
+        if r.returncode == 0 and http == "200":
+            try:
+                return json.loads(body)
+            except Exception:
+                pass
+        last_err = "rc=%s http=%s %s %s" % (r.returncode, http, body[:120], (r.stderr or "")[:120])
+        print("      upload attempt %d failed: %s" % (attempt, last_err))
+    die("upload failed after 3 attempts: " + last_err)
+
+
 def cmd_publish(version, apk_path, notes):
     token = os.environ.get("GITEE_TOKEN", "").strip()
     if not token:
@@ -121,15 +171,12 @@ def cmd_publish(version, apk_path, notes):
     code = read_version_code()
     fn = "xctally-%s.apk" % version
 
-    print("[1/3] creating gitee release %s (versionCode %d)" % (tag, code))
-    rel = api(API + "/releases", token,
-              data={"tag_name": tag, "name": tag, "body": notes,
-                    "target_commitish": "main"})
+    print("[1/3] gitee release %s (versionCode %d)" % (tag, code))
+    rel = find_or_create_release(token, tag, notes)
     print("      release id=" + str(rel.get("id")))
 
     print("[2/3] uploading " + fn)
-    att = api(API + "/releases/%s/attach_files" % rel["id"], token, data={},
-              multipart=(fn, open(apk_path, "rb").read()))
+    att = upload_attachment(token, rel["id"], fn, apk_path)
     print("      attach: " + json.dumps(att, ensure_ascii=False)[:200])
     apk_url = "https://gitee.com/%s/%s/releases/download/%s/%s" % (OWNER, REPO, tag, fn)
 
