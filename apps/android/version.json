@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
+  "versionCode": 3,
   "versionName": "1.1",
   "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.1/xctally-1.1.apk",
-  "notes": "见标签说明"
+  "notes": "页头固定与列表滚动优化、SF 风格图标、AI 输入框多行、AI 联网搜索、应用内检查更新、鸿蒙工程、开源（MIT）"
 }

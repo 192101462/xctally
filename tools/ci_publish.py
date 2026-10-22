@@ -136,7 +136,8 @@ def find_or_create_release(token, tag, notes):
 
 def upload_attachment(token, rel_id, fn, path):
     """5MB APK 从海外 runner 传 gitee 偶发极慢：Python 的 SSL 单次写会超时，
-    换 curl（自带重试/断流控制）再包一层整体重试"""
+    换 curl（自带重试/断流控制）再包一层整体重试。
+    注意 gitee 创建类接口返回 201，2xx 都算成功。"""
     url = API + "/releases/%s/attach_files" % rel_id
     last_err = ""
     for attempt in range(1, 4):
@@ -151,7 +152,7 @@ def upload_attachment(token, rel_id, fn, path):
         out = (r.stdout or "").strip()
         http = out.rsplit("\n", 1)[-1] if "\n" in out else ""
         body = out.rsplit("\n", 1)[0] if "\n" in out else out
-        if r.returncode == 0 and http == "200":
+        if r.returncode == 0 and http in ("200", "201"):
             try:
                 return json.loads(body)
             except Exception:
@@ -159,6 +160,21 @@ def upload_attachment(token, rel_id, fn, path):
         last_err = "rc=%s http=%s %s %s" % (r.returncode, http, body[:120], (r.stderr or "")[:120])
         print("      upload attempt %d failed: %s" % (attempt, last_err))
     die("upload failed after 3 attempts: " + last_err)
+
+
+def purge_duplicate_attachments(token, rel, fn):
+    """删掉同名旧附件（之前失败重试留下的重复文件），失败不挡路"""
+    try:
+        for a in (rel.get("attach_assets") or []):
+            if a.get("name") == fn:
+                req = urllib.request.Request(
+                    API + "/releases/%s/attach_files/%s?access_token=%s"
+                    % (rel["id"], a["id"], token), method="DELETE")
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    resp.read()
+                print("      removed old attachment id=%s" % a.get("id"))
+    except Exception as e:
+        print("      (purge skipped: %s)" % e)
 
 
 def cmd_publish(version, apk_path, notes):
@@ -174,6 +190,7 @@ def cmd_publish(version, apk_path, notes):
     print("[1/3] gitee release %s (versionCode %d)" % (tag, code))
     rel = find_or_create_release(token, tag, notes)
     print("      release id=" + str(rel.get("id")))
+    purge_duplicate_attachments(token, rel, fn)
 
     print("[2/3] uploading " + fn)
     att = upload_attachment(token, rel["id"], fn, apk_path)
