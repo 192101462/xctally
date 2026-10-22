@@ -33,10 +33,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK 37
+      - name: Accept Android SDK licenses + best-effort preinstall
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" > /dev/null
+          # runner 自带的 sdkmanager 索引可能偏旧，装不上新平台也不要紧：
+          # 许可证已接受，下面 Gradle 会自动下载缺失的 SDK 组件
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" \
+            || echo "(preinstall skipped — gradle will auto-download)"
 
       - name: Set version from tag
         id: ver
