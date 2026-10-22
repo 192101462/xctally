@@ -61,8 +61,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var pendingPickId: String? = null
-    private var lastSaved: File? = null
     private var lastDownloadId: Long = -1      // 正在下载的更新包（DownloadManager id）
+    private var pendingSave: Pair<String, String>? = null   // 待保存的备份（文件名, 内容）
 
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -91,6 +91,30 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         toast(if (granted) "到期提醒已开启" else "没有通知权限，到期时不会弹提醒")
+    }
+
+    /**
+     * 导出备份：弹系统"另存为"，用户自选位置（下载/文档/网盘目录）。
+     * 之前写应用私有目录再分享——私有目录在文件选择器里不可见，
+     * 换手机导入时"找不到自己导出的文件"，所以改成让用户直接选目的地。
+     */
+    private val saveLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? ->
+        val pc = pendingSave
+        pendingSave = null
+        if (uri == null || pc == null) {
+            toast("已取消导出")
+            return@registerForActivityResult
+        }
+        try {
+            contentResolver.openOutputStream(uri)?.use {
+                it.write(pc.second.toByteArray(Charsets.UTF_8))
+            }
+            toast("备份已保存：${pc.first}")
+        } catch (e: Exception) {
+            toast("保存失败：${e.message}")
+        }
     }
 
     private var pendingImageId: String? = null
@@ -448,47 +472,31 @@ class MainActivity : AppCompatActivity() {
             this@MainActivity.toast(msg)
         }
 
-        /** 导出备份：写入 App 外部私有目录，随后可分享出去 */
+        /** 导出备份：弹"另存为"让用户自选位置（私有目录在文件选择器里不可见） */
         @JavascriptInterface
         fun saveFile(name: String, content: String) {
-            try {
-                val dir = File(getExternalFilesDir(null), "backups")
-                if (!dir.exists()) dir.mkdirs()
-                // 文件名来自网页，虽然当前只会传固定格式，仍按白名单收一道，
-                // 防止 "../" 之类把备份写到目录外
-                val safe = name.substringAfterLast('/')
-                    .substringAfterLast('\\')
-                    .filter { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
-                val f = File(dir, if (safe.isBlank()) "backup.json" else safe)
-                f.writeText(content, Charsets.UTF_8)
-                lastSaved = f
-            } catch (e: Exception) {
-                toast("保存失败：${e.message}")
-            }
-        }
-
-        /** 唤起系统分享，把刚导出的备份发给自己（微信/邮件/网盘都行） */
-        @JavascriptInterface
-        fun shareLastFile() {
-            val f = lastSaved ?: return
+            // 文件名收一道白名单，防 "../" 之类越界
+            val safe = name.substringAfterLast('/')
+                .substringAfterLast('\\')
+                .filter { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+            pendingSave = Pair(if (safe.isBlank()) "backup.json" else safe, content)
             runOnUiThread {
                 try {
-                    val uri = FileProvider.getUriForFile(
-                        this@MainActivity, "$packageName.fileprovider", f
-                    )
-                    val send = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/json"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    startActivity(Intent.createChooser(send, "把备份发到…"))
+                    saveLauncher.launch(if (safe.isBlank()) "backup.json" else safe)
                 } catch (e: Exception) {
-                    toast("分享失败：${e.message}\n文件位置：${f.absolutePath}")
+                    pendingSave = null
+                    toast("打不开保存面板：${e.message}")
                 }
             }
         }
 
-        /** 导入备份：打开系统文件选择器 */
+        /** 兼容保留：导出已改为自选位置保存，不再需要"分享"这一步 */
+        @JavascriptInterface
+        fun shareLastFile() {
+            // no-op（platform.js 会无条件调用）
+        }
+
+        /** 导入备份：打开系统文件选择器（偏向 json，但不限死） */
         @JavascriptInterface
         fun pickFile(id: String) {
             runOnUiThread {
@@ -498,6 +506,11 @@ class MainActivity : AppCompatActivity() {
                         Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                             addCategory(Intent.CATEGORY_OPENABLE)
                             type = "*/*"
+                            // 备份是 json：给选择器一个类型提示，json 排前面更好找
+                            putExtra(
+                                Intent.EXTRA_MIME_TYPES,
+                                arrayOf("application/json", "application/octet-stream", "text/plain")
+                            )
                         }
                     )
                 } catch (e: Exception) {

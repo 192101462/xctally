@@ -339,6 +339,13 @@
         (a.category ? '，分类 ' + a.category : '') +
         (a.acquiredAt ? '，获得日期 ' + a.acquiredAt : '');
     }
+    if (a.type === 'add_note') {
+      return '新增收藏随笔「' + (a.title || '未命名') + '」' +
+        (a.cat ? '，分类 ' + a.cat : '') +
+        (a.rating ? '，★' + a.rating : '') +
+        (a.price != null ? '，价格 ' + a.price : '') +
+        (a.body ? '，正文 ' + String(a.body).length + ' 字' : '');
+    }
     if (a.type === 'update_item') {
       const keys = Object.keys(a.fields || {});
       return '修改「' + name + '」：' + (keys.length ? keys.map(function (k) {
@@ -376,6 +383,26 @@
         d.events.push({
           id: QY.uid('ev'), itemId: item.id, type: 'acquired',
           at: item.acquiredAt, amount: item.cost, note: item.source
+        });
+        applied++;
+        return;
+      }
+      if (a.type === 'add_note') {
+        // 新增收藏随笔：标题必填，插件值按 App 约定收口
+        if (!window.QYV || !QYV.addEntry) { dropped++; return; }
+        const title = String(a.title || '').trim();
+        if (!title) { dropped++; return; }
+        const plugins = [];
+        if (a.rating != null && Number(a.rating) > 0) plugins.push({ k: 'rating', v: Number(a.rating) });
+        if (a.price != null && a.price !== '') plugins.push({ k: 'price', v: Number(a.price) });
+        if (a.mood) plugins.push({ k: 'mood', v: String(a.mood) });
+        QYV.addEntry({
+          title: title,
+          cat: a.cat || '',
+          date: a.date || QY.iso(QY.today()),
+          tags: a.tags || [],
+          plugins: plugins,
+          body: a.body || ''
         });
         applied++;
         return;

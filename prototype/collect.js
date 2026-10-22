@@ -1340,6 +1340,33 @@
     snapshot: snapshot,
     merge: merge,
     save: save,
+    // 给 AI 助手用：直接新增一条随笔（不走表单）。返回新条目 id。
+    addEntry: function (p) {
+      p = p || {};
+      const cat = String(p.cat || '').trim();
+      if (cat && !db.cats.some(function (c) { return c.name === cat; })) {
+        db.cats.push({ name: cat, emoji: '📁' });   // AI 提到的收藏分类不存在就顺手建
+      }
+      // 插件值只收认识的键，类型按 App 的约定收口
+      const KNOWN = { rating: 'number', price: 'number', mood: 'string', link: 'string' };
+      const plugins = (Array.isArray(p.plugins) ? p.plugins : []).filter(function (x) {
+        return x && KNOWN[x.k] && x.v != null && x.v !== '';
+      }).map(function (x) {
+        return { k: x.k, v: KNOWN[x.k] === 'number' ? Number(x.v) : String(x.v) };
+      });
+      const entry = {
+        id: QY.uid('c'),
+        title: String(p.title || '未命名').trim() || '未命名',
+        cat: cat || (db.cats[0] ? db.cats[0].name : ''),
+        date: p.date || QY.iso(QY.today()),
+        tags: Array.isArray(p.tags) ? p.tags.map(String).filter(Boolean) : [],
+        plugins: plugins,
+        bodyHtml: sanitize('<p>' + esc(String(p.body || '').trim() || p.title || '').replace(/\n/g, '</p><p>') + '</p>')
+      };
+      db.entries.push(entry);
+      save();
+      return entry.id;
+    },
     // 给物品模块复用：选一张图（原生可拍照/相册）-> 压缩 -> 回调 dataURL
     // cb(dataUrl, info)，info.bytes 是最终字节数、info.gif 标记动图
     pickImage: function (cb, opts) {

@@ -46,7 +46,7 @@
 9. 截图里有几行商品就输出几条，不要合并看起来相似的商品。
 10. 如果整张图都不是订单（例如聊天记录、风景照），输出 {"error":"not_an_order"}，不要硬编。`;
 
-  const ASSISTANT = `你是「琪遇台账」的助手，帮用户管理物品（库存、过期、成本）和能源用量。
+  const ASSISTANT = `你是「琪遇台账」的助手，帮用户管理物品（库存、过期、成本）、能源用量和图文随笔（收藏）。
 
 【当前数据】
 物品清单（id | 名称 | 分类 | 价格 | 状态 | 归档 | 到期日）：
@@ -54,13 +54,15 @@
 
 汇总：在用 {{COUNT}} 件，持有成本 {{DAILY}}/天，已浪费 ¥{{WASTED}}
 今天是 {{TODAY}}
-用户自己的分类：{{CATEGORIES}}
+用户自己的物品分类：{{CATEGORIES}}
+用户自己的收藏分类：{{NOTE_CATS}}
 
 【输出】严格按这个结构，不要有其他文字：
 { "reply": "给用户看的话（简体中文，简短）", "actions": [ ...动作... ] }
 
 【动作】
 { "type":"add_item",     "name":"", "price":数字或null, "qty":数字, "category":"", "sub":"", "acquiredAt":"YYYY-MM-DD", "source":"", "location":"", "note":"" }
+{ "type":"add_note",     "title":"", "cat":"收藏分类", "date":"YYYY-MM-DD", "tags":[""], "rating":1-5或null, "price":数字或null, "mood":"", "body":"随笔正文（纯文本，可多行）" }
 { "type":"update_item",  "id":"", "fields":{ 要改的字段 } }
 { "type":"set_archived", "id":"", "archived":true|false }
 { "type":"set_pinned",   "id":"", "pinned":true|false }
@@ -72,10 +74,13 @@
    在 reply 里问清楚。日期缺失可以默认今天，但要说明"按今天记"。
 3. 删除、归档这类会改变数据的动作，只生成动作，不要声称已经完成——App 会先让用户确认。
 4. 一次最多 10 个动作。
-5. 分类只能用上面的分类清单，没有合适的用 "其他"。
-6. 统计、筛选类问题（"这个月食品花了多少""哪些快过期了"）直接用 reply 回答，
+5. 物品分类只能用物品分类清单，没有合适的用 "其他"；
+   收藏随笔的 cat 只能用收藏分类清单，没有合适的留空 ""（App 会归到第一个分类）。
+6. 用户想"记一篇随笔 / 记录一次经历 / 收藏一段话"这类诉求用 add_note；
+   body 写纯文本，不要写 HTML。
+7. 统计、筛选类问题（"这个月食品花了多少""哪些快过期了"）直接用 reply 回答，
    actions 留空。清单里没有的信息就说不知道，不要推算。
-7. 语气像同事帮你记账：简短、直接，不要客套，不要复述用户的话。
+8. 语气像同事帮你记账：简短、直接，不要客套，不要复述用户的话。
 
 【用户发图片时】
 用户可能直接发订单截图或购物小票。这时按下面的规则提取，然后用动作入库：
@@ -127,13 +132,22 @@
     },
     assistantPrompt: function (data) {
       const s = QY.summaries(data);
+      // 收藏分类来自随笔模块（可能没开启，缺省给通用清单）
+      let noteCats = '生活 / 吃吃喝喝 / 看过的 / 出去玩 / 灵感';
+      try {
+        const snap = (window.QYV && QYV.snapshot) ? QYV.snapshot() : null;
+        if (snap && snap.cats && snap.cats.length) {
+          noteCats = snap.cats.map(function (c) { return c.name; }).join(' / ');
+        }
+      } catch (err) { /* 保持默认 */ }
       return fill(ASSISTANT, {
         ITEMS_TABLE: itemsTable(data),
         COUNT: s.count,
         DAILY: QY.fmtRate(s.daily),
         WASTED: s.wasted.toFixed(2),
         TODAY: QY.iso(QY.today()),
-        CATEGORIES: catNames(data)
+        CATEGORIES: catNames(data),
+        NOTE_CATS: noteCats
       });
     }
   };

@@ -25,6 +25,19 @@
   function buildBackup() {
     const d = appData();
     const snap = window.QYV ? QYV.snapshot() : { entries: [], cats: [] };
+    // AI 配置（含 Key）与用量随备份走 —— 换手机不用重新配
+    const c = window.QYA ? QYA.cfg() : null;
+    const ai = c ? {
+      key: c.key || '',
+      model: c.model || '',
+      visionModel: c.visionModel || '',
+      baseUrl: c.baseUrl || '',
+      webSearch: c.webSearch === true,
+      searchKey: c.searchKey || '',
+      enabled: c.enabled !== false,
+      usage: c.usage || null,
+      prices: c.prices || null
+    } : null;
     return {
       format: FORMAT,
       version: VERSION,
@@ -37,7 +50,8 @@
       collect: {
         entries: snap.entries.slice(),
         cats: snap.cats.slice()
-      }
+      },
+      ai: ai
     };
   }
 
@@ -66,7 +80,8 @@
     UI().save();
     UI().mount();
     UI().toast('备份已导出（物品 ' + pkg.app.items.length + ' · 随笔 ' + pkg.collect.entries.length +
-      ' · 表具 ' + pkg.app.meters.length + '，共 ' + total + ' 条）');
+      ' · 表具 ' + pkg.app.meters.length + '，共 ' + total + ' 条' +
+      (pkg.ai && pkg.ai.key ? '，含 AI 配置——文件里有明文 Key，注意保管' : '') + '）');
   }
 
   /* ---------------- 恢复 ---------------- */
@@ -127,7 +142,8 @@
       items: diffList(d.items, app.items),
       events: diffList(d.events, app.events),
       meters: diffList(d.meters, app.meters),
-      collect: diffList(snap.entries, collect.entries)
+      collect: diffList(snap.entries, collect.entries),
+      hasAi: !!(pkg.ai && (pkg.ai.key || pkg.ai.model || pkg.ai.baseUrl))
     };
   }
 
@@ -160,6 +176,8 @@
           row('流水', diff.events, app.events && app.events.length) +
           row('随笔', diff.collect, collect.entries && collect.entries.length) +
           row('能源', diff.meters, app.meters && app.meters.length) +
+          (diff.hasAi ? '<div class="kv"><span class="k">AI 配置</span><span class="v">' +
+            (pkg.ai.key ? '含 API Key' : '未含 Key') + ' · 模型/联网/用量一并恢复</span></div>' : '') +
         '</div>' +
 
         (conflicts
@@ -237,12 +255,32 @@
       added += r.added; conflict += r.conflict;
     }
 
+    // AI 配置：直接采用备份里的（含 Key、模型、联网开关、用量统计）。
+    // 备份文件里是明文 Key —— 导出的文件请自己保管好
+    let aiApplied = false;
+    if (pkg.ai && window.QYA && QYA.update) {
+      const a = pkg.ai;
+      QYA.update({
+        key: a.key || '',
+        model: a.model || '',
+        visionModel: a.visionModel || '',
+        baseUrl: a.baseUrl || '',
+        webSearch: a.webSearch === true,
+        searchKey: a.searchKey || '',
+        enabled: a.enabled !== false
+      });
+      if (a.usage) QYA.update({ usage: a.usage });
+      if (a.prices) QYA.update({ prices: a.prices });
+      aiApplied = true;
+    }
+
     d.lastBackup = pkg.exportedAt || d.lastBackup;
     UI().save();
     pending = null;
     UI().closeSheet();
     UI().mount();
-    UI().toast('恢复完成：新增 ' + added + ' 条' + (conflict ? '，' + conflict + ' 条冲突已保留当前版本' : ''));
+    UI().toast('恢复完成：新增 ' + added + ' 条' + (conflict ? '，' + conflict + ' 条冲突已保留当前版本' : '') +
+      (aiApplied ? '，AI 配置已恢复' : ''));
   }
 
   /* ---------------- 演示：伪造一份"新手机上的备份" ---------------- */
