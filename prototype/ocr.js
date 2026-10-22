@@ -220,12 +220,27 @@
           '<input id="ai-model" class="input" value="' + esc(raw.model || QYA.DEFAULTS.model) + '" /></div>' +
         '<div class="field"><label>Base URL</label>' +
           '<input id="ai-base" class="input" value="' + esc(raw.baseUrl || QYA.DEFAULTS.baseUrl) + '" /></div>' +
+        '<label class="check-row"><input type="checkbox" id="ai-web"' +
+          (c.webSearch ? ' checked' : '') + ' />' +
+          '<span>联网搜索</span><b>回答前先搜网页，需搜索 Key</b></label>' +
+        '<div class="field" id="ai-searchrow" style="display:' + (c.webSearch ? 'block' : 'none') + '">' +
+          '<label>搜索 API Key（博查 bochaai.com）</label>' +
+          '<input id="ai-searchkey" class="input" type="password" placeholder="sk-..." value="' +
+            esc(raw.searchKey || '') + '" autocomplete="off" />' +
+          '<div class="field-note">对话助手回答前会先搜网页，把结果交给模型参考；' +
+            '搜索失败时自动退回不联网回答。Key 同样只存本机。</div></div>' +
         '<div class="notice" id="ai-test-out" style="display:none"></div>' +
         '<div class="sheet-actions" style="margin-top:14px">' +
           '<button class="btn plain" data-action="i-ai-test">测试连接</button>' +
           '<button class="btn primary" data-action="i-ai-save">保存</button>' +
         '</div>' +
       '</div>');
+    // 开关联动搜索 Key 字段的显隐
+    const webBox = document.getElementById('ai-web');
+    const searchRow = document.getElementById('ai-searchrow');
+    if (webBox && searchRow) webBox.addEventListener('change', function () {
+      searchRow.style.display = webBox.checked ? 'block' : 'none';
+    });
   }
 
   function saveAiConfig() {
@@ -233,10 +248,20 @@
     const model = (document.getElementById('ai-model').value || '').trim();
     const baseUrl = (document.getElementById('ai-base').value || '').trim();
     const enabled = document.getElementById('ai-enabled').checked;
-    QYA.update({ key: key, model: model, baseUrl: baseUrl, enabled: enabled });
+    const webBox = document.getElementById('ai-web');
+    const searchKeyEl = document.getElementById('ai-searchkey');
+    QYA.update({
+      key: key, model: model, baseUrl: baseUrl, enabled: enabled,
+      webSearch: !!(webBox && webBox.checked),
+      searchKey: searchKeyEl ? (searchKeyEl.value || '').trim() : ''
+    });
+    if (webBox && webBox.checked && !(searchKeyEl && searchKeyEl.value.trim())) {
+      UI().toast('已保存，但联网搜索需要填搜索 Key 才会生效');
+    } else {
+      UI().toast(key ? '已保存，AI 功能可用' : '已保存（没填 Key，AI 功能隐藏）');
+    }
     UI().closeSheet();
     UI().mount();
-    UI().toast(key ? '已保存，AI 功能可用' : '已保存（没填 Key，AI 功能隐藏）');
   }
 
   function testAiConfig() {
@@ -249,9 +274,9 @@
     });
     if (out) { out.style.display = 'block'; out.textContent = '测试中…'; }
     QYA.test().then(function (reply) {
-      if (out) out.textContent = '✅ 连接正常，模型回复：' + reply;
+      if (out) out.textContent = '连接正常，模型回复：' + reply;
     }).catch(function (err) {
-      if (out) out.textContent = '❌ ' + ((err && err.message) || '测试失败');
+      if (out) out.textContent = '出错：' + ((err && err.message) || '测试失败');
     });
   }
 

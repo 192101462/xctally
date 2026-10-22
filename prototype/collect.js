@@ -265,7 +265,9 @@
     return 'background:linear-gradient(150deg,#E7ECF5,#C9D6E8)';
   }
   function tileInner(e) {
-    return firstImage(e.bodyHtml) ? '' : catEmoji(e.cat);
+    if (firstImage(e.bodyHtml)) return '';
+    const em = catEmoji(e.cat);
+    return window.QYIcon ? QYIcon.forEmoji(em, 21) : em;
   }
 
   function rowHTML(e) {
@@ -289,15 +291,16 @@
 
   function renderListInner() {
     const list = filtered();
-    if (!list.length) return '<div class="empty"><div class="emoji">🗂</div><p>这里还没有内容</p></div>';
+    if (!list.length) return '<div class="empty"><div class="emoji">' +
+      (window.QYIcon ? QYIcon.forEmoji('🗂', 36) : '🗂') + '</div><p>这里还没有内容</p></div>';
     return list.map(rowHTML).join('');
   }
 
   function renderList() {
     const chips = ['全部'].concat(db.cats.map(function (c) { return c.name; })).map(function (c) {
-      const emoji = c === '全部' ? '' : catEmoji(c) + ' ';
+      const ic = (c !== '全部' && window.QYIcon) ? QYIcon.forEmoji(catEmoji(c), 13) + ' ' : '';
       return '<button class="chip ' + (state.cat === c ? 'active' : '') +
-        '" data-action="c-chip" data-cat="' + esc(c) + '">' + emoji + esc(c) + '</button>';
+        '" data-action="c-chip" data-cat="' + esc(c) + '">' + ic + esc(c) + '</button>';
     }).join('');
 
     const recent = db.entries.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 6);
@@ -309,8 +312,10 @@
     }).join('');
 
     return '' +
-      UI().pageHead('收藏', db.entries.length + ' 条随笔 · ' + db.cats.length + ' 个自定义分类',
-        UI().iconBtn('c-add', '新增收藏')) +
+      '<div class="page-top">' +
+        UI().pageHead('收藏', db.entries.length + ' 条随笔 · ' + db.cats.length + ' 个自定义分类',
+          UI().iconBtn('c-add', '新增收藏')) +
+      '</div>' +
       '<div class="cover-strip">' + strip + '</div>' +
       '<div class="search">' + UI().I.search +
         '<input id="c-search" placeholder="搜索标题、正文、标签" value="' + esc(state.query) + '" />' +
@@ -361,10 +366,11 @@
     const img = firstImage(e.bodyHtml);
     const cover = img
       ? '<div class="hero-cover" style="background-image:url(' + img + ');background-size:cover;background-position:center"></div>'
-      : '<div class="hero-cover" style="background:linear-gradient(150deg,#E7ECF5,#C9D6E8)">' + catEmoji(e.cat) + '</div>';
+      : '<div class="hero-cover" style="background:linear-gradient(150deg,#E7ECF5,#C9D6E8)">' +
+        (window.QYIcon ? QYIcon.forEmoji(catEmoji(e.cat), 44) : catEmoji(e.cat)) + '</div>';
 
     const meta = [];
-    if (e.cat) meta.push(catEmoji(e.cat) + ' ' + e.cat);
+    if (e.cat) meta.push((window.QYIcon ? QYIcon.forEmoji(catEmoji(e.cat), 13) + ' ' : catEmoji(e.cat) + ' ') + e.cat);
     meta.push(QY.fmtDate(e.date));
     const n = imageCount(e.bodyHtml);
     if (n) meta.push(n + ' 张图');
@@ -933,10 +939,12 @@
         g.clip();
         g.fillStyle = grad;
         g.fillRect(0, 0, IMG_W, coverH);
-        g.font = '110px ' + FONT;
+        // 排版字封面：标题首字。不用分类 emoji —— 画进导出长图会显得廉价
+        g.font = '600 96px ' + FONT;
+        g.fillStyle = 'rgba(28, 28, 30, 0.55)';
         g.textAlign = 'center';
         g.textBaseline = 'middle';
-        g.fillText(catEmoji(e.cat), IMG_W / 2, coverH / 2 + PAD / 2);
+        g.fillText(String(e.title || '记').trim().charAt(0) || '记', IMG_W / 2, coverH / 2 + PAD / 2);
         g.restore();
         y = PAD + coverH + 30;
       }

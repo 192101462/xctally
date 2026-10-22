@@ -288,13 +288,16 @@
     }).join('');
 
     return '' +
-      UI().pageHead('物品', s.count + ' 件在用 · 累计投入 ' + QY.fmtMoney(s.totalSpend),
-        UI().iconBtn('i-add', '新增')) +
-      '<div class="segmented" style="margin-bottom:14px">' + seg + '</div>' +
+      '<div class="page-top">' +
+        UI().pageHead('物品', s.count + ' 件在用 · 累计投入 ' + QY.fmtMoney(s.totalSpend),
+          UI().iconBtn('i-add', '新增')) +
+        '<div class="segmented" style="margin-bottom:10px">' + seg + '</div>' +
+        '<div class="chips">' + chips + '</div>' +
+      '</div>' +
+      // 搜索是低频操作，不占固定区 —— 跟随列表滚动，给内容多留高度
       '<div class="search">' + UI().I.search +
         '<input id="i-search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
       '</div>' +
-      '<div class="chips">' + chips + '</div>' +
       '<div class="group" id="i-list">' + renderListInner() + '</div>';
   }
 
@@ -373,7 +376,8 @@
     const events = QY.eventsOf(data(), item.id);
     const timeline = events.map(function (e) {
       const t = QY.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
-      return '<div class="tl-item"><div class="tl-dot">' + t.emoji + '</div>' +
+      return '<div class="tl-item"><div class="tl-dot">' +
+        (window.QYIcon ? QYIcon.forEvent(e.type, 15) : t.emoji) + '</div>' +
         '<div class="tl-body"><div class="tl-title">' + t.label +
           (e.amount ? ' <span class="amount">' + QY.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
         '<div class="tl-sub">' + QY.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div></div>';
@@ -427,7 +431,8 @@
     const cur = (document.getElementById('f-' + key) || {}).value;
     const opts = pickerOptionsFor(key).map(function (o) {
       return '<div class="picker-opt ' + (o.v === cur ? 'on' : '') + '" data-action="i-pick" data-k="' + key +
-        '" data-v="' + esc(o.v) + '">' + (o.e ? '<span style="font-size:17px">' + o.e + '</span>' : '') +
+        '" data-v="' + esc(o.v) + '">' + (o.e
+          ? '<span class="pick-ic">' + (window.QYIcon ? QYIcon.forEmoji(o.e, 18) : esc(o.e)) + '</span>' : '') +
         '<span>' + esc(o.t) + '</span>' + (o.v === cur ? '<span class="tick">✓</span>' : '') + '</div>';
     }).join('');
     const layer = document.createElement('div');
@@ -650,10 +655,13 @@
       const isNew = catEdit === '';
       const c = isNew ? QY.nextCatStyle(d) : QY.catOf(catEdit, d);
       const used = isNew ? 0 : d.items.filter(function (i) { return i.category === catEdit; }).length;
-      const emojis = ['📦', '🥛', '💊', '🧺', '🧣', '💻', '⚡️', '🎀', '🍞', '🧴', '🪥', '🧸', '📚', '🔧', '🪴']
+      // 图标候选：每一个都能映射到 icons.js 里的【不同】线性图标
+      //（列表里出现两个同图标的选项会让用户以为坏了）
+      const emojis = ['📦', '🥛', '💊', '🧺', '🧣', '💻', '⚡️', '🎀', '🧴', '🔧', '📚', '⌚️', '🔌', '🪴', '💡']
         .map(function (em) {
           return '<button type="button" class="emoji-opt ' + (em === c.emoji ? 'on' : '') +
-            '" data-action="i-cat-emoji" data-em="' + em + '">' + em + '</button>';
+            '" data-action="i-cat-emoji" data-em="' + em + '">' +
+            (window.QYIcon ? QYIcon.forEmoji(em, 21) : em) + '</button>';
         }).join('');
 
       UI().openSheet('' +
@@ -683,7 +691,8 @@
     const rows = cats.map(function (c) {
       const n = d.items.filter(function (i) { return i.category === c.name; }).length;
       return '<div class="row" data-action="i-cat-edit" data-name="' + esc(c.name) + '">' +
-        '<div class="tile sm" style="background:linear-gradient(150deg,' + c.g[0] + ',' + c.g[1] + ')">' + c.emoji + '</div>' +
+        '<div class="tile sm" style="background:linear-gradient(150deg,' + c.g[0] + ',' + c.g[1] + ')">' +
+          (window.QYIcon ? QYIcon.forEmoji(c.emoji, 17) : c.emoji) + '</div>' +
         '<div class="row-main"><div class="row-title">' + esc(c.name) + '</div>' +
           '<div class="row-sub">' + n + ' 件 · ' + (c.costTrack !== false ? '计入日均成本' : '不计入日均成本') + '</div></div>' +
         '<div class="row-side"><span class="chev">›</span></div></div>';
@@ -1379,7 +1388,7 @@
     const list = (opts.options || []).map(function (o) {
       return '<div class="picker-opt' + (o.v === opts.current ? ' on' : '') +
         '" data-choose="' + esc(o.v) + '">' +
-        (o.e ? '<span style="font-size:17px">' + o.e + '</span>' : '') +
+        (o.e ? '<span class="pick-ic">' + (window.QYIcon ? QYIcon.forEmoji(o.e, 18) : esc(o.e)) + '</span>' : '') +
         '<span>' + esc(o.t) + '</span>' +
         (o.v === opts.current ? '<span class="tick">✓</span>' : '') + '</div>';
     }).join('');

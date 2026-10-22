@@ -21,9 +21,12 @@
   const native = android || harmony;
 
   // 原生壳里不应该显示"手机外框 + 左侧说明栏"，用 ?app=1 也能在浏览器里预览这个模式
+  const kind = android ? 'android' : (harmony ? 'harmony' : 'web');
   const appMode = !!native || /[?&]app=1(&|$)/.test(location.search);
   const markApp = function () {
     document.documentElement.classList.add('app-mode');
+    // 壳的种类也标上：CSS 按 shell-android / shell-harmony 区分各自的安全区处理
+    if (native) document.documentElement.classList.add('shell-' + kind);
     if (document.body) document.body.classList.add('app-mode');
   };
   if (appMode) {
@@ -36,7 +39,7 @@
 
   window.QYPlatform = {
     native: !!native,
-    kind: android ? 'android' : (harmony ? 'harmony' : 'web'),
+    kind: kind,
     appMode: appMode,
 
     /* 保存文本文件 */

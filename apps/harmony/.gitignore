@@ -1,0 +1,12 @@
+# DevEco Studio / hvigor 构建产物与本地配置，一律不进版本库
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer

@@ -217,6 +217,28 @@ body {
 .sb-right { display: flex; align-items: center; gap: 6px; }
 .sb-right svg { fill: var(--label); }
 
+/* 线性图标（icons.js）在文本流里的对齐 */
+.qi { flex: none; vertical-align: -0.18em; }
+/* 彩色底 tile 上的图标用半透明墨色，深色模式换浅色 */
+.tile .qi { color: rgba(28, 28, 30, 0.68); }
+html[data-theme="dark"] .tile .qi { color: rgba(242, 242, 247, 0.78); }
+
+/* 原生壳的顶部结构条：只负责给状态栏下方留出固定空位
+   （安卓壳 42px；浏览器预览里额外垫 24px 模拟状态栏位）。
+   页面标题本身固定在 .page-top 里，不在这里显示。 */
+.appbar {
+  display: none;              /* 浏览器演示模式不占位 */
+}
+html.app-mode .appbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  position: relative;
+  z-index: 4;
+}
+
 /* 由刘海遮住的灵动岛 */
 .screen::after {
   content: "";
@@ -234,6 +256,7 @@ body {
 /* ---------------- 内容区 ---------------- */
 
 .view {
+  --view-top: 22px;           /* 页面内容与滚动区顶的间距（app 模式会按壳覆写） */
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
@@ -583,6 +606,7 @@ body {
   display: grid;
   place-items: center;
   font-size: 14px;
+  color: var(--label-2);
 }
 .tl-body { flex: 1; min-width: 0; }
 .tl-title { font-size: 14px; font-weight: 600; }
@@ -1265,12 +1289,32 @@ html.app-mode .screen { border-radius: 0; }
 html.app-mode .screen::after { display: none; }   /* 灵动岛 */
 html.app-mode .statusbar { display: none; }        /* 假的 9:41 */
 html.app-mode .home-indicator { display: none; }
-html.app-mode .view {
-  padding-top: calc(14px + env(safe-area-inset-top, 0px));
-  /* 状态栏避让：targetSdk 35+ 起系统强制 edge-to-edge，网页会画到状态栏下面，
-     所以这里要主动让出顶部空间；env() 在支持 viewport-fit=cover 时更精确。 */
-  padding-top: calc(34px + env(safe-area-inset-top, 0px));
+/* 安卓壳：MainActivity 用 setDecorFitsSystemWindows(true) 退出了 edge-to-edge，
+   WebView 整体在状态栏下方。env() 仍然保留兜底。 */
+html.app-mode.shell-android .view,
+html.app-mode.shell-harmony .view {
+  --view-top: 14px;
+  padding-top: calc(var(--view-top) + env(safe-area-inset-top, 0px));
   padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+/* 其余环境（浏览器 ?app=1 预览）：顶部占位与真机一致，
+   预览的意义是看真实 App 效果，不再额外垫"状态栏位" */
+html.app-mode .view {
+  --view-top: 14px;
+  padding-top: calc(var(--view-top) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+}
+/* 页头固定区：大标题（和物品页的筛选控件）钉在滚动区顶部，只有下面的列表动。
+   注意：sticky 的吸附约束按 margin box 计算，而我们有负 margin-top（抵掉 .view 的
+   顶部内边距），所以 top 也要用同样的负值 —— 否则粘住时会低出一截，
+   缝隙里会透出滚动的列表内容。 */
+.page-top {
+  position: sticky;
+  top: calc(var(--view-top, 22px) * -1);
+  z-index: 6;
+  background: var(--bg);
+  margin: calc(var(--view-top, 22px) * -1) -18px 10px;
+  padding: var(--view-top, 22px) 18px 6px;
 }
 html.app-mode .tabbar {
   height: calc(64px + env(safe-area-inset-bottom, 0px));
@@ -1375,6 +1419,9 @@ html[data-theme="dark"] .hero-plain { background: linear-gradient(150deg, #22262
 .picker-opt:active { background: var(--fill-2); }
 .picker-opt.on { color: var(--blue); font-weight: 600; }
 .picker-opt .tick { margin-left: auto; color: var(--blue); font-weight: 700; }
+/* 选项前的分类图标（线性） */
+.pick-ic { display: inline-flex; align-items: center; color: var(--label-2); }
+.picker-opt.on .pick-ic { color: var(--blue); }
 
 /* 表单里的图片选择 */
 .photo-row { display: flex; align-items: center; gap: 14px; }
@@ -1628,8 +1675,19 @@ html.scrolling .ai-ball { transition: none; }
 .ai-actions.done { opacity: 0.72; }
 .ai-actions-head { font-weight: 650; margin-bottom: 6px; }
 .ai-actions ul { margin: 0 0 10px; padding-left: 18px; line-height: 1.7; }
-.ai-input { display: flex; gap: 8px; align-items: center; padding-top: 4px; }
+.ai-input { display: flex; gap: 8px; align-items: flex-end; padding-top: 4px; }
 .ai-input .input { flex: 1; min-width: 0; }
+/* 输入框是可换行的 textarea（JS 随内容增高）：固定初始高度、封顶高度，
+   底部对齐让"发送"按钮在长文本时仍贴着输入框下缘 */
+.ai-input textarea.input {
+  resize: none;
+  overflow-y: auto;
+  height: 44px;
+  max-height: 132px;
+  line-height: 1.45;
+  padding: 12.5px 14px;
+}
+.ai-input textarea.input:disabled { opacity: 0.55; }
 .ai-pic {
   flex: none;
   width: 38px;
@@ -1764,7 +1822,9 @@ html.scrolling .ai-ball { transition: none; }
 /* 往下滑时，页面标题变成顶部的小长圆条：点它回到最上方 */
 .to-top {
   position: fixed;
-  top: calc(10px + env(safe-area-inset-top, 0px));
+  /* 顶部是固定的页头（.page-top），长条要落在它下面：
+     --pin-h 由 JS 渲染后按实际页头高度写入 */
+  top: calc(var(--pin-h, 120px) + 12px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translate(-50%, -16px);
   opacity: 0;

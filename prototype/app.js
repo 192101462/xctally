@@ -15,6 +15,9 @@
 
   let data = QY.load();
   const state = { tab: 'home', detailId: null, category: '全部', query: '' };
+  // 网页版本号（发版时与 apps/android 的 versionName 一起改；
+  // App 内检查更新走原生比对 versionCode，这里只用于"当前 v?"的展示）
+  const APP_VERSION = '1.0';
 
   function save() { QY.save(data); }
   function itemById(id) {
@@ -179,7 +182,8 @@
     return (n / 1024 / 1024).toFixed(2) + ' MB';
   }
 
-  // 页面标题栏：左侧大标题 + 副标题，右侧可挂一个圆形操作按钮
+  // 页面标题栏：左侧大标题 + 副标题，右侧可挂一个圆形操作按钮。
+  // 调用方一般会把它包进 .page-top（粘性容器），让页头钉在滚动区顶部。
   function pageHead(title, sub, btn) {
     return '<div class="page-head">' +
       '<div>' +
@@ -233,7 +237,8 @@
     const notes = (window.QYV ? QYV.recent(3) : []).map(function (nt) {
       const tile = nt.img
         ? '<div class="tile" style="background-image:url(' + nt.img + ');background-size:cover;background-position:center"></div>'
-        : '<div class="tile">' + nt.emoji + '</div>';
+        : '<div class="tile" style="background:var(--fill-2)">' +
+          (window.QYIcon ? QYIcon.forEmoji(nt.emoji, 21) : nt.emoji) + '</div>';
       return '<div class="row" data-action="goto-collect" data-id="' + nt.id + '">' + tile +
         '<div class="row-main">' +
           '<div class="row-title">' + esc(nt.title) + '</div>' +
@@ -245,7 +250,9 @@
     }).join('');
 
     return '' +
-      pageHead('今天', dateLabel + ' · 正在记录 ' + s.count + ' 样东西', iconBtn('add', '新增记录')) +
+      '<div class="page-top">' +
+        pageHead('今天', dateLabel + ' · 正在记录 ' + s.count + ' 样东西', iconBtn('add', '新增记录')) +
+      '</div>' +
 
       '<div class="card">' +
         '<div class="mini-label">持有成本</div>' +
@@ -396,7 +403,7 @@
       const t = QY.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
       return '' +
         '<div class="tl-item">' +
-          '<div class="tl-dot">' + t.emoji + '</div>' +
+          '<div class="tl-dot">' + (window.QYIcon ? QYIcon.forEvent(e.type, 15) : t.emoji) + '</div>' +
           '<div class="tl-body">' +
             '<div class="tl-title">' + t.label +
               (e.amount ? ' <span class="amount">' + QY.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
@@ -468,7 +475,8 @@
     return '' +
       '<div class="card">' +
         '<div style="display:flex;align-items:center;gap:12px">' +
-          '<div class="tile" style="background:linear-gradient(150deg,#FFF1C9,#FFD666)">' + m.icon + '</div>' +
+          '<div class="tile" style="background:linear-gradient(150deg,#FFF1C9,#FFD666)">' +
+            (window.QYIcon ? QYIcon.forEmoji(m.icon, 22) : m.icon) + '</div>' +
           '<div class="row-main">' +
             '<div class="row-title">' + m.name + '</div>' +
             '<div class="row-sub">' + m.account + ' · ' + m.priceLabel + '</div>' +
@@ -499,10 +507,12 @@
 
   function viewEnergy() {
     const total = data.meters.reduce(function (s, m) { return s + m.current.cost; }, 0);
-    const head = pageHead('能源', '本月合计 ' + QY.fmtMoney(total) + ' · ' + data.meters.length + ' 只表具',
-      iconBtn('reading', '抄表'));
+    const head = '<div class="page-top">' +
+      pageHead('能源', '本月合计 ' + QY.fmtMoney(total) + ' · ' + data.meters.length + ' 只表具',
+        iconBtn('reading', '抄表')) + '</div>';
     if (!data.meters.length) {
-      return head + '<div class="empty"><div class="emoji">⚡️</div><p>还没有表具，点右下角添加</p></div>';
+      return head + '<div class="empty"><div class="emoji">' +
+        (window.QYIcon ? QYIcon.forEmoji('⚡️', 38) : '⚡️') + '</div><p>还没有表具，点右下角添加</p></div>';
     }
     // 表具排序跟随设置
     const sortedMeters = data.meters.slice();
@@ -532,7 +542,7 @@
       return '' +
         '<div class="row static">' +
           '<div class="tile sm" style="background:linear-gradient(150deg,' + g[0] + ',' + g[1] + ')">' +
-            QY.catOf(c, data).emoji + '</div>' +
+            (window.QYIcon ? QYIcon.forEmoji(QY.catOf(c, data).emoji, 17) : QY.catOf(c, data).emoji) + '</div>' +
           '<div class="row-main">' +
             '<div class="row-title">' + esc(c) + '</div>' +
             '<div class="track" style="margin-top:8px"><i style="width:' + pct + '%"></i></div>' +
@@ -542,8 +552,10 @@
     }).join('');
 
     return '' +
-      pageHead('我的', '',
-        '<button class="gear-btn" data-action="open-settings" aria-label="设置">' + GEAR + '</button>') +
+      '<div class="page-top">' +
+        pageHead('我的', '',
+          '<button class="gear-btn" data-action="open-settings" aria-label="设置">' + GEAR + '</button>') +
+      '</div>' +
 
       '<div class="group">' +
         kv('在用物品', s.count + ' 件' + (s.archived ? '（另有 ' + s.archived + ' 件归档）' : '')) +
@@ -796,6 +808,10 @@
       html = viewMe();
     }
     view.innerHTML = html;
+    // 实测固定页头高度，喂给回顶长条的落点（--pin-h）：
+    // 物品页的固定区带筛选控件，比首页高得多，写死会挡住内容
+    const pin = view.querySelector('.page-top');
+    document.documentElement.style.setProperty('--pin-h', (pin ? pin.offsetHeight : 0) + 'px');
     // 余额在首页卡片上查，这里不再自动拉取
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
@@ -1247,6 +1263,9 @@
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
           setRow('set-go', '外观', { k: 'look', chev: true }) +
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
+        '</div>' +
+        '<div class="group" style="margin-top:14px">' +
+          setRow('upd-check', '检查更新', { side: '当前 v' + APP_VERSION, chev: true }) +
         '</div>';
     }
 
@@ -1329,6 +1348,65 @@
     data: function () { return data; },
     save: save
   };
+
+  /* ---------------- 应用内更新 ----------------
+   * 版本清单与 APK 都放 gitee（直链见 MainActivity 的 VERSION_URL 注释），
+   * 检查与下载都由安卓原生完成，这里只负责入口和弹窗。
+   * 原生检查完回调 window.QYUpd.onResult(json)：
+   *   {code:'update', versionName, notes, apkUrl} | {code:'latest'} | {code:'error'}
+   */
+  window.QYUpd = {
+    onResult: function (json) {
+      let r;
+      try { r = typeof json === 'string' ? JSON.parse(json) : json; }
+      catch (err) { toast('更新信息解析失败'); return; }
+      if (r.code === 'update') {
+        openSheet('' +
+          '<div class="sheet"><div class="grabber"></div>' +
+            '<h3>发现新版本 v' + esc(r.versionName || '') + '</h3>' +
+            '<div class="notice" style="margin:12px 0">' +
+              (r.notes ? esc(r.notes).replace(/\n/g, '<br>') : '没有填写更新说明。') +
+            '</div>' +
+            '<div class="sheet-actions">' +
+              '<button class="btn plain" data-action="upd-later">以后再说</button>' +
+              '<button class="btn primary" data-action="upd-download" data-url="' + esc(r.apkUrl || '') + '">下载并安装</button>' +
+            '</div>' +
+          '</div>');
+      } else if (r.code === 'latest') {
+        toast('已是最新版本' + (r.versionName ? '（v' + r.versionName + '）' : ''));
+      } else {
+        toast('检查更新失败：' + (r.message || '网络错误'));
+      }
+    }
+  };
+
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest && e.target.closest('[data-action]');
+    if (!el) return;
+    const act = el.getAttribute('data-action');
+    if (act.indexOf('upd-') !== 0) return;
+    e.stopPropagation();
+    if (act === 'upd-check') {
+      if (window.QYAndroid && QYAndroid.checkUpdate) {
+        toast('正在检查更新…');
+        QYAndroid.checkUpdate();
+      } else if (window.QYPlatform && QYPlatform.kind === 'harmony') {
+        toast('鸿蒙版请在应用市场或华为开发者官网更新');
+      } else {
+        toast('请在手机 App 的设置里检查更新');
+      }
+    } else if (act === 'upd-download') {
+      const url = el.getAttribute('data-url') || '';
+      if (window.QYAndroid && QYAndroid.downloadUpdate) {
+        QYAndroid.downloadUpdate(url);
+      } else {
+        toast('请在手机 App 里操作');
+      }
+    } else if (act === 'upd-later') {
+      closeSheet();
+    }
+    return true;
+  });
 
   /* ---------------- 启动 ---------------- */
 

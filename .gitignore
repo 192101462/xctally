@@ -41,3 +41,15 @@ design/_*.png
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- 发版机密：绝不进版本库 -------------------------------------------
+# 签名密钥与口令（丢了无法覆盖升级，务必备份到安全的地方）
+apps/android/keystore.properties
+apps/android/*.jks
+apps/android/*.keystore
+# Gitee 私人令牌（可随时在 gitee 设置里吊销）
+tools/.gitee_token
+# Android Studio「Generate Signed APK」的默认输出目录
+apps/android/app/release/
+# Python 缓存
+__pycache__/

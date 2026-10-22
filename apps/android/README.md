@@ -151,6 +151,49 @@ dependencies {
 - **正式包**（可选）：`Build → Generate Signed App Bundle / APK`，自己建一个签名文件即可
 - 把 APK 传到手机安装（首次要允许"安装未知来源应用"）
 
+## 八、发版与应用内更新（一键发版）
+
+App 里「我的 → 设置 → 检查更新」会读仓库里的 `apps/android/version.json`
+（gitee raw 直链），比对 `versionCode` 后提示下载。
+`tools/release.py` 把发版做成了**一条命令**：
+
+```bash
+python tools/release.py 1.1 "这次更新了什么，一行一条
+第二行"
+```
+
+它会自动：versionCode +1 → 打签名 release 包 → 打 git 标签 →
+建 gitee Release 并上传 APK → 把直链写进 version.json → 提交推送。
+手机上点「检查更新」就能升级。
+
+### 一次性准备（只做一次，约 5 分钟）
+
+1. **签名密钥**（在仓库根目录执行；密码自己定，**务必备份**，丢了就无法覆盖升级）：
+   ```bash
+   keytool -genkeypair -v -keystore apps/android/release.jks -alias xctally -keyalg RSA -keysize 2048 -validity 10950
+   ```
+   然后新建 `apps/android/keystore.properties`（已被 .gitignore 忽略，不会上传）：
+   ```properties
+   storeFile=release.jks
+   storePassword=你设的库口令
+   keyAlias=xctally
+   keyPassword=你设的密钥口令
+   ```
+
+2. **Gitee 私人令牌**：gitee.com → 设置 → 私人令牌 → 生成（只勾 projects 权限），
+   把令牌粘进 `tools/.gitee_token` 文件（同样被 gitignore；也可用环境变量 GITEE_TOKEN）。
+   令牌等于半个账号，**只存在本机，不要发给任何人**。泄露了随时在 gitee 设置里吊销。
+
+### 只想本地构建验证（不传 gitee、不推 git）
+
+```bash
+python tools/release.py 1.1 "测试" --skip-upload --skip-push
+```
+
+> 令牌/密钥文件名见 .gitignore 的"发版机密"一节；换电脑发版把这三个文件拷过去即可。
+> （更重度的高度自动化——推送即云端构建——可以用 Gitee Go 或 GitHub Actions 镜像，
+>  个人项目用本地脚本最省心：无额度限制、密钥不出本机、构建速度快。）
+
 ---
 
 ## 这个壳做了什么
@@ -161,7 +204,9 @@ dependencies {
 | 数据持久化 | WebView 的 `localStorage`（开启 `domStorageEnabled`） |
 | 导出备份 | 写入 `getExternalFilesDir/backups/`，然后**唤起系统分享**，发给新手机 |
 | 导入备份 | `ACTION_OPEN_DOCUMENT` 选文件 → 内容回传给网页 → 走原有的"对比后合并"流程 |
+| 拍照 / 选图 | 系统相机 / 相册，原生压到长边 1600 JPEG 再回传 dataURL |
 | 到期提醒 | `WorkManager` 每天 9 点跑一次，把当天该提醒的条目弹成系统通知 |
+| 应用内更新 | 读 gitee 上的 version.json → `DownloadManager` 下载 → FileProvider 授权弹安装器 |
 | 返回键 | 先关面板 → 再回上一层 → 都没有才退出 |
 
 ### 为什么用 `https://appassets...` 而不是 `file://`

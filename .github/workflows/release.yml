@@ -1,0 +1,94 @@
+# xctally 云端自动构建（GitHub Actions）
+# ============================================================
+# 链路：日常只 push gitee → gitee「推送镜像」自动同步本仓库 →
+#       推一个 v* 标签触发本流水线 → 云端构建签名 APK →
+#       发布回 gitee Release 并更新 version.json → 手机检查更新即可升级。
+#
+# 一次性配置见 docs/ci-setup.md（镜像 + Secrets 清单）。
+#
+# 触发：推 v 开头的标签（git tag v1.1 && git push origin v1.1），
+#       或在 GitHub 仓库 Actions 页手动触发（不传版本时只构建不发布）。
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 1.1），留空则只构建不发布'
+        required: false
+        default: ''
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK 37
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" > /dev/null
+
+      - name: Set version from tag
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+          else
+            VER="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "publish=$( [ -n "$VER" ] && echo yes || echo no )" >> "$GITHUB_OUTPUT"
+
+      # 版本号处理 + 产出 versionCode：ci_publish.py bump 负责改 build.gradle.kts
+      - name: Bump versionCode / versionName
+        if: steps.ver.outputs.publish == 'yes'
+        run: |
+          chmod +x apps/android/gradlew
+          python tools/ci_publish.py bump "${{ steps.ver.outputs.version }}"
+
+      - name: Decode signing keystore
+        if: steps.ver.outputs.publish == 'yes'
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > apps/android/release.jks
+          cat > apps/android/keystore.properties <<EOF
+          storeFile=release.jks
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+
+      - name: Build release APK
+        run: |
+          cd apps/android
+          chmod +x gradlew
+          ./gradlew assembleRelease --console=plain
+
+      - name: Show build result
+        run: ls -la apps/android/app/build/outputs/apk/release/
+
+      # 发布回 gitee：建 Release + 传 APK + 更新 version.json 并推回
+      - name: Publish to Gitee
+        if: steps.ver.outputs.publish == 'yes'
+        run: |
+          python tools/ci_publish.py publish \
+            --version "${{ steps.ver.outputs.version }}" \
+            --apk apps/android/app/build/outputs/apk/release/app-release.apk \
+            --notes "见标签说明"
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+
+      - name: Upload APK artifact (workflow 手动触发/留档)
+        uses: actions/upload-artifact@v4
+        with:
+          name: xctally-apk
+          path: apps/android/app/build/outputs/apk/release/app-release.apk

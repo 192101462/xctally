@@ -7,6 +7,9 @@ import { QYBridge } from '../bridge/QYBridge';
  *
  * 用 ArkWeb 装下 rawfile/www/ 里的网页应用（与安卓壳同一份代码）。
  * 返回键交给网页决定：先关面板 → 再回上一层 → 都没有才退出。
+ *
+ * methodList 是"暴露给网页的方法白名单"——QYBridge 里加新方法时，
+ * 这里必须同步加，否则网页调用时是 undefined。
  */
 @Entry
 @Component
@@ -43,11 +46,13 @@ struct Index {
         .fileAccess(true)
         .imageAccess(true)
         .databaseAccess(true)
+        // 键盘遮挡输入框：交给系统默认避让（窗口为键盘让位、Web 组件缩小，
+        // ArkWeb 自己会把聚焦的输入框滚进可视区，网页侧不需要 scrollIntoView）
         // 桥接给网页的原生能力（网页里是 window.QYHarmony）
         .javaScriptProxy({
           object: this.bridge,
           name: 'QYHarmony',
-          methodList: ['isApp', 'toast', 'saveFile', 'shareLastFile', 'pickFile', 'scheduleReminders'],
+          methodList: ['isApp', 'toast', 'saveFile', 'shareLastFile', 'pickFile', 'pickImage', 'scheduleReminders'],
           controller: this.controller
         })
         .width('100%')

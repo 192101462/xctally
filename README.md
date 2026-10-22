@@ -54,6 +54,7 @@ xctally/
 │  ├─ index.html         页面骨架 + 手机外框
 │  ├─ styles.css         设计变量与样式（浅深两套主题 + 原生壳模式）
 │  ├─ platform.js        平台适配层（浏览器 / 安卓 / 鸿蒙）
+│  ├─ icons.js           SF Symbols 风格线性图标集（渲染时把数据里的 emoji 映射成 SVG）
 │  ├─ data.js            物品 / 能源数据层：Item / Event / 表具 + 派生计算
 │  ├─ collect.js         收藏模块：统一随笔条目 + 插件 + 图文混排正文 + 图片压缩 + 长图导出
 │  ├─ backup.js          备份与恢复：导出完整包 / 恢复预览 / 冲突保护式合并

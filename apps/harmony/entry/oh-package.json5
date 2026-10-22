@@ -1,0 +1,9 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "xctally 鸿蒙壳：装下 prototype/ 里的网页应用，桥接原生能力",
+  "main": "",
+  "author": "qiyu",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

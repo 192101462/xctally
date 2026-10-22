@@ -2,6 +2,8 @@
 <paths>
     <!-- getExternalFilesDir(null)/backups/ 下的备份文件可通过 FileProvider 分享出去 -->
     <external-files-path name="backups" path="backups/" />
+    <!-- 应用内更新下载的 APK，下载完成后经 FileProvider 授权给系统安装器 -->
+    <external-files-path name="update" path="update/" />
     <files-path name="files" path="." />
     <cache-path name="cache" path="." />
 </paths>

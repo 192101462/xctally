@@ -17,7 +17,12 @@
     model: 'deepseek-flash',
     visionModel: '',            // 留空表示和 model 用同一个
     key: '',
-    enabled: true
+    enabled: true,
+    // 联网搜索：默认博查（bochaai.com，支持跨域、中文结果好）。
+    // 只在设置里打开开关并填了搜索 Key 才会启用，关闭时行为与从前完全一致。
+    webSearch: false,
+    searchKey: '',
+    searchUrl: 'https://api.bochaai.com/v1/web-search'
   };
 
   /* 单价：DeepSeek 分高峰/空闲两套价（空闲价 = 高峰价的一半）。
@@ -67,6 +72,9 @@
       visionModel: c.visionModel || c.model || DEFAULTS.model,
       key: c.key || '',
       enabled: c.enabled !== false,
+      webSearch: c.webSearch === true,
+      searchKey: c.searchKey || '',
+      searchUrl: String(c.searchUrl || DEFAULTS.searchUrl).replace(/\/+$/, ''),
       ball: c.ball || {},
       usage: c.usage || { calls: 0, in: 0, out: 0, cacheHit: 0 },
       prices: Object.assign({}, DEFAULT_PRICES, PRICE_OFF_DEFAULTS, c.prices || {})
@@ -264,6 +272,38 @@
     return out.trim();
   }
 
+  /* 联网搜索（博查 API）：返回 [{name, url, snippet}]，失败抛错由调用方降级 */
+  async function webSearch(query) {
+    const c = cfg();
+    if (!c.webSearch || !c.searchKey) return [];
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 15000) : null;
+    let res;
+    try {
+      res = await fetch(c.searchUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + c.searchKey
+        },
+        body: JSON.stringify({ query: String(query || '').slice(0, 100), summary: true, count: 5 }),
+        signal: ctrl ? ctrl.signal : undefined
+      });
+    } catch (err) {
+      if (timer) clearTimeout(timer);
+      throw new Error(friendly(err));
+    }
+    if (timer) clearTimeout(timer);
+    if (!res.ok) throw new Error('搜索接口返回 ' + res.status);
+    const data = await res.json();
+    // 博查结构 data.webPages.value[]；其它兼容结构兜底：data.results[]
+    const list = (data && data.data && data.data.webPages && data.data.webPages.value) ||
+      (data && data.webPages && data.webPages.value) || (data && data.results) || [];
+    return list.slice(0, 5).map(function (x) {
+      return { name: String(x.name || x.title || ''), url: String(x.url || ''), snippet: String(x.summary || x.snippet || '') };
+    }).filter(function (x) { return x.name || x.snippet; });
+  }
+
   window.QYA = {
     KEY: KEY,
     DEFAULTS: DEFAULTS,
@@ -275,6 +315,7 @@
     vision: vision,
     parseJson: parseJson,
     test: test,
+    webSearch: webSearch,
     friendly: friendly,
     usage: usage,
     usageReset: usageReset,

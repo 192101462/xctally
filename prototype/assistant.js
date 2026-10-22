@@ -54,7 +54,8 @@
     const el = document.createElement('div');
     el.className = 'ai-ball';
     el.id = 'ai-ball';
-    el.innerHTML = '<span class="ai-ball-icon">💬</span>';
+    el.innerHTML = '<span class="ai-ball-icon">' +
+      (window.QYIcon ? QYIcon.forEmoji('💬', 26) : '💬') + '</span>';
     document.body.appendChild(el);
     return el;
   }
@@ -256,7 +257,8 @@
       const done = m.applied === true;
       const dropped = m.dropped || 0;
       html += '<div class="ai-actions' + (done ? ' done' : '') + '">' +
-        '<div class="ai-actions-head">' + (done ? '✅ 已执行' : '将要执行 ' + m.actions.length + ' 个动作') +
+        '<div class="ai-actions-head">' +
+          (done ? (window.QYIcon ? QYIcon.forEmoji('✅', 14) : '✅') + ' 已执行' : '将要执行 ' + m.actions.length + ' 个动作') +
           (dropped ? '（' + dropped + ' 个被丢弃）' : '') + '</div>' +
         '<ul>' + items + '</ul>' +
         (done ? '' : '<div class="sheet-actions"><button class="btn plain" data-ai="skip">不用了</button>' +
@@ -294,8 +296,8 @@
         : '') +
       '<div class="ai-input">' +
         '<button class="ai-pic" data-ai="pick" aria-label="发送图片">' + CAMERA + '</button>' +
-        '<input id="ai-text" class="input" placeholder="说点什么，或发张截图…" autocomplete="off"' +
-          (busy ? ' disabled' : '') + ' />' +
+        '<textarea id="ai-text" class="input" rows="1" placeholder="说点什么，或发张截图…"' +
+          ' autocomplete="off"' + (busy ? ' disabled' : '') + '></textarea>' +
         '<button class="btn primary" data-ai="send"' + (busy ? ' disabled' : '') + '>' +
           (busy ? '…' : '发送') + '</button>' +
       '</div></div>';
@@ -423,7 +425,7 @@
     }, { maxSide: 1280, quality: 0.8 });
   }
 
-  function send(text) {
+  async function send(text) {
     const t = String(text || '').trim();
     const img = pendingImage;
     if ((!t && !img) || busy) return;
@@ -435,6 +437,24 @@
 
     const data = UI().data();
     const sys = { role: 'system', content: window.QYP.assistantPrompt(data) };
+
+    // 联网搜索：开启且配了搜索 Key 时，把网页结果附进 system prompt。
+    // 失败静默降级（提示一句），不要因为搜索挂了把整个对话卡死。
+    const acfg = window.QYA ? QYA.cfg() : null;
+    if (acfg && acfg.webSearch && acfg.searchKey && t) {
+      try {
+        const results = await QYA.webSearch(t);
+        if (results && results.length) {
+          sys.content += '\n\n## 网页搜索结果（回答时效性问题时优先参考，并注明来源序号）\n' +
+            results.map(function (r, i) {
+              return '[' + (i + 1) + '] ' + r.name + '\n' + r.url + '\n' + r.snippet;
+            }).join('\n\n');
+        }
+      } catch (err) {
+        UI().toast('联网搜索失败，本次未联网回答');
+      }
+    }
+
     // 历史只带文字（每轮重发图片很贵），当前这条带图才发 base64
     const history = msgs.slice(-8).map(function (m) {
       if (m.role === 'user' && m.image) {
@@ -507,9 +527,26 @@
     }
   }, true);
 
+  /* 输入框随内容自动增高（封顶 132px，超出自己滚动） */
+  function autoGrow(t) {
+    if (!t || t.tagName !== 'TEXTAREA') return;
+    t.style.height = 'auto';
+    t.style.height = Math.min(t.scrollHeight, 132) + 'px';
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'ai-text') autoGrow(e.target);
+  });
+
+  /* 回车行为：
+   *   手机（原生壳）回车 = 换行，发送一律点按钮 —— 输入法回车太容易误触发送；
+   *   桌面浏览器回车 = 发送，Shift+Enter = 换行。 */
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
     if (!e.target || e.target.id !== 'ai-text') return;
+    if (e.isComposing) return;                              // 输入法的"确认候选"不算回车
+    if (window.QYPlatform && QYPlatform.native) return;     // 手机：回车换行
+    if (e.shiftKey) return;                                 // 桌面：Shift+Enter 换行
     e.preventDefault();
     send(e.target.value);
   });

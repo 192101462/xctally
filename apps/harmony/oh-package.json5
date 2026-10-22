@@ -1,0 +1,9 @@
+{
+  "name": "xctally",
+  "version": "1.0.0",
+  "description": "琪遇台账 · 鸿蒙壳（ArkWeb + 原生能力桥）",
+  "main": "",
+  "author": "qiyu",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

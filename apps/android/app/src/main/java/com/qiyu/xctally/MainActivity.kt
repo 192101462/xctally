@@ -1,7 +1,11 @@
 package com.qiyu.xctally
 
 import android.Manifest
+import android.app.DownloadManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -31,6 +35,9 @@ import androidx.webkit.WebViewClientCompat
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlin.concurrent.thread
 
 /**
  * xctally 安卓壳
@@ -55,6 +62,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private var pendingPickId: String? = null
     private var lastSaved: File? = null
+    private var lastDownloadId: Long = -1      // 正在下载的更新包（DownloadManager id）
 
     private val assetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -215,8 +223,10 @@ class MainActivity : AppCompatActivity() {
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true          // localStorage：数据就存在这里
-            settings.allowFileAccess = true
-            settings.allowContentAccess = true
+            // 所有资源都走 WebViewAssetLoader 的 https 域，WebView 本身用不到
+            // file:// 和 content://，关掉这两个开关纯属收窄攻击面
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
             settings.mediaPlaybackRequiresUserGesture = false
             settings.textZoom = 100                     // 不跟随系统字体缩放，避免布局错乱
             webViewClient = object : WebViewClientCompat() {
@@ -288,11 +298,111 @@ class MainActivity : AppCompatActivity() {
 
         askNotificationPermission()
         ReminderWorker.schedule(this)
+        registerUpdateReceiver()
     }
 
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
+    }
+
+    /* ---------------- 应用内更新 ----------------
+     * 版本清单放在仓库里（gitee raw 直链，无需服务器）：
+     *   { "versionCode": 2, "versionName": "1.1", "apkUrl": "...", "notes": "..." }
+     * 发版流程见 apps/android/README.md。
+     * 检查与下载都走原生（HttpURLConnection / DownloadManager），
+     * 不经过 WebView —— 一来没有跨域问题，二来下载进度交给系统通知栏。
+     */
+
+    private fun registerUpdateReceiver() {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
+                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
+                if (id != lastDownloadId) return
+                lastDownloadId = -1
+                installDownloadedApk(id)
+            }
+        }
+        // Android 14+ 要求显式声明接收器是否导出；系统广播用 NOT_EXPORTED 即可
+        ContextCompat.registerReceiver(
+            this, receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    /** 下载完成后唤起系统安装器（APK 在应用外部私有目录，走 FileProvider 授权） */
+    private fun installDownloadedApk(downloadId: Long) {
+        try {
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            val uri = dm.getUriForDownloadedFile(downloadId)
+                ?: FileProvider.getUriForFile(this, "$packageName.fileprovider", updateApkFile())
+            val install = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(install)
+        } catch (e: Exception) {
+            // 多半是"安装未知应用"权限没授予：系统会引导用户去开，这里提示一下位置
+            toast("无法弹出安装界面：${e.message}\n请在 系统设置 → 应用 → 琪遇台账 里允许\"安装未知应用\"")
+        }
+    }
+
+    private fun updateApkFile(): File =
+        File(File(getExternalFilesDir(null), "update"), "xctally-update.apk")
+
+    /** 拉取远端版本清单并和本地 versionCode 比较，结果回调给网页 QYUpd.onResult */
+    private fun checkUpdateInternal() {
+        thread {
+            var result = JSONObject()
+            try {
+                val conn = URL(VERSION_URL).openConnection() as HttpURLConnection
+                conn.connectTimeout = 10000
+                conn.readTimeout = 10000
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                conn.disconnect()
+                val remote = JSONObject(body)
+                val latest = remote.optInt("versionCode", -1)
+                val pi = packageManager.getPackageInfo(packageName, 0)
+                val current = if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()
+                result = when {
+                    latest > current -> JSONObject().put("code", "update")
+                        .put("versionName", remote.optString("versionName"))
+                        .put("notes", remote.optString("notes"))
+                        .put("apkUrl", remote.optString("apkUrl"))
+                        .put("current", current.toString())
+                    else -> JSONObject().put("code", "latest")
+                        .put("versionName", remote.optString("versionName", ""))
+                }
+            } catch (e: Exception) {
+                result = JSONObject().put("code", "error").put("message", e.message ?: "网络错误")
+            }
+            val payload = result.toString()
+            runOnUiThread {
+                webView.evaluateJavascript(
+                    "window.QYUpd && window.QYUpd.onResult(${JSONObject.quote(payload)})", null
+                )
+            }
+        }
+    }
+
+    /** 交给系统 DownloadManager 下载（进度条走系统通知），完成后由广播唤起安装 */
+    private fun downloadUpdateInternal(url: String) {
+        try {
+            val req = DownloadManager.Request(Uri.parse(url)).apply {
+                setTitle("琪遇台账 · 更新")
+                setDescription("下载完成后自动弹出安装")
+                setMimeType("application/vnd.android.package-archive")
+                setDestinationInExternalFilesDir(this@MainActivity, null, "update/xctally-update.apk")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            }
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            lastDownloadId = dm.enqueue(req)
+            toast("开始下载，进度看通知栏")
+        } catch (e: Exception) {
+            toast("下载失败：${e.message}")
+        }
     }
 
     private fun askNotificationPermission() {
@@ -344,7 +454,12 @@ class MainActivity : AppCompatActivity() {
             try {
                 val dir = File(getExternalFilesDir(null), "backups")
                 if (!dir.exists()) dir.mkdirs()
-                val f = File(dir, name)
+                // 文件名来自网页，虽然当前只会传固定格式，仍按白名单收一道，
+                // 防止 "../" 之类把备份写到目录外
+                val safe = name.substringAfterLast('/')
+                    .substringAfterLast('\\')
+                    .filter { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+                val f = File(dir, if (safe.isBlank()) "backup.json" else safe)
                 f.writeText(content, Charsets.UTF_8)
                 lastSaved = f
             } catch (e: Exception) {
@@ -415,9 +530,28 @@ class MainActivity : AppCompatActivity() {
         fun scheduleReminders(json: String) {
             ReminderWorker.save(this@MainActivity, json)
         }
+
+        /** 检查更新：结果通过 window.QYUpd.onResult(json) 回调给网页 */
+        @JavascriptInterface
+        fun checkUpdate() {
+            checkUpdateInternal()
+        }
+
+        /** 下载并安装更新（apkUrl 来自检查结果的回传） */
+        @JavascriptInterface
+        fun downloadUpdate(url: String) {
+            if (url.isBlank()) {
+                toast("下载地址为空：请先把 APK 传到 gitee Release 并填进 version.json")
+                return
+            }
+            downloadUpdateInternal(url)
+        }
     }
 
     companion object {
+        /** 版本清单：发版时更新它（见 apps/android/README.md 的发版流程） */
+        private const val VERSION_URL =
+            "https://gitee.com/qiyu_server/xctally/raw/main/apps/android/version.json"
         /**
          * 网页里统一的"返回上一层"逻辑，按层级从最上层往下试：
          *   1. 选择器 / 确认框这类覆盖层

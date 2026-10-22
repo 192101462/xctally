@@ -17,8 +17,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "prototype")
 
+# 安卓壳已改为 build.gradle.kts 里 assets.srcDirs 直接指向 prototype/，
+# 不再复制文件；现在只有鸿蒙壳的 rawfile 需要同步。
 TARGETS = [
-    ("Android", os.path.join(ROOT, "apps", "android", "app", "src", "main", "assets", "www")),
     ("HarmonyOS", os.path.join(ROOT, "apps", "harmony", "entry", "src", "main", "resources", "rawfile", "www")),
 ]
 

@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "琪遇台账应用主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "家庭消耗台账 + 图文随笔"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "琪遇台账"
+    },
+    {
+      "name": "reason_reminder",
+      "value": "物品保质期、保修等到期时，需要在当天发送系统提醒"
+    }
+  ]
+}
