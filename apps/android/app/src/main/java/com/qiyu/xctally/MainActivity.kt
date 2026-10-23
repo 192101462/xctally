@@ -1,12 +1,11 @@
 package com.qiyu.xctally
 
 import android.Manifest
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -26,6 +25,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
@@ -36,8 +36,10 @@ import androidx.webkit.WebViewClientCompat
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
@@ -62,7 +64,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private var pendingPickId: String? = null
-    private var lastDownloadId: Long = -1      // 正在下载的更新包（DownloadManager id）
     private var pendingSave: Pair<String, String>? = null   // 待保存的备份（文件名, 内容）
 
     private val assetLoader by lazy {
@@ -333,7 +334,6 @@ class MainActivity : AppCompatActivity() {
 
         askNotificationPermission()
         ReminderWorker.schedule(this)
-        registerUpdateReceiver()
     }
 
     override fun onDestroy() {
@@ -345,33 +345,20 @@ class MainActivity : AppCompatActivity() {
      * 版本清单放在仓库里（gitee raw 直链，无需服务器）：
      *   { "versionCode": 2, "versionName": "1.1", "apkUrl": "...", "notes": "..." }
      * 发版流程见 apps/android/README.md。
-     * 检查与下载都走原生（HttpURLConnection / DownloadManager），
-     * 不经过 WebView —— 一来没有跨域问题，二来下载进度交给系统通知栏。
+     * 检查与下载都走原生（HttpURLConnection），不经过 WebView —— 没有跨域问题。
+     *
+     * 下载也自己做，不用系统 DownloadManager：兼容层（如卓易通）上它的进度
+     * 通知经常不显示，完成广播也可能送不到 NOT_EXPORTED 接收器 —— 用户看到的
+     * 就是"说好看通知栏，通知栏却什么都没有，下完了也没反应"。自己下、自己
+     * 发进度通知、下完直接唤起安装器，行为在哪个设备上都一致。
      */
 
-    private fun registerUpdateReceiver() {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                if (intent.action != DownloadManager.ACTION_DOWNLOAD_COMPLETE) return
-                val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                if (id != lastDownloadId) return
-                lastDownloadId = -1
-                installDownloadedApk(id)
-            }
-        }
-        // Android 14+ 要求显式声明接收器是否导出；系统广播用 NOT_EXPORTED 即可
-        ContextCompat.registerReceiver(
-            this, receiver, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-    }
+    private val downloading = AtomicBoolean(false)   // 防止重复点"下载并安装"
 
-    /** 下载完成后唤起系统安装器（APK 在应用外部私有目录，走 FileProvider 授权） */
-    private fun installDownloadedApk(downloadId: Long) {
+    /** 唤起系统安装器（APK 在应用外部私有目录，走 FileProvider 授权） */
+    private fun installApk(file: File) {
         try {
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val uri = dm.getUriForDownloadedFile(downloadId)
-                ?: FileProvider.getUriForFile(this, "$packageName.fileprovider", updateApkFile())
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
             val install = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -422,21 +409,94 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 交给系统 DownloadManager 下载（进度条走系统通知），完成后由广播唤起安装 */
+    /** 自己下载 APK：进度发自己的通知（gitee 直链会 302 到 CDN，HttpURLConnection 自动跟随），
+     *  下完落盘改名、直接唤起安装器。整个过程不依赖任何系统组件的可选实现。 */
     private fun downloadUpdateInternal(url: String) {
-        try {
-            val req = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle("琪遇台账 · 更新")
-                setDescription("下载完成后自动弹出安装")
-                setMimeType("application/vnd.android.package-archive")
-                setDestinationInExternalFilesDir(this@MainActivity, null, "update/xctally-update.apk")
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        if (!downloading.compareAndSet(false, true)) {
+            toast("已经在下载了，稍等一下")
+            return
+        }
+        val file = updateApkFile()
+        val notifId = 2001
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        runOnUiThread {
+            if (Build.VERSION.SDK_INT >= 26) {
+                nm.createNotificationChannel(
+                    NotificationChannel("update", "应用更新", NotificationManager.IMPORTANCE_LOW)
+                )
             }
-            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            lastDownloadId = dm.enqueue(req)
+            if (!nm.areNotificationsEnabled()) {
+                toast("没开通知权限看不到进度，但不影响下载，完成后会直接弹安装")
+            }
             toast("开始下载，进度看通知栏")
-        } catch (e: Exception) {
-            toast("下载失败：${e.message}")
+        }
+        thread {
+            try {
+                val notifyProgress = { pct: Int, text: String ->
+                    val nb = NotificationCompat.Builder(this, "update")
+                        .setSmallIcon(android.R.drawable.stat_sys_download)
+                        .setContentTitle("琪遇台账 · 正在下载更新")
+                        .setContentText(text)
+                        .setProgress(100, if (pct < 0) 0 else pct, pct < 0)
+                        .setOngoing(true)
+                        .setOnlyAlertOnce(true)
+                        .build()
+                    nm.notify(notifId, nb)
+                }
+                notifyProgress(-1, "连接中…")
+                val conn = URL(url).openConnection() as HttpURLConnection
+                conn.connectTimeout = 15000
+                conn.readTimeout = 60000
+                conn.inputStream.use { input ->
+                    file.parentFile?.mkdirs()
+                    // 先写 .part 再改名：半截文件不会被当成完整安装包
+                    val tmp = File(file.parentFile, file.name + ".part")
+                    FileOutputStream(tmp).use { out ->
+                        val total = conn.contentLengthLong   // -1 = 服务器没报长度
+                        val buf = ByteArray(64 * 1024)
+                        var done = 0L
+                        var lastPct = -1
+                        var lastMb = -1L
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            if (total > 0) {
+                                val pct = (done * 100 / total).toInt()
+                                if (pct != lastPct) {
+                                    lastPct = pct
+                                    notifyProgress(pct, "$pct%（${"%.1f".format(done / 1048576f)} MB）")
+                                }
+                            } else {
+                                val mb = done shr 20
+                                if (mb != lastMb) {
+                                    lastMb = mb
+                                    notifyProgress(-1, "已下载 ${"%.1f".format(done / 1048576f)} MB")
+                                }
+                            }
+                        }
+                        if (done == 0L) throw IllegalStateException("下载内容为空")
+                    }
+                    if (tmp != file && !tmp.renameTo(file)) {
+                        file.delete()
+                        if (!tmp.renameTo(file)) throw IllegalStateException("保存安装包失败")
+                    }
+                }
+                conn.disconnect()
+                val doneNote = NotificationCompat.Builder(this, "update")
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentTitle("琪遇台账 · 下载完成")
+                    .setContentText("正在弹出安装…")
+                    .setAutoCancel(true)
+                    .build()
+                nm.notify(notifId, doneNote)
+                runOnUiThread { installApk(file) }
+            } catch (e: Exception) {
+                toast("下载失败：${e.message}")
+            } finally {
+                downloading.set(false)
+            }
         }
     }
 
