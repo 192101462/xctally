@@ -1,18 +1,19 @@
 # xctally 云端自动构建（GitHub Actions）
 # ============================================================
 # 链路：日常只 push gitee → gitee「推送镜像」自动同步本仓库 →
-#       推一个 v* 标签触发本流水线 → 云端构建签名 APK →
+#       在 Actions 页手动触发（填版本号+更新说明）→ 云端构建签名 APK →
 #       发布回 gitee Release 并更新 version.json → 手机检查更新即可升级。
 #
 # 一次性配置见 docs/ci-setup.md（镜像 + Secrets 清单）。
 #
-# 触发：推 v 开头的标签（git tag v1.1 && git push origin v1.1），
-#       或在 GitHub 仓库 Actions 页手动触发（不传版本时只构建不发布）。
+# 触发：只在 Actions 页手动 Run workflow（workflow_dispatch）。
+#       【不要】用 push 标签触发：发布脚本调 gitee API 建 Release 时会
+#       顺手创建标签，镜像晚一步把它同步过来时会再次触发流水线——
+#       而且标签指向的是旧提交（不含刚修好的流水线代码），白白重跑一遍
+#       还容易失败。手动触发永远是最新代码。
 name: release
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
@@ -52,19 +53,13 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" \
             || echo "(preinstall skipped — gradle will auto-download)"
 
-      - name: Set version from tag
+      - name: Set version from inputs
         id: ver
         env:
           INPUT_NOTES: ${{ github.event.inputs.notes }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            VER="${GITHUB_REF_NAME#v}"
-            # 标签触发没有输入框：用标签说明当发行版说明
-            NOTES="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}" | tr -d '\r')"
-          else
-            VER="${{ github.event.inputs.version }}"
-            NOTES="$INPUT_NOTES"
-          fi
+          VER="${{ github.event.inputs.version }}"
+          NOTES="$INPUT_NOTES"
           {
             echo "version=$VER"
             echo "publish=$( [ -n "$VER" ] && echo yes || echo no )"

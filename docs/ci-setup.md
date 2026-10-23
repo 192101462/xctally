@@ -92,27 +92,18 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 `.github/workflows/release.yml` 和 `tools/ci_publish.py` 已在仓库里，
 随代码一起 push 到 gitee，镜像同步到 GitHub 后即生效。
 
-## 五、发版
-
-**方式一（推荐）：Actions 页手动触发，能顺便填更新说明**
+## 五、发版 = Actions 页手动触发
 
 GitHub 仓库 → **Actions** → **release** → **Run workflow**：
 
-- **version** 填版本号（如 `1.2`）
-- **notes** 填更新说明，**每行一条**（如"修复卓易通顶部露内容"、"搜索栏重新固定"）。
+- **version** 填版本号（如 `1.3`），留空则只构建不发布
+- **notes** 填更新说明，**每行一条**（如"修复某某问题"、"新增某某功能"）。
   这份文字会同时显示在 gitee 发行版的说明里和 App 内「检查更新」的弹窗里，
   用户升级前就能看到这次更新了什么。
 
-**方式二：推一个标签**（更新说明用标签说明文字，需要带注释的标签）：
-
-```bash
-python tools/release.py --help     # 本地一键发版仍可用（不经过云端）
-# 云端自动构建发版：
-git tag -a v1.2 -m "修复卓易通顶部露内容
-搜索栏重新固定
-检查更新显示真实版本号"
-git push origin v1.2               # gitee → 镜像 → GitHub Actions 自动构建发布
-```
+> v1.2 及之前的标签名（v1.1、v1.2）只是发布脚本建 Release 时自动生成的标记，
+> 现在流水线只认 Actions 页手动触发，**不要**再推标签触发（镜像晚一步把标签
+> 同步到 GitHub 时会再跑一遍旧代码的流水线，白白重构建还容易失败）。
 
 构建进度看 GitHub 仓库的 **Actions** 页（一次约 5-8 分钟）。
 完成后 gitee 的"发行版"页面出现新 Release，`version.json` 已更新，
