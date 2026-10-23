@@ -294,21 +294,36 @@
         '" data-action="i-filter" data-k="' + x.k + '">' + x.t + '</button>';
     }).join('');
 
-    const chips = ['全部'].concat(QY.catList(d).map(function (c) { return c.name; })).map(function (c) {
-      return '<button class="chip ' + (state.category === c ? 'active' : '') +
-        '" data-action="i-cat" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
+    const chips = QY.catList(d).map(function (c) {
+      return '<button class="chip ' + (state.category === c.name ? 'active' : '') +
+        '" data-action="i-cat" data-cat="' + esc(c.name) + '">' + esc(c.name) + '</button>';
     }).join('');
 
     return '' +
       '<div class="page-top">' +
         UI().pageHead('物品', s.count + ' 件在用 · 累计投入 ' + QY.fmtMoney(s.totalSpend),
           UI().iconBtn('i-add', '新增')) +
-        // 搜索钉在固定区（紧凑样式见 .page-top .search）：列表滚动时也能随时搜
-        '<div class="search">' + UI().I.search +
-          '<input id="i-search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
+        // 搜索 + 筛选同一行。窄屏用下拉（点开选），≥560px 才放下完整的
+        // 在用/归档/全部分段（CSS 控制显隐，两份都渲染）
+        '<div class="items-tools">' +
+          '<div class="search">' + UI().I.search +
+            '<input id="i-search" placeholder="搜索名称、位置、来源" value="' + esc(state.query) + '" />' +
+          '</div>' +
+          '<div class="segmented">' + seg + '</div>' +
+          '<button type="button" class="seg-dd" data-action="i-filter-dd">' +
+            '<span>' + (state.filter === 'archived' ? '归档' : state.filter === 'all' ? '全部' : '在用') + '</span>' +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"' +
+              ' stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
+          '</button>' +
         '</div>' +
-        '<div class="segmented" style="margin-bottom:8px;margin-top:10px">' + seg + '</div>' +
-        '<div class="chips">' + chips + '</div>' +
+        // 分类行：「全部」固定在最左；其余分类能放几个放几个，
+        // 放不下的进最右侧「⋯」下拉（全放得下就不显示下拉）——见 layoutCats()
+        '<div class="cat-row">' +
+          '<button class="chip ' + (state.category === '全部' ? 'active' : '') +
+            '" data-action="i-cat" data-cat="全部">全部</button>' +
+          '<div class="cat-wrap">' + chips + '</div>' +
+          '<button type="button" class="cat-more" data-action="i-cat-more" aria-label="更多分类">⋯</button>' +
+        '</div>' +
       '</div>' +
       '<div class="group" id="i-list">' + renderListInner() + '</div>';
   }
@@ -374,9 +389,9 @@
       kv('数量', (item.qty || 1) + ' ' + (item.unit || '个') +
         (item.cost != null && (item.qty || 1) > 1 ? ' · 单价 ' + QY.fmtMoney(item.cost / item.qty) : '')),
       kv('分类', esc(item.category) + (item.sub ? ' · ' + esc(item.sub) : '')),
-      // 状态 = 分类里的阶段词（未开封 → 使用中 → …），跟分类走
-      kv('状态', '<span class="pill blue">' + esc(item.status) + '</span>' +
-        '<button class="btn mini" data-action="i-status" data-id="' + item.id + '">改</button>'),
+      // 状态 = 分类里的阶段词（未开封 → 使用中 → …），点状态标签本身就能改
+      kv('状态', '<span class="pill blue tappable" data-action="i-status" data-id="' + item.id + '">' +
+        esc(item.status) + '</span>'),
       // 归档 = 总开关（是/否），点一下就切换，和列表右滑、按钮是同一个逻辑
       kv('归档', (QY.isArchived(item)
         ? '<span class="pill gray">已归档</span>' +
@@ -427,11 +442,6 @@
           '<div class="empty" style="padding:22px 14px"><p>还没有记录</p></div>') + '</div></div>' +
       '<div class="section"><div class="sheet-actions" style="flex-wrap:wrap">' +
         '<button class="btn primary" data-action="i-edit" data-id="' + item.id + '">编辑</button>' +
-        '<button class="btn plain" data-action="i-status" data-id="' + item.id + '">改状态</button>' +
-        '<button class="btn plain" data-action="i-archive" data-id="' + item.id + '">' +
-          (QY.isArchived(item) ? '取消归档' : '归档') + '</button>' +
-        '<button class="btn plain" data-action="i-pin" data-id="' + item.id + '">' +
-          (item.pinned ? '取消置顶' : '置顶') + '</button>' +
         '<button class="btn plain" data-action="i-del" data-id="' + item.id + '" style="color:var(--red)">删除</button>' +
       '</div></div>';
   }
@@ -973,6 +983,60 @@
     });
   }
 
+  /* ---------------- 分类行：按宽度收纳进「⋯」下拉 ----------------
+   * 全部恢复显示量一遍自然宽度；放不下就亮出 ⋯ 按钮再量一遍（要扣掉按钮宽）。
+   * 当前选中的分类若被收进下拉，按钮直接显示它的名字，选择状态看得见。 */
+  let hiddenCats = [];
+
+  function layoutCats() {
+    const row = document.querySelector('.page-top .cat-row');
+    if (!row) return;
+    const wrap = row.querySelector('.cat-wrap');
+    const more = row.querySelector('.cat-more');
+    if (!wrap || !more) return;
+    const chips = Array.prototype.slice.call(wrap.children);
+    const gap = 8;
+    more.style.display = 'none';
+    chips.forEach(function (c) { c.style.display = ''; });
+    hiddenCats = [];
+    const fits = function (limit) {
+      let used = 0;
+      for (let i = 0; i < chips.length; i++) {
+        used += chips[i].offsetWidth + (i ? gap : 0);
+        if (used > limit) return i;         // 第 i 个开始放不下
+      }
+      return chips.length;
+    };
+    let hideFrom = fits(wrap.clientWidth);
+    if (hideFrom < chips.length) {
+      // 显示要用 'flex'，不能用 ''：CSS 默认 display:none，
+      // 清空内联样式会回落成隐藏，按钮就永远出不来了
+      more.style.display = 'flex';
+      hideFrom = fits(wrap.clientWidth - more.offsetWidth - gap);
+      for (let i = hideFrom; i < chips.length; i++) chips[i].style.display = 'none';
+      hiddenCats = chips.slice(hideFrom).map(function (c) { return c.getAttribute('data-cat'); });
+    }
+    // 选中项被收进下拉时，按钮显示选中分类名（否则就是 ⋯）
+    const sel = hiddenCats.indexOf(state.category) >= 0;
+    more.textContent = sel ? state.category : '⋯';
+    more.classList.toggle('active', sel);
+  }
+
+  let catResizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (catResizeTimer) clearTimeout(catResizeTimer);
+    catResizeTimer = setTimeout(layoutCats, 120);
+  });
+
+  /* 筛选小浮层：点外面收起（选项点击走 i-filter 自己收）；
+     分类「⋯」的浮层也是同一个类，一并收 */
+  document.addEventListener('click', function (e) {
+    const menu = document.querySelector('.seg-dd-menu');
+    if (!menu) return;
+    if (e.target.closest && e.target.closest('.seg-dd-menu, .seg-dd, .cat-more')) return;
+    menu.remove();
+  }, true);
+
   /* 长按时间线条目 500ms → 打开修改弹窗（平时没有多余的按钮，界面干净） */
   (function bindTimelinePress() {
     let pressTimer = null;
@@ -1413,7 +1477,42 @@
       if (UI().backFromDetail) UI().backFromDetail();
       else { state.detailId = null; UI().mount(); }
     }
-    else if (action === 'i-filter') { state.filter = el.getAttribute('data-k'); UI().mount(); }
+    else if (action === 'i-filter') {
+      state.filter = el.getAttribute('data-k');
+      const menu = document.querySelector('.seg-dd-menu');
+      if (menu) menu.remove();   // 就地浮层：选完收起（mount 重渲染也会带走它）
+      UI().mount();
+    }
+    else if (action === 'i-cat-more') {
+      // 「⋯」就地浮层：只列被收纳的分类（能放下的已经在行里了）
+      const existed = document.querySelector('.seg-dd-menu');
+      if (existed) { existed.remove(); return; }
+      if (!hiddenCats.length) return;
+      const m = document.createElement('div');
+      m.className = 'seg-dd-menu';
+      m.innerHTML = hiddenCats.map(function (name) {
+        return '<button type="button" class="' + (state.category === name ? 'active' : '') +
+          '" data-action="i-cat" data-cat="' + esc(name) + '">' + esc(name) +
+          (state.category === name ? ' ✓' : '') + '</button>';
+      }).join('');
+      el.parentNode.appendChild(m);   // .cat-row（position:relative）
+    }
+    else if (action === 'i-filter-dd') {
+      // 就地展开的小浮层（锚在下拉按钮下方），再点一次或点外面收起
+      const existed = document.querySelector('.seg-dd-menu');
+      if (existed) { existed.remove(); return; }
+      const dd = el.closest('.seg-dd');
+      if (!dd) return;
+      const cur = state.filter;
+      const m = document.createElement('div');
+      m.className = 'seg-dd-menu';
+      m.innerHTML = [['active', '在用'], ['archived', '归档'], ['all', '全部']].map(function (x) {
+        return '<button type="button" class="' + (cur === x[0] ? 'active' : '') +
+          '" data-action="i-filter" data-k="' + x[0] + '">' + x[1] +
+          (cur === x[0] ? ' ✓' : '') + '</button>';
+      }).join('');
+      dd.parentNode.appendChild(m);
+    }
     else if (action === 'i-cat') { state.category = el.getAttribute('data-cat'); UI().mount(); }
     else if (action === 'i-close') { editingId = null; UI().closeSheet(); }
     else if (action === 'i-save') saveForm();
@@ -1548,6 +1647,8 @@
     openTrash: openTrash,
     handleAction: handleAction,
     handleInput: handleInput,
+    // 首页/重挂载后按实际宽度收纳分类行（app.js 的 mount 会调）
+    layoutCats: layoutCats,
     // AI 动作也走它，保证时间线/开封联动和手动一致
     applyStatus: applyStatus,
     confirmSheet: confirmSheet

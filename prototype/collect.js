@@ -1332,6 +1332,8 @@
   window.QYV = {
     renderList: renderList,
     renderDetailIfAny: renderDetailIfAny,
+    // 首页加号 / AI 用：直接打开"新增随笔"表单（等于点收藏页的 + ）
+    openForm: function () { UI().openSheet(formHTML(null)); initEditor(); },
     clearDetail: function () { state.detailId = null; },
     hasDetail: function () { return !!state.detailId; },
     openDetail: function (id) { state.detailId = id; },
@@ -1367,6 +1369,27 @@
       db.entries.push(entry);
       save();
       return entry.id;
+    },
+    // 给 AI 助手用：按 id 改随笔（字段白名单）与删除随笔
+    updateEntry: function (id, patch) {
+      const e = db.entries.filter(function (x) { return x.id === id; })[0];
+      if (!e) return false;
+      patch = patch || {};
+      if (patch.title != null) e.title = String(patch.title).trim() || e.title;
+      if (patch.cat) e.cat = String(patch.cat);
+      if (patch.date) e.date = patch.date;
+      if (Array.isArray(patch.tags)) e.tags = patch.tags.map(String).filter(Boolean);
+      if (patch.body != null) {
+        e.bodyHtml = sanitize('<p>' + esc(String(patch.body).trim()).replace(/\n/g, '</p><p>') + '</p>');
+      }
+      save();
+      return true;
+    },
+    deleteEntry: function (id) {
+      const n = db.entries.length;
+      db.entries = db.entries.filter(function (x) { return x.id !== id; });
+      save();
+      return db.entries.length < n;
     },
     // 给物品模块复用：选一张图（原生可拍照/相册）-> 压缩 -> 回调 dataURL
     // cb(dataUrl, info)，info.bytes 是最终字节数、info.gif 标记动图

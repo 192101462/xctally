@@ -664,10 +664,10 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        /** 网页把到期清单交过来，交给 WorkManager 每天检查 */
+        /** 网页把到期清单交过来（hour = 每天几点提醒），交给 WorkManager 排班 */
         @JavascriptInterface
-        fun scheduleReminders(json: String) {
-            ReminderWorker.save(this@MainActivity, json)
+        fun scheduleReminders(json: String, hour: Int) {
+            ReminderWorker.save(this@MainActivity, json, hour)
         }
 
         /** 设置页「发条测试通知」：立即验证通知链路 */

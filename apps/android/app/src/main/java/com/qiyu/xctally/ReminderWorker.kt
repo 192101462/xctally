@@ -58,6 +58,7 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
     companion object {
         private const val PREFS = "xctally"
         private const val KEY = "reminders"
+        private const val KEY_HOUR = "reminder_hour"
         private const val CHANNEL = "xctally_due"
         private const val WORK = "xctally_reminders"
 
@@ -94,14 +95,17 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
 
         /** 设置页「发条测试通知」：立刻弹一条，验证权限/通道/ROM 放行整条链路 */
         fun postTest(ctx: Context) {
+            val hour = prefs(ctx).getInt(KEY_HOUR, 9)
             notify(ctx, "test", "琪遇台账 · 测试通知",
-                "到期提醒链路是通的。真正的提醒会在到期前 3 天的早上 9 点左右弹出。")
+                "提醒链路是通的。真正的提醒按你的设置，在到期前几天、每天 $hour 点左右弹出。")
         }
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-        fun save(ctx: Context, json: String) {
-            // 网页每次都会推全量清单；旧的"已提醒"标记按 id 保留，避免同一天重复弹
+        fun save(ctx: Context, json: String, hour: Int) {
+            // 网页每次都会推全量清单；旧的"已提醒"标记按 id 保留，避免同一天重复弹。
+            // hour 是用户选的提醒钟点（设置 → 到期提醒），存下来供排班用。
+            val h = hour.coerceIn(0, 23)
             val old = load(ctx)
             val done = HashSet<String>()
             for (i in 0 until old.length()) {
@@ -119,7 +123,10 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
             } catch (e: Exception) {
                 return
             }
-            prefs(ctx).edit().putString(KEY, fresh.toString()).apply()
+            prefs(ctx).edit()
+                .putString(KEY, fresh.toString())
+                .putInt(KEY_HOUR, h)
+                .apply()
             schedule(ctx)
         }
 
@@ -132,20 +139,21 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
             }
         }
 
-        /** 每天上午 9 点左右跑一次 */
+        /** 每天在用户选的钟点跑一次（默认 9 点） */
         fun schedule(ctx: Context) {
+            val hour = prefs(ctx).getInt(KEY_HOUR, 9)
             val req = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
-                .setInitialDelay(millisToNextMorning(), TimeUnit.MILLISECONDS)
+                .setInitialDelay(millisToNext(hour), TimeUnit.MILLISECONDS)
                 .build()
             WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
                 WORK, ExistingPeriodicWorkPolicy.UPDATE, req
             )
         }
 
-        private fun millisToNextMorning(): Long {
+        private fun millisToNext(hour: Int): Long {
             val now = Calendar.getInstance()
             val next = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 9)
+                set(Calendar.HOUR_OF_DAY, hour)
                 set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0)
                 set(Calendar.MILLISECOND, 0)

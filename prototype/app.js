@@ -46,8 +46,20 @@
     energy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 2.8 5.6 13.4h5.2l-1 7.8 8-11.2h-5.4z"/></svg>',
     me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.4" r="3.6"/><path d="M4.9 20.2c1.4-3.6 4-5.4 7.1-5.4s5.7 1.8 7.1 5.4"/></svg>',
     search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>',
-    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+    plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    image: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="4.6" width="16.8" height="14.8" rx="2.4"/><circle cx="9" cy="10" r="1.7"/><path d="M4.4 17.6l4.8-4.4 3.6 3.2 3-2.6 4 3.4"/></svg>'
   };
+
+  /* 浅色背景预设：都很淡（和默认 #f2f2f7 同量级），保证文字对比度。
+     深色模式不吃这些 —— 自动回默认深底，见 applyBackground。 */
+  const BG_PRESETS = [
+    { v: 'default', t: '默认（云雾灰）', css: 'linear-gradient(160deg,#f7f7fa,#ececf2)' },
+    { v: 'p1', t: '奶油', css: 'linear-gradient(160deg,#faf6ee,#f1e9da)' },
+    { v: 'p2', t: '淡粉', css: 'linear-gradient(160deg,#fbf1f2,#f3e3e7)' },
+    { v: 'p3', t: '雾蓝', css: 'linear-gradient(160deg,#edf4fa,#e0eaf4)' },
+    { v: 'p4', t: '薄荷', css: 'linear-gradient(160deg,#eef7f1,#e0efe7)' },
+    { v: 'p5', t: '浅紫', css: 'linear-gradient(160deg,#f4f1fa,#e9e3f3)' }
+  ];
 
   /* ---------------- 界面偏好（标签页显隐 / 三处排序） ----------------
    * 单独一个存储键，和业务数据分开：不进备份，清数据也不会顺手清掉。
@@ -64,19 +76,30 @@
   function ui() {
     let c = {};
     try { c = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (err) { c = {}; }
-    return {
+    return Object.assign({}, c, {
       tabs: Object.assign({}, UI_DEFAULTS.tabs, c.tabs || {}),
       sort: Object.assign({}, UI_DEFAULTS.sort, c.sort || {}),
-      theme: c.theme || UI_DEFAULTS.theme
-    };
+      theme: c.theme || UI_DEFAULTS.theme,
+      bg: c.bg || { preset: 'default', img: null },
+      // 提醒：days 支持多选（数组）；老数据是单个数字，包一层数组兼容
+      reminder: (function () {
+        const r = Object.assign({ days: [3], hour: 9 }, c.reminder || {});
+        r.days = Array.isArray(r.days) ? (r.days.length ? r.days : [3])
+          : [Number(r.days) || 3];
+        r.hour = Number(r.hour) || 9;
+        return r;
+      })()
+    });
   }
   function uiSet(patch) {
     const cur = ui();
-    const next = {
+    // 通用浅合并：tabs/sort 深一层，其余字段（theme、bg…）直接替换。
+    // 之前白名单式重建会把新字段（如背景设置）悄悄丢掉。
+    const next = Object.assign({}, cur, patch || {}, {
       tabs: Object.assign({}, cur.tabs, (patch && patch.tabs) || {}),
-      sort: Object.assign({}, cur.sort, (patch && patch.sort) || {}),
-      theme: (patch && patch.theme) || cur.theme || 'auto'
-    };
+      sort: Object.assign({}, cur.sort, (patch && patch.sort) || {})
+    });
+    next.theme = next.theme || 'auto';
     try { localStorage.setItem(UI_KEY, JSON.stringify(next)); } catch (err) { /* 忽略 */ }
   }
   function tabVisible(id) { return !!FORCED_TABS[id] || ui().tabs[id] !== false; }
@@ -102,8 +125,48 @@
   }
   function setThemeAttr(dark) {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    applyBackground();
     // 让原生把系统栏/窗口底色换成主题色：兼容层没让网页铺满时，边缘不露白条
     if (window.QYPlatform && QYPlatform.setSystemBars) QYPlatform.setSystemBars(dark);
+  }
+
+  /* 背景应用：预设色/自定义图只挂在浅色模式上，深色模式一律回默认深底
+     （浅底图配深色界面会发灰、文字对比乱，不值得做双份映射）。 */
+  function applyBackground() {
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark';
+    const bg = ui().bg || {};
+    root.style.removeProperty('--user-bg');
+    if (dark || (!bg.img && (!bg.preset || bg.preset === 'default'))) {
+      root.removeAttribute('data-bg');
+      return;
+    }
+    if (bg.img) {
+      root.setAttribute('data-bg', 'img');
+      root.style.setProperty('--user-bg', 'url(' + bg.img + ')');
+    } else {
+      root.setAttribute('data-bg', bg.preset);
+    }
+  }
+
+  /* 自定义背景图压一道再存：720px / 0.6 的 JPEG 一般几十 KB，
+     原图直存会把 localStorage 撑爆 */
+  function compressBg(dataUrl) {
+    return new Promise(function (resolve) {
+      const img = new Image();
+      img.onload = function () {
+        try {
+          const scale = Math.min(1, 720 / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(img.width * scale));
+          cv.height = Math.max(1, Math.round(img.height * scale));
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', 0.6));
+        } catch (err) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = dataUrl;
+    });
   }
 
   const ITEMS_SORTS = [
@@ -824,7 +887,12 @@
       html = viewMe();
     }
     view.innerHTML = html;
-    // 余额在首页卡片上查，这里不再自动拉取
+    // 分类行按实际宽度收纳。要等布局真正完成才能量宽度：
+    // 双 rAF 保一帧布局，再补一个延时兜底（字体晚加载会改 chip 宽度）
+    if (window.QYI && QYI.layoutCats) {
+      requestAnimationFrame(function () { requestAnimationFrame(QYI.layoutCats); });
+      setTimeout(QYI.layoutCats, 300);
+    }
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
     updateTopPill();
@@ -858,7 +926,10 @@
 
   // 把到期清单交给原生壳去发系统通知（浏览器里是空操作）
   function pushReminders() {
-    if (!window.QYPlatform || !window.QYPlatform.native) return;
+    if (!window.QYPlatform || !QYPlatform.native) return;
+    const rem = ui().reminder;
+    const hour = Math.max(0, Number(rem.hour) || 9);
+    const aheads = rem.days.slice().sort(function (a, b) { return a - b; });
     const list = [];
     data.items.forEach(function (it) {
       if (!QY.isActive(it)) return;
@@ -868,16 +939,20 @@
       targets.forEach(function (t) {
         const days = QY.dayDiff(QY.today(), QY.parseDate(t.date));
         if (days == null || days < 0) return;
-        list.push({
-          id: it.id + '_' + t.kind,
-          title: it.name + ' · ' + t.kind,
-          body: QY.fmtDate(t.date) + (days > 0 ? '（还有 ' + days + ' 天）' : '（就是今天）'),
-          // 提前 3 天提醒；已经进入 3 天以内的，明天早上提醒一次
-          remindAt: days > 3 ? QY.addDays(days - 3) : QY.addDays(1)
+        // 多选几天就生成几条：第 d 天提前的那条在 (days-d) 天后到期触发。
+        // 每条自己的 done 标记互不影响，同一天也能弹两次不同提前量的提醒。
+        aheads.forEach(function (d) {
+          if (days < d) return;   // 已经过了这个提前量就不再补
+          list.push({
+            id: it.id + '_' + t.kind + '_d' + d,
+            title: it.name + ' · ' + t.kind,
+            body: QY.fmtDate(t.date) + (days > 0 ? '（还有 ' + days + ' 天）' : '（就是今天）'),
+            remindAt: QY.addDays(days - d)
+          });
         });
       });
     });
-    QYPlatform.scheduleReminders(list);
+    QYPlatform.scheduleReminders(list, hour);
   }
 
   /* ---------------- 事件委托 ---------------- */
@@ -927,9 +1002,30 @@
       state.category = el.getAttribute('data-cat');
       mount();
     } else if (action === 'add') {
-      // 物品新增统一走 items.js 的表单
+      // 首页的加号跟着界面走：收藏标签可见时选择记哪种，只有物品就直接开物品表单
+      if (tabVisible('collect') && window.QYV && QYV.renderList) {
+        openSheet('<div class="sheet"><div class="grabber"></div>' +
+          '<h3>记点什么？</h3>' +
+          '<div class="group">' +
+            '<div class="picker-opt" data-action="add-item"><span>新增物品</span><span class="chev">›</span></div>' +
+            '<div class="picker-opt" data-action="add-note"><span>新增收藏随笔</span><span class="chev">›</span></div>' +
+          '</div></div>');
+      } else if (window.QYI) {
+        QYI.openForm(null);
+      } else {
+        openSheet(itemFormHTML());
+      }
+    } else if (action === 'add-item') {
+      closeSheet();
       if (window.QYI) QYI.openForm(null);
       else openSheet(itemFormHTML());
+    } else if (action === 'add-note') {
+      closeSheet();
+      state.tab = 'collect';
+      state.detailId = null;
+      mount();
+      if (window.QYV && QYV.openForm) QYV.openForm();
+      else toast('收藏模块不可用');
     } else if (action === 'reading') {
       openSheet(readingFormHTML(id || (data.meters[0] && data.meters[0].id)));
     } else if (action === 'close-sheet') {
@@ -976,6 +1072,29 @@
       (state.setting || []).pop();
       if (!(state.setting || []).length) state.setting = null;
       mount();
+    } else if (action === 'set-remind-days') {
+      // 多选 toggle：至少保留一个，不然提醒就静默了
+      const rem = ui().reminder;
+      const v = Number(el.getAttribute('data-v'));
+      const has = rem.days.indexOf(v) >= 0;
+      const days = has ? rem.days.filter(function (x) { return x !== v; }) : rem.days.concat([v]).sort(function (a, b) { return a - b; });
+      if (!days.length) { toast('至少保留一个，不然收不到提醒'); return; }
+      uiSet({ reminder: { days: days, hour: rem.hour } });
+      mount();   // 顺手把新清单推给原生重新排班
+    } else if (action === 'remind-hour-open') {
+      const rem = ui().reminder;
+      openSheet('<div class="sheet"><div class="grabber"></div>' +
+        '<h3>几点提醒</h3>' +
+        '<div class="group">' + [7, 8, 9, 10, 11, 12, 18, 20, 21].map(function (h) {
+          return '<div class="picker-opt ' + (rem.hour === h ? 'on' : '') +
+            '" data-action="set-remind-hour" data-v="' + h + '"><span>' + h + ' 点</span>' +
+            (rem.hour === h ? '<span class="tick">✓</span>' : '') + '</div>';
+        }).join('') + '</div></div>');
+    } else if (action === 'set-remind-hour') {
+      const rem = ui().reminder;
+      uiSet({ reminder: { days: rem.days.slice(), hour: Number(el.getAttribute('data-v')) } });
+      closeSheet();
+      mount();
     } else if (action === 'test-reminder') {
       // 立即发一条测试通知，验证权限/通道/ROM 放行整条链路
       if (window.QYAndroid && QYAndroid.testReminder) {
@@ -986,6 +1105,27 @@
       } else {
         toast('测试通知要在手机 App 里发（浏览器无法弹系统通知）');
       }
+    } else if (action === 'set-bg') {
+      uiSet({ bg: { preset: el.getAttribute('data-v'), img: null } });
+      applyBackground();
+      mount();
+    } else if (action === 'set-bg-img') {
+      if (!window.QYPlatform || !QYPlatform.pickImage) { toast('浏览器里暂不支持选背景图'); return; }
+      QYPlatform.pickImage(function (dataUrl) {
+        if (!dataUrl) return;
+        compressBg(dataUrl).then(function (comp) {
+          if (!comp) { toast('这张图处理不了'); return; }
+          uiSet({ bg: { preset: 'img', img: comp } });
+          applyBackground();
+          mount();
+          toast('背景已换；深色模式下会自动用回默认');
+        });
+      }, { maxSide: 1280, quality: 0.8 });
+    } else if (action === 'set-bg-clear') {
+      uiSet({ bg: { preset: 'default', img: null } });
+      applyBackground();
+      mount();
+      toast('已恢复默认背景');
     } else if (action === 'set-go') {
       state.setting = (state.setting || []).concat([el.getAttribute('data-k')]);
       mount();
@@ -1061,9 +1201,23 @@
     mount();
   }
 
+  /* AI/首页用：切到某个标签页（等效于点底部标签，会先退出设置/详情） */
+  function gotoTab(tab) {
+    const t = ['home', 'items', 'collect', 'energy', 'me'].indexOf(tab) >= 0 ? tab : 'home';
+    rememberScroll();
+    state.setting = null;
+    state.detailFrom = null;
+    state.tab = t;
+    state.detailId = null;
+    if (window.QYV) QYV.clearDetail();
+    if (window.QYI) QYI.clearDetail();
+    resetScrollUi();
+    mount();
+    restoreScroll();
+  }
+
   /* 详情页返回按钮上写什么：哪来的就写哪 */
-  function detailBackLabel() {
-    const from = state.detailFrom;
+  function detailBackLabel() {    const from = state.detailFrom;
     if (!from || from === 'items') return '物品';
     if (from === 'home') return '首页';
     return PAGE_TITLES[from] || '物品';
@@ -1284,7 +1438,11 @@
         '<div class="group" style="margin-top:16px">' +
           setRow('set-go', 'AI助手', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
-          setRow('test-reminder', '到期提醒', { side: '提前3天 · 早9点', chev: true }) +
+          setRow('set-go', '到期提醒', {
+            k: 'remind',
+            side: '提前' + (ui().reminder.days.join('/')) + '天 · ' + ui().reminder.hour + '点',
+            chev: true
+          }) +
           setRow('set-go', '外观', { k: 'look', chev: true }) +
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
         '</div>' +
@@ -1294,7 +1452,7 @@
     }
 
     const top = path[path.length - 1];
-    const titles = { ai: 'AI助手', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '排序', theme: '深色模式' };
+    const titles = { ai: 'AI助手', data: '数据管理', look: '外观', mem: '内存', tabs: '界面', sort: '列表排序', theme: '深色模式', bg: '背景', remind: '到期提醒' };
     const nav = setNav('set-back', '设置', titles[top] || '设置');
 
     if (top === 'ai') {
@@ -1307,19 +1465,65 @@
         '</div>';
     }
     if (top === 'data') {
+      const so = ui().sort || {};
+      const itemsSort = (ITEMS_SORTS.filter(function (o) { return o.v === so.items; })[0] || {}).t;
       return nav + '<div class="group" style="margin-top:16px">' +
         setRow('b-export', '导出完整备份', { chev: true }) +
         setRow('b-import', '导入数据', { chev: true }) +
         setRow('i-trash', '回收站', { side: '保留 ' + QY.TRASH_DAYS + ' 天', chev: true }) +
+        setRow('set-go', '列表排序', { k: 'sort', side: itemsSort || '默认', chev: true }) +
         '</div>';
     }
     if (top === 'look') {
       const t0 = ui().tabs;
       const hidden = ['collect', 'energy'].filter(function (k) { return t0[k] === false; }).length;
+      const bg = ui().bg || {};
+      const bgLabel = bg.img ? '自定义图片' : (BG_PRESETS.filter(function (p) { return p.v === bg.preset; })[0] || BG_PRESETS[0]).t;
       return nav + '<div class="group" style="margin-top:16px">' +
         setRow('set-go', '深色模式', { k: 'theme', side: themeLabel(), chev: true }) +
+        setRow('set-go', '背景', { k: 'bg', side: bgLabel, chev: true }) +
         setRow('set-go', '界面', { k: 'tabs', side: hidden ? '隐藏 ' + hidden + ' 个' : '全部显示', chev: true }) +
-        setRow('set-go', '排序', { k: 'sort', chev: true }) +
+        '</div>';
+    }
+    if (top === 'remind') {
+      const rem = ui().reminder;
+      const daysChips = [1, 2, 3, 5, 7, 14].map(function (v) {
+        return '<button class="chip ' + (rem.days.indexOf(v) >= 0 ? 'active' : '') +
+          '" data-action="set-remind-days" data-v="' + v + '">提前 ' + v + ' 天</button>';
+      }).join('');
+      return nav +
+        '<div class="set-group-title" style="margin-top:16px">提前几天开始提醒（可多选）</div>' +
+        '<div class="group" style="padding:10px 12px"><div class="chips" style="padding:0;margin:0;flex-wrap:wrap">' + daysChips + '</div></div>' +
+        '<div class="set-group-title" style="margin-top:12px">提醒时间</div>' +
+        '<div class="group" style="margin-top:2px">' +
+          '<div class="set-row" data-action="remind-hour-open">' +
+            '<span class="set-title">几点提醒</span>' +
+            '<span class="set-value">' + rem.hour + ' 点</span><span class="chev">›</span>' +
+          '</div>' +
+          setRow('test-reminder', '发条测试通知', { side: '验证权限和系统拦截', chev: true }) +
+        '</div>';
+    }
+    if (top === 'bg') {
+      const bg = ui().bg || {};
+      const cur = bg.img ? 'img' : (bg.preset || 'default');
+      const rows = BG_PRESETS.map(function (p) {
+        return '<div class="set-row" data-action="set-bg" data-v="' + p.v + '">' +
+          '<span class="bg-swatch" style="background:' + p.css + '"></span>' +
+          '<span class="set-title">' + esc(p.t) + '</span>' +
+          (cur === p.v ? '<span class="chev" style="color:var(--blue)">✓</span>' : '') +
+          '</div>';
+      }).join('');
+      return nav + '<div class="set-group-title" style="margin-top:16px">浅色背景</div>' +
+        '<div class="group">' + rows + '</div>' +
+        '<div class="set-group-title">自定义</div><div class="group">' +
+          '<div class="set-row" data-action="set-bg-img">' +
+            '<span class="bg-switch">' + I.image + '</span>' +
+            '<span class="set-title">从相册选一张</span>' +
+            (cur === 'img' && bg.img
+              ? '<span class="bg-switch" style="background-image:url(' + bg.img + ')"></span>' : '') +
+          '</div>' +
+          (cur === 'img' && bg.img
+            ? '<div class="set-row" data-action="set-bg-clear"><span class="set-title" style="color:var(--red)">移除自定义背景</span></div>' : '') +
         '</div>';
     }
     if (top === 'theme') {
@@ -1370,6 +1574,10 @@
     rememberScroll: rememberScroll,
     // AI 改主题后要重铺 data-theme + 通知原生换系统栏颜色
     applyTheme: applyTheme,
+    // AI 动作用：切页（等效点底部标签）、清空数据（自带三步确认）、背景应用
+    gotoTab: gotoTab,
+    clearData: clearAllData,
+    applyBackground: applyBackground,
     ui: ui,
     uiSet: uiSet,
     itemById: function (id) { return itemById(id); },

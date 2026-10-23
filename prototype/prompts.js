@@ -9,6 +9,11 @@
  *   2. 分类只能从用户自己的分类里选，禁止自创（否则会冒出"乳制品"这种没建过的分类）。
  *   3. 要求输出严格 JSON，并在代码里做容错解析（模型偶尔会包 ```json）。
  *   4. 模型只产出"动作"，真正改数据一律由 App 确认后执行。
+ *   5. 【加新功能的同步义务】App 里每加一个手动操作，都要在这里的动作清单
+ *      加一行、在 assistant.js 的 describe()/applyActions() 加对应分支；
+ *      不可逆动作（清空/批量删）加进 apply 处理器里的 dangerTypes 二确列表。
+ *      模型给不出的枚举值（状态词/排序/表具）要像 STATUS_VOCAB/METERS 一样
+ *      注入进提示词，代码侧再校验一遍。
  */
 (function () {
   'use strict';
@@ -56,21 +61,38 @@
 今天是 {{TODAY}}
 用户自己的物品分类：{{CATEGORIES}}
 用户自己的收藏分类：{{NOTE_CATS}}
+表具（名称 | 当前用量 | 单价）：{{METERS}}
+物品排序词表：items=date/dateAsc/price/daily/expiry/name；collect=recent/oldest/title；energy=amount/name
 
 【输出】严格按这个结构，不要有其他文字：
 { "reply": "给用户看的话（简体中文，简短）", "actions": [ ...动作... ] }
 
-【动作】
+【动作】（App 里所有手动操作都对应到这里；写新功能时同步加动作）
 { "type":"add_item",     "name":"", "price":数字或null, "qty":数字, "category":"", "sub":"", "acquiredAt":"YYYY-MM-DD", "source":"", "location":"", "note":"" }
 { "type":"add_note",     "title":"", "cat":"收藏分类", "date":"YYYY-MM-DD", "tags":[""], "rating":1-5或null, "price":数字或null, "mood":"", "body":"随笔正文（纯文本，可多行）" }
+{ "type":"update_note",  "title":"随笔标题（要能唯一对上）", "fields":{ "title":"", "cat":"", "date":"", "body":"" } }
+{ "type":"delete_note",  "title":"" }
 { "type":"update_item",  "id":"", "fields":{ 要改的字段 } }
 { "type":"set_status",   "id":"物品id（优先）；说不清id时填name", "name":"", "status":"状态词" }
 { "type":"set_archived", "id":"", "archived":true|false }
 { "type":"set_pinned",   "id":"", "pinned":true|false }
 { "type":"delete_item",  "id":"" }
-{ "type":"set_theme",    "mode":"dark|light|auto" }
-{ "type":"check_update" }
+{ "type":"restore_item", "name":"回收站里的物品名" }
+{ "type":"add_event",    "id":"或name", "name":"", "evType":"used|opened|repaired|replaced|lent|returned|disposed|status", "at":"YYYY-MM-DD", "amount":数字或null, "note":"" }
 { "type":"delete_records", "scope":"events|items", "before":"YYYY-MM-DD" }
+{ "type":"empty_trash" }
+{ "type":"add_category",     "name":"新分类名", "statuses":["未开封","使用中","已用完"] }
+{ "type":"update_category",  "name":"分类名", "statuses":["新状态词","…"] }
+{ "type":"delete_category",  "name":"" }
+{ "type":"add_reading",  "meter":"表具名（{{METERS}}）", "value":本月用量数字 }
+{ "type":"set_theme",    "mode":"dark|light|auto" }
+{ "type":"set_bg",       "preset":"default|p1奶油|p2淡粉|p3雾蓝|p4薄荷|p5浅紫" }
+{ "type":"set_sort",     "group":"items|collect|energy", "value":"排序值（词表见【当前数据】末行）" }
+{ "type":"set_tabs",     "collect":true|false, "energy":true|false }
+{ "type":"goto",         "tab":"home|items|collect|energy|me" }
+{ "type":"export_backup" }
+{ "type":"check_update" }
+{ "type":"clear_data" }
 
 各分类的状态词表（set_status 的 status 只能从这里选，按物品所属分类）：
 {{STATUS_VOCAB}}
@@ -94,8 +116,14 @@
 10. set_theme：用户说"深色/夜间"→ dark，"浅色/白天"→ light，"跟随系统"→ auto。
 11. delete_records 是危险操作（App 会二次确认）："删除X之前的记录"时把 X 换算成
     YYYY-MM-DD 填 before；用户说的"记录"指时间线就用 events，明确说"物品"才用 items。
-    reply 里说清楚将要删什么、多少条以内，不要说"已删除"。
+    reply 里说清楚将要删什么、多少条以内，不要说"已删除"。empty_trash 同理。
 12. "看看有没有新版本/更新"→ check_update（结果 App 会自动弹出，reply 简单说在查即可）。
+13. 用户问"回收站里有什么/能不能找回"→ 按 name 用 restore_item；
+    抄表（"电费抄表/水表记一下"）→ add_reading，meter 从 {{METERS}} 里选。
+14. 随笔的修改/删除靠 title 唯一匹配，匹配不上就在 reply 里问。
+15. 排序/背景/标签显隐/切页面：按用户口吻选 value/preset/tab；
+    set_sort 的 value 只能从【当前数据】末行的词表里选。
+16. clear_data 只有用户明确说"清空所有数据"才用（App 会连问三次）。
 
 【用户发图片时】
 用户可能直接发订单截图或购物小票。这时按下面的规则提取，然后用动作入库：
@@ -148,6 +176,15 @@
     }).join('\n');
   }
 
+  /* 表具清单：抄表动作需要知道有哪些表、当前读数 */
+  function metersTable(data) {
+    const ms = (data && data.meters) || [];
+    if (!ms.length) return '（无表具）';
+    return ms.map(function (m) {
+      return m.name + ' | ' + (m.current ? m.current.usage : '?') + ' | ¥' + (m.tier ? m.tier.price : '?') + '/单位';
+    }).join('；');
+  }
+
   window.QYP = {
     VISION: VISION,
     ASSISTANT: ASSISTANT,
@@ -173,6 +210,7 @@
         TODAY: QY.iso(QY.today()),
         CATEGORIES: catNames(data),
         NOTE_CATS: noteCats,
+        METERS: metersTable(data),
         STATUS_VOCAB: statusVocab(data)
       });
     }

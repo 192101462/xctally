@@ -327,6 +327,29 @@
     return m.length === 1 ? m[0] : null;
   }
 
+  /* 按标题找随笔（AI 不拿 entries 全表，靠唯一标题/前缀匹配） */
+  function findNote(title) {
+    const n = String(title || '').trim();
+    if (!n || !window.QYV) return null;
+    const snap = QYV.snapshot();
+    let m = snap.entries.filter(function (e) { return e.title === n; });
+    if (!m.length) m = snap.entries.filter(function (e) { return (e.title || '').indexOf(n) >= 0; });
+    return m.length === 1 ? m[0] : null;
+  }
+
+  /* 按名称找表具（抄表用） */
+  function findMeter(name) {
+    const n = String(name || '').trim();
+    if (!n) return null;
+    const ms = UI().data().meters || [];
+    let m = ms.filter(function (x) { return x.name === n; });
+    if (!m.length) m = ms.filter(function (x) { return (x.name || '').indexOf(n) >= 0; });
+    return m.length === 1 ? m[0] : null;
+  }
+
+  /* 时间线手动记一笔允许的类型（与 items.js 的 MANUAL_EVENT_TYPES 保持一致） */
+  const EVENT_TYPES_ALLOWED = ['used', 'opened', 'repaired', 'replaced', 'lent', 'returned', 'disposed', 'status'];
+
   /* delete_records 影响范围（描述和二确都展示具体条数，用户看得见代价） */
   function countRecords(a) {
     const d = UI().data();
@@ -335,6 +358,13 @@
     }
     return (d.events || []).filter(function (e) { return e.at && e.at < a.before; }).length;
   }
+
+  /* 排序选项词表（提示词注入 + 动作校验共用）。加新排序时同步这里和设置页。 */
+  const SORT_OPTIONS = {
+    items: ['date', 'dateAsc', 'price', 'daily', 'expiry', 'name'],
+    collect: ['recent', 'oldest', 'title'],
+    energy: ['amount', 'name']
+  };
 
   function describe(a) {
     if (!a || !a.type) return '（无法识别的动作）';
@@ -376,6 +406,57 @@
       return '删除 ' + a.before + ' 之前的' + (a.scope === 'items' ? '物品（进回收站）' : '时间线记录（不可恢复）') +
         '，共 ' + n + ' 条' + (n ? '' : '（没有符合条件的）');
     }
+    if (a.type === 'restore_item') {
+      const t = (UI().data().trash || []).filter(function (x) {
+        return x.item && x.item.name && (a.name ? x.item.name.indexOf(a.name) >= 0 : false);
+      })[0];
+      return '从回收站恢复「' + (t ? t.item.name : (a.name || '未找到')) + '」';
+    }
+    if (a.type === 'empty_trash') {
+      return '清空回收站（' + (UI().data().trash || []).length + ' 项彻底删除，不可恢复）';
+    }
+    if (a.type === 'add_category') {
+      return '新建物品分类「' + a.name + '」' +
+        (a.statuses && a.statuses.length ? '，状态词：' + a.statuses.join(' / ') : '');
+    }
+    if (a.type === 'update_category') {
+      return '调整分类「' + a.name + '」的状态词为：' + (a.statuses || []).join(' / ');
+    }
+    if (a.type === 'delete_category') {
+      const used = UI().data().items.filter(function (i) { return i.category === a.name; }).length;
+      return '删除分类「' + a.name + '」' + (used ? '，' + used + ' 件物品会归入「其他」' : '');
+    }
+    if (a.type === 'add_reading') return '抄表：' + a.meter + ' 记 ' + a.value;
+    if (a.type === 'add_event') {
+      const target = (a.id ? itemById(a.id) : null) || findByName(a.name);
+      return '给「' + (target ? target.name : (a.name || '未找到')) + '」记一笔：' +
+        (QY.EVENT_TYPES[a.evType] || { label: a.evType }).label +
+        (a.amount != null ? ' ¥' + a.amount : '') + (a.note ? '（' + a.note + '）' : '');
+    }
+    if (a.type === 'update_note') {
+      const e = a.id ? null : findNote(a.title);
+      return '修改随笔「' + ((e && e.title) || a.title) + '」：' +
+        Object.keys(a.fields || {}).join('、');
+    }
+    if (a.type === 'delete_note') {
+      const e2 = findNote(a.title);
+      return '删除随笔「' + ((e2 && e2.title) || a.title) + '」';
+    }
+    if (a.type === 'set_sort') return '把' + (a.group === 'items' ? '物品' : a.group === 'collect' ? '收藏' : '能源') +
+      '列表按「' + a.value + '」排序';
+    if (a.type === 'set_tabs') {
+      const parts = [];
+      if (a.collect != null) parts.push('收藏' + (a.collect ? '显示' : '隐藏'));
+      if (a.energy != null) parts.push('能源' + (a.energy ? '显示' : '隐藏'));
+      return '界面标签：' + parts.join('，');
+    }
+    if (a.type === 'set_bg') {
+      const names = { default: '默认', p1: '奶油', p2: '淡粉', p3: '雾蓝', p4: '薄荷', p5: '浅紫' };
+      return '切换浅色背景为「' + (names[a.preset] || a.preset) + '」（深色模式不受影响）';
+    }
+    if (a.type === 'goto') return '打开' + ({ home: '首页', items: '物品', collect: '收藏', energy: '能源', me: '我的' }[a.tab] || a.tab) + '页';
+    if (a.type === 'export_backup') return '导出完整备份（会弹系统保存面板）';
+    if (a.type === 'clear_data') return '清空全部数据（会连问 3 次确认）';
     return a.type;
   }
 
@@ -435,6 +516,148 @@
         UI().uiSet({ theme: mode });
         if (UI().applyTheme) UI().applyTheme();
         applied++;
+        return;
+      }
+      if (a.type === 'set_bg') {
+        const ok = ['default', 'p1', 'p2', 'p3', 'p4', 'p5'].indexOf(a.preset) >= 0;
+        if (!ok) { dropped++; return; }
+        UI().uiSet({ bg: { preset: a.preset, img: null } });
+        if (UI().applyBackground) UI().applyBackground();
+        applied++;
+        return;
+      }
+      if (a.type === 'set_sort') {
+        const g = SORT_OPTIONS[a.group];
+        if (!g || g.indexOf(a.value) < 0) { dropped++; return; }
+        const patch = {};
+        patch[a.group] = a.value;
+        UI().uiSet({ sort: patch });
+        applied++;
+        return;
+      }
+      if (a.type === 'set_tabs') {
+        if (a.collect == null && a.energy == null) { dropped++; return; }
+        const t = {};
+        if (a.collect != null) t.collect = !!a.collect;
+        if (a.energy != null) t.energy = !!a.energy;
+        UI().uiSet({ tabs: t });
+        applied++;
+        return;
+      }
+      if (a.type === 'goto') {
+        if (UI().gotoTab) { UI().gotoTab(a.tab); applied++; }
+        else dropped++;
+        return;
+      }
+      if (a.type === 'export_backup') {
+        if (window.QYB && QYB.doExport) { QYB.doExport(); applied++; }
+        else dropped++;
+        return;
+      }
+      if (a.type === 'clear_data') {
+        // clearAllData 自带 3 步确认，不需要再叠二确
+        if (UI().clearData) { UI().clearData(); applied++; }
+        else dropped++;
+        return;
+      }
+      if (a.type === 'restore_item') {
+        const name = String(a.name || '').trim();
+        const t = name ? (d.trash || []).filter(function (x) {
+          return x.item && x.item.name && x.item.name.indexOf(name) >= 0;
+        }) : [];
+        if (t.length !== 1) { dropped++; return; }
+        d.items.push(t[0].item);
+        (t[0].events || []).forEach(function (e) { d.events.push(e); });
+        d.trash = d.trash.filter(function (x) { return x.id !== t[0].id; });
+        UI().toast('已恢复「' + t[0].item.name + '」');
+        applied++;
+        return;
+      }
+      if (a.type === 'empty_trash') {
+        // 危险动作：执行前已被红色二确拦过（见 apply 处理器）
+        const n = (d.trash || []).length;
+        d.trash = [];
+        UI().toast('回收站已清空（' + n + ' 项）');
+        applied++;
+        return;
+      }
+      if (a.type === 'add_category') {
+        const nm = String(a.name || '').trim();
+        if (!nm || QY.catList(d).some(function (c) { return c.name === nm; })) { dropped++; return; }
+        const sts = (Array.isArray(a.statuses) ? a.statuses : []).map(String).filter(Boolean);
+        d.itemCats.push({
+          name: nm, emoji: '📦',
+          g: ['#ECECF1', '#CFCFD8'], costTrack: true,
+          statuses: sts.length ? sts : ['未开封', '使用中', '已用完']
+        });
+        applied++;
+        return;
+      }
+      if (a.type === 'update_category') {
+        const c = QY.catList(d).filter(function (x) { return x.name === a.name; })[0];
+        const sts = (Array.isArray(a.statuses) ? a.statuses : []).map(String).filter(Boolean);
+        if (!c || sts.length < 2) { dropped++; return; }
+        c.statuses = sts;
+        d.items.forEach(function (i) {
+          if (i.category === c.name && sts.indexOf(i.status) < 0) i.status = sts[0];
+        });
+        applied++;
+        return;
+      }
+      if (a.type === 'delete_category') {
+        const nm = String(a.name || '').trim();
+        const c = QY.catList(d).filter(function (x) { return x.name === nm; })[0];
+        if (!c) { dropped++; return; }
+        d.itemCats = QY.catList(d).filter(function (x) { return x.name !== nm; });
+        if (!d.itemCats.length) {
+          d.itemCats = QY.DEFAULT_CATS.map(function (x) {
+            return { name: x.name, emoji: x.emoji, g: x.g.slice(), costTrack: x.costTrack, statuses: (x.statuses || []).slice() };
+          });
+        }
+        d.items.forEach(function (i) { if (i.category === nm) i.category = '其他'; });
+        applied++;
+        return;
+      }
+      if (a.type === 'add_reading') {
+        const m = findMeter(a.meter);
+        const usage = Number(a.value);
+        if (!m || !usage || usage <= 0) { dropped++; return; }
+        const last = m.history[m.history.length - 1];
+        m.current.usage = usage;
+        m.current.cost = Number((usage * m.tier.price).toFixed(2));
+        m.current.projected = usage;
+        m.current.projectedCost = m.current.cost;
+        m.current.trend = last && last.cost ? (m.current.cost - last.cost) / last.cost : 0;
+        m.tier.used = usage;
+        m.history.push({ at: QY.iso(QY.today()), usage: usage, cost: m.current.cost });
+        UI().toast(m.name + ' 已抄表');
+        applied++;
+        return;
+      }
+      if (a.type === 'add_event') {
+        const it2 = (a.id ? itemById(a.id) : null) || findByName(a.name);
+        if (!it2 || EVENT_TYPES_ALLOWED.indexOf(a.evType) < 0) { dropped++; return; }
+        d.events.push({
+          id: QY.uid('ev'), itemId: it2.id, type: a.evType,
+          at: /^\d{4}-\d{2}-\d{2}$/.test(a.at || '') ? a.at : QY.iso(QY.today()),
+          amount: a.amount != null && a.amount !== '' ? Number(a.amount) : null,
+          note: a.note || null
+        });
+        applied++;
+        return;
+      }
+      if (a.type === 'update_note') {
+        if (!window.QYV || !QYV.updateEntry) { dropped++; return; }
+        const e = findNote(a.title);
+        if (!e) { dropped++; return; }
+        if (QYV.updateEntry(e.id, a.fields || {})) applied++; else dropped++;
+        return;
+      }
+      if (a.type === 'delete_note') {
+        if (!window.QYV || !QYV.deleteEntry) { dropped++; return; }
+        const e = findNote(a.title);
+        if (!e) { dropped++; return; }
+        if (QYV.deleteEntry(e.id)) { applied++; UI().toast('已删除随笔'); } else dropped++;
         return;
       }
       if (a.type === 'check_update') {
@@ -523,14 +746,34 @@
 
   /* ---------------- 发消息 ---------------- */
 
-  /* 选一张图（拍照/相册），压缩后挂在输入框上方等发送 */
+  /* 选一张图（拍照/相册），压缩后挂在输入框上方等发送。
+   * 原生壳里先问来源（相机/相册）；浏览器没有原生选择器，直接走文件选择。 */
   function pickImage() {
     if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
+    const go = function (source) {
+      QYV.pickImage(function (dataUrl) {
+        if (!dataUrl) return;
+        pendingImage = dataUrl;
+        rerenderChat();
+      }, { maxSide: 1280, quality: 0.8, source: source });
+    };
+    if (!window.QYPlatform || !QYPlatform.native) { go(''); return; }
+    UI().openSheet('<div class="sheet"><div class="grabber"></div>' +
+      '<h3>图片来源</h3>' +
+      '<div class="group">' +
+        '<div class="picker-opt" data-ai="pick-camera"><span>拍照</span><span class="chev">›</span></div>' +
+        '<div class="picker-opt" data-ai="pick-gallery"><span>从相册选择</span><span class="chev">›</span></div>' +
+      '</div></div>');
+  }
+
+  /* 来源选择面板的落地：按来源调起原生相机/相册 */
+  function pickImageWith(source) {
+    if (!window.QYV || !QYV.pickImage) return;
     QYV.pickImage(function (dataUrl) {
       if (!dataUrl) return;
       pendingImage = dataUrl;
       rerenderChat();
-    }, { maxSide: 1280, quality: 0.8 });
+    }, { maxSide: 1280, quality: 0.8, source: source });
   }
 
   async function send(text) {
@@ -610,6 +853,8 @@
     if (act === 'close') { hideBall(); return; }
     if (act === 'hide') { UI().closeSheet(); hideBall(); return; }
     if (act === 'pick') { pickImage(); return; }
+    if (act === 'pick-camera') { UI().closeSheet(); pickImageWith('camera'); return; }
+    if (act === 'pick-gallery') { UI().closeSheet(); pickImageWith('gallery'); return; }
     if (act === 'unpick') { pendingImage = null; rerenderChat(); return; }
     if (act === 'think') {
       const c = window.QYA ? QYA.cfg() : {};
@@ -635,9 +880,13 @@
         rerenderChat();
         UI().toast('已执行 ' + r.applied + ' 个动作');
       };
-      // 批量删除是危险动作：执行按钮算第一确，这里再弹一道红色确认（二确）
+      // 不可逆/大批量动作：执行按钮算第一确，这里再弹一道红色确认（二确）。
+      // clear_data 不在列——它自带三步确认。
+      const dangerTypes = ['delete_records', 'empty_trash'];
       const danger = last.actions.filter(function (a) {
-        return a.type === 'delete_records' && /^\d{4}-\d{2}-\d{2}$/.test(a.before || '');
+        if (dangerTypes.indexOf(a.type) < 0) return false;
+        if (a.type === 'delete_records') return /^\d{4}-\d{2}-\d{2}$/.test(a.before || '');
+        return true;
       });
       if (danger.length && window.QYI && QYI.confirmSheet) {
         QYI.confirmSheet(

@@ -118,10 +118,15 @@
       if (cb) cb(dataUrl == null ? null : String(dataUrl));
     },
 
-    /* 把待提醒清单交给原生，让系统去发通知 */
-    scheduleReminders: function (list) {
+    /* 把待提醒清单交给原生，让系统去发通知。
+     * hour = 提醒钟点（安卓原生按它排每天的班；鸿蒙壳暂用默认 9 点，
+     * 多传参数会撞 ArkWeb 的方法签名，所以那边只传清单）。 */
+    scheduleReminders: function (list, hour) {
       if (native && native.scheduleReminders) {
-        try { native.scheduleReminders(JSON.stringify(list || [])); } catch (err) { /* 忽略 */ }
+        try {
+          if (kind === 'android') native.scheduleReminders(JSON.stringify(list || []), Number(hour) || 9);
+          else native.scheduleReminders(JSON.stringify(list || []));
+        } catch (err) { /* 忽略 */ }
       }
     },
 
