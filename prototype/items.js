@@ -220,16 +220,28 @@
         UI().mount();
         UI().toast(item.pinned ? '已置顶' : '已取消置顶');
       } else if (act === 'i-archive') {
-        // 归档只动归档标记，不改物品状态
-        item.archived = !QY.isArchived(item);
-        UI().save();
-        UI().mount();
-        UI().toast(item.archived ? '已归档，可在「归档」里回看' : '已取消归档');
+        toggleArchive(item);
       } else if (act === 'i-del') {
         deleteItem(id);
       }
     }, true);
   })();
+
+  /* 归档 = 物品的总开关，与状态无关。列表右滑、详情按钮、详情「归档」行
+   * 走的都是这一个函数，并记一条时间线。 */
+  function toggleArchive(item) {
+    const was = QY.isArchived(item);
+    item.archived = !was;
+    data().events.push({
+      id: QY.uid('ev'), itemId: item.id,
+      type: was ? 'unarchived' : 'archived',
+      at: QY.iso(QY.today()), amount: null,
+      note: was ? '从归档恢复' : null
+    });
+    UI().save();
+    UI().mount();
+    UI().toast(item.archived ? '已归档，可在「归档」里回看' : '已取消归档');
+  }
 
   function filtered() {
     const d = data();
@@ -362,7 +374,15 @@
       kv('数量', (item.qty || 1) + ' ' + (item.unit || '个') +
         (item.cost != null && (item.qty || 1) > 1 ? ' · 单价 ' + QY.fmtMoney(item.cost / item.qty) : '')),
       kv('分类', esc(item.category) + (item.sub ? ' · ' + esc(item.sub) : '')),
-      kv('状态', '<span class="pill ' + (QY.isArchived(item) ? 'gray' : 'green') + '">' + esc(item.status) + '</span>'),
+      // 状态 = 分类里的阶段词（未开封 → 使用中 → …），跟分类走
+      kv('状态', '<span class="pill blue">' + esc(item.status) + '</span>' +
+        '<button class="btn mini" data-action="i-status" data-id="' + item.id + '">改</button>'),
+      // 归档 = 总开关（是/否），点一下就切换，和列表右滑、按钮是同一个逻辑
+      kv('归档', (QY.isArchived(item)
+        ? '<span class="pill gray">已归档</span>' +
+          '<button class="btn mini" data-action="i-archive" data-id="' + item.id + '">恢复</button>'
+        : '<span class="pill green">在用</span>' +
+          '<button class="btn mini" data-action="i-archive" data-id="' + item.id + '">归档</button>')),
       kv('日均成本', tracked ? '计入' : '不计入（消耗品）'),
       kv('存放位置', esc(item.location || '—')),
       item.expiresAt ? kv('到期日', QY.fmtDate(item.expiresAt) +
@@ -376,8 +396,8 @@
     const events = QY.eventsOf(data(), item.id);
     const timeline = events.map(function (e) {
       const t = QY.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
-      return '<div class="tl-item"><div class="tl-dot">' +
-        (window.QYIcon ? QYIcon.forEvent(e.type, 15) : t.emoji) + '</div>' +
+      return '<div class="tl-item" data-ev-id="' + e.id + '" data-id="' + item.id + '">' +
+        '<div class="tl-dot">' + (window.QYIcon ? QYIcon.forEvent(e.type, 15) : t.emoji) + '</div>' +
         '<div class="tl-body"><div class="tl-title">' + t.label +
           (e.amount ? ' <span class="amount">' + QY.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
         '<div class="tl-sub">' + QY.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div></div>';
@@ -388,7 +408,8 @@
         esc(UI().detailBackLabel ? UI().detailBackLabel() : '物品') + '</button></div>' +
       hero +
       '<div style="padding:18px 4px 0">' +
-        '<h1 style="margin:0;font-size:25px;font-weight:700;letter-spacing:-0.025em">' + esc(item.name) + '</h1>' +
+        '<h1 style="margin:0;font-size:25px;font-weight:700;letter-spacing:-0.025em">' + esc(item.name) +
+          (QY.isArchived(item) ? ' <span class="pill gray" style="vertical-align:4px">已归档</span>' : '') + '</h1>' +
         '<p style="margin:6px 0 0;font-size:13px;color:var(--label-2)">' +
           esc(item.category) + (item.sub ? ' · ' + esc(item.sub) : '') +
           (item.location ? ' · ' + esc(item.location) : '') + '</p>' +
@@ -399,11 +420,18 @@
           (extra > 0 ? '含维修/更换 ' + QY.fmtMoney(extra) + ' · ' : '') + '用得越久，每天越便宜</div>' : '') +
       '</div>' +
       '<div class="section"><div class="section-head"><h2>详情</h2></div><div class="group">' + rows + '</div></div>' +
-      '<div class="section"><div class="section-head"><h2>时间线</h2><span>' + events.length + ' 条</span></div>' +
-        '<div class="group timeline">' + timeline + '</div></div>' +
+      '<div class="section"><div class="section-head"><h2>时间线</h2>' +
+        '<span class="sec-tools"><span>' + events.length + ' 条 · 长按可改</span>' +
+          '<button class="btn mini" data-action="i-ev-add" data-id="' + item.id + '">＋ 记一笔</button></span></div>' +
+        '<div class="group timeline">' + (timeline ||
+          '<div class="empty" style="padding:22px 14px"><p>还没有记录</p></div>') + '</div></div>' +
       '<div class="section"><div class="sheet-actions" style="flex-wrap:wrap">' +
         '<button class="btn primary" data-action="i-edit" data-id="' + item.id + '">编辑</button>' +
         '<button class="btn plain" data-action="i-status" data-id="' + item.id + '">改状态</button>' +
+        '<button class="btn plain" data-action="i-archive" data-id="' + item.id + '">' +
+          (QY.isArchived(item) ? '取消归档' : '归档') + '</button>' +
+        '<button class="btn plain" data-action="i-pin" data-id="' + item.id + '">' +
+          (item.pinned ? '取消置顶' : '置顶') + '</button>' +
         '<button class="btn plain" data-action="i-del" data-id="' + item.id + '" style="color:var(--red)">删除</button>' +
       '</div></div>';
   }
@@ -546,6 +574,14 @@
           pickerField('status', '状态', e.status) +
           '<div class="field"><label>二级分类</label>' +
             '<input id="f-sub" class="input" placeholder="装饰 / 生鲜 / 家电…" value="' + esc(e.sub || '') + '" /></div>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>开封日期（可留空）</label>' +
+              '<input id="f-opened" class="input" type="date" readonly data-action="i-date"' +
+                ' data-target="f-opened" value="' + (e.openedAt || '') + '" /></div>' +
+            '<div class="field"><label>保修至（可留空）</label>' +
+              '<input id="f-warranty" class="input" type="date" readonly data-action="i-date"' +
+                ' data-target="f-warranty" value="' + (e.warrantyUntil || '') + '" /></div>' +
+          '</div>' +
           '<div class="field"><label>到期日（可留空）</label>' +
             '<input id="f-exp" class="input" type="date" readonly data-action="i-date"' +
               ' data-target="f-exp" value="' + (e.expiresAt || '') + '" /></div>' +
@@ -608,6 +644,8 @@
       status: document.getElementById('f-status').value,
       location: (document.getElementById('f-loc').value || '').trim(),
       expiresAt: document.getElementById('f-exp').value || null,
+      openedAt: document.getElementById('f-opened').value || null,
+      warrantyUntil: document.getElementById('f-warranty').value || null,
       note: (document.getElementById('f-note').value || '').trim(),
       photo: formPhoto,
       costTrack: document.getElementById('f-costtrack').checked
@@ -615,13 +653,30 @@
 
     if (editingId) {
       const it = byId(editingId);
-      if (it) Object.keys(fields).forEach(function (k) { it[k] = fields[k]; });
-      UI().save();
-      UI().closeSheet();
-      state.detailId = editingId;
-      editingId = null;
-      UI().mount();
-      UI().toast('已保存');
+      if (it) {
+        // 记下改了哪些字段，给时间线一条"修改"记录
+        const NAMES = { name: '名称', category: '分类', sub: '二级分类', acquiredAt: '获得日期',
+          source: '来源', cost: '价格', qty: '数量', unit: '单位', status: '状态',
+          location: '位置', expiresAt: '到期日', openedAt: '开封日期', warrantyUntil: '保修',
+          note: '备注', photo: '图片', costTrack: '日均成本' };
+        const changed = Object.keys(fields).filter(function (k) {
+          return String(it[k] == null ? '' : it[k]) !== String(fields[k] == null ? '' : fields[k]);
+        });
+        Object.keys(fields).forEach(function (k) { it[k] = fields[k]; });
+        if (changed.length) {
+          data().events.push({
+            id: QY.uid('ev'), itemId: it.id, type: 'edited',
+            at: QY.iso(QY.today()), amount: null,
+            note: changed.map(function (k) { return NAMES[k] || k; }).join('、')
+          });
+        }
+        UI().save();
+        UI().closeSheet();
+        state.detailId = editingId;
+        editingId = null;
+        UI().mount();
+        UI().toast('已保存');
+      }
       return;
     }
 
@@ -796,18 +851,32 @@
     if (!item) return;
     const cur = item.status;
     const onPick = function (v) {
+      const from = item.status;
       item.status = v;
+      // 联动：状态换成"开封"类且还没记开封日期时，顺手补上
+      if (/开封/.test(v) && !item.openedAt) {
+        item.openedAt = QY.iso(QY.today());
+        data().events.push({
+          id: QY.uid('ev'), itemId: item.id, type: 'opened',
+          at: item.openedAt, amount: null, note: null
+        });
+      }
+      if (v !== from) {
+        data().events.push({
+          id: QY.uid('ev'), itemId: item.id, type: 'status',
+          at: QY.iso(QY.today()), amount: null, note: from + ' → ' + v
+        });
+      }
       UI().save();
       UI().closeSheet();
       UI().mount();
-      UI().toast(QY.isArchived(item) ? '已移入归档，随时可以改回来' : '状态已改为 ' + v);
+      UI().toast('状态已改为 ' + v);
     };
     const list = QY.catStatuses(item.category, data());
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
         '<h3>改状态</h3>' +
-        '<p class="hint">' + esc(item.category) + ' 的状态：' + esc(list.join(' → ')) +
-        '<br>归档是另一件事：它不改状态，只是把东西收起来，随时能翻回来看</p>' +
+        '<p class="hint">' + esc(item.category) + ' 的阶段：' + esc(list.join(' → ')) + '</p>' +
         '<div class="group">' + list.map(function (s) {
           return '<div class="picker-opt ' + (s === cur ? 'on' : '') + '" data-action="i-status-set" data-v="' + esc(s) + '">' +
             '<span>' + esc(s) + '</span>' +
@@ -819,6 +888,105 @@
     pendingStatusPick = onPick;
   }
   let pendingStatusPick = null;
+
+  /* ---------------- 时间线：记一笔 / 长按修改删除 ----------------
+   * 自动记录（新增、改状态、归档、编辑）之外，动作类的（维修/更换/借出…）
+   * 用「＋ 记一笔」手动补；长按任意一条可改可删。
+   */
+  const MANUAL_EVENT_TYPES = ['used', 'opened', 'repaired', 'replaced', 'lent', 'returned', 'disposed', 'status'];
+
+  function openEventSheet(itemId, ev) {
+    const e = ev || { id: null, type: 'used', at: QY.iso(QY.today()), amount: null, note: '' };
+    const chips = MANUAL_EVENT_TYPES.map(function (t) {
+      const meta = QY.EVENT_TYPES[t];
+      return '<button type="button" class="chip ' + (e.type === t ? 'active' : '') +
+        '" data-action="i-ev-type" data-v="' + t + '">' + (window.QYIcon ? QYIcon.forEvent(t, 14) : meta.emoji) +
+        ' ' + meta.label + '</button>';
+    }).join('');
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>' + (ev ? '修改这条记录' : '记一笔') + '</h3>' +
+        '<div class="chips" style="margin:10px 0 4px">' + chips + '</div>' +
+        '<input type="hidden" id="ev-type" value="' + e.type + '" />' +
+        '<div class="field"><label>日期</label>' +
+          '<input id="ev-date" class="input" type="date" readonly data-action="i-date"' +
+            ' data-target="ev-date" value="' + e.at + '" /></div>' +
+        '<div class="field-row">' +
+          '<div class="field"><label>金额（可选，如维修费）</label>' +
+            '<input id="ev-amount" class="input" type="number" step="0.01" placeholder="0"' +
+              ' value="' + (e.amount != null ? e.amount : '') + '" /></div>' +
+          '<div class="field"><label>备注</label>' +
+            '<input id="ev-note" class="input" value="' + esc(e.note || '') + '" /></div>' +
+        '</div>' +
+        '<div class="sheet-actions" style="flex-wrap:wrap">' +
+          (ev ? '<button class="btn plain" data-action="i-ev-del" data-id="' + itemId +
+            '" data-ev="' + e.id + '" style="color:var(--red)">删除</button>' : '') +
+          '<button class="btn plain" data-action="i-close">取消</button>' +
+          '<button class="btn primary" data-action="i-ev-save" data-id="' + itemId +
+            '" data-ev="' + (e.id || '') + '">保存</button>' +
+        '</div>' +
+      '</div>');
+  }
+
+  function saveEventSheet(itemId, evId) {
+    const d = data();
+    const type = (document.getElementById('ev-type') || {}).value || 'used';
+    const at = (document.getElementById('ev-date') || {}).value || QY.iso(QY.today());
+    const amountRaw = ((document.getElementById('ev-amount') || {}).value || '').trim();
+    const note = ((document.getElementById('ev-note') || {}).value || '').trim();
+    if (evId) {
+      const ev = d.events.filter(function (x) { return x.id === evId; })[0];
+      if (!ev) { UI().toast('这条记录已经不在了'); UI().closeSheet(); return; }
+      ev.type = type; ev.at = at;
+      ev.amount = amountRaw === '' ? null : Number(amountRaw);
+      ev.note = note || null;
+      UI().toast('已修改');
+    } else {
+      d.events.push({
+        id: QY.uid('ev'), itemId: itemId, type: type, at: at,
+        amount: amountRaw === '' ? null : Number(amountRaw), note: note || null
+      });
+      UI().toast('已记一笔');
+    }
+    UI().save();
+    UI().closeSheet();
+    UI().mount();
+  }
+
+  function deleteEvent(itemId, evId) {
+    const d = data();
+    const i = d.events.findIndex(function (x) { return x.id === evId && x.itemId === itemId; });
+    if (i < 0) { UI().closeSheet(); return; }
+    confirmSheet('删除这条时间线记录？', { danger: true, ok: '删除' }).then(function (yes) {
+      if (!yes) return;
+      d.events.splice(i, 1);
+      UI().save();
+      UI().closeSheet();
+      UI().mount();
+      UI().toast('已删除');
+    });
+  }
+
+  /* 长按时间线条目 500ms → 打开修改弹窗（平时没有多余的按钮，界面干净） */
+  (function bindTimelinePress() {
+    let pressTimer = null;
+    const clear = function () { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+    document.addEventListener('pointerdown', function (e) {
+      const el = e.target.closest && e.target.closest('.tl-item[data-ev-id]');
+      if (!el) return;
+      const itemId = el.getAttribute('data-id');
+      const evId = el.getAttribute('data-ev-id');
+      clear();
+      pressTimer = setTimeout(function () {
+        pressTimer = null;
+        const ev = data().events.filter(function (x) { return x.id === evId; })[0];
+        if (ev) openEventSheet(itemId, ev);
+      }, 500);
+    }, { passive: true });
+    document.addEventListener('pointermove', clear, { passive: true });
+    document.addEventListener('pointerup', clear);
+    document.addEventListener('pointercancel', clear);
+  })();
 
   /* App 自己的确认框。
    * 不依赖 window.confirm —— 安卓 WebView 里它默认只会返回 false（见 MainActivity
@@ -1228,6 +1396,8 @@
     if (action === 'i-add') openForm(null);
     else if (action === 'i-edit') openForm(byId(id));
     else if (action === 'i-open') {
+      // 记住列表位置，详情返回时还原（goItem 内部也会记）
+      if (UI().rememberScroll) UI().rememberScroll();
       if (UI().goItem) UI().goItem(id);
       else { state.detailId = id; UI().mount(); }
     }
@@ -1294,6 +1464,30 @@
       changeStatus(id);
     } else if (action === 'i-status-set') {
       if (pendingStatusPick) { const f = pendingStatusPick; pendingStatusPick = null; f(el.getAttribute('data-v')); }
+    } else if (action === 'i-archive') {
+      // 详情页按钮 / 详情「归档」行：与列表右滑同一个逻辑
+      const it0 = byId(id);
+      if (it0) toggleArchive(it0);
+    } else if (action === 'i-pin') {
+      const it0 = byId(id);
+      if (it0) {
+        it0.pinned = !it0.pinned;
+        UI().save();
+        UI().mount();
+        UI().toast(it0.pinned ? '已置顶' : '已取消置顶');
+      }
+    } else if (action === 'i-ev-add') {
+      openEventSheet(id, null);
+    } else if (action === 'i-ev-type') {
+      const hid = document.getElementById('ev-type');
+      if (hid) hid.value = el.getAttribute('data-v');
+      document.querySelectorAll('#sheet-root .chips .chip').forEach(function (c) {
+        c.classList.toggle('active', c.getAttribute('data-v') === hid.value);
+      });
+    } else if (action === 'i-ev-save') {
+      saveEventSheet(id, el.getAttribute('data-ev'));
+    } else if (action === 'i-ev-del') {
+      deleteEvent(id, el.getAttribute('data-ev'));
     } else if (action === 'i-del') {
       deleteItem(id);
     } else if (action === 'i-cat-manage') {

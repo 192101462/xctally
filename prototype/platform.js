@@ -178,8 +178,6 @@
     const root = document.documentElement;
     if (isFinite(top)) root.style.setProperty('--safe-top', Math.max(0, top) + 'px');
     if (isFinite(bottom)) root.style.setProperty('--safe-bottom', Math.max(0, bottom) + 'px');
-    // 页头实测高度依赖安全区，重算一次回顶长条落点
-    if (window.QYApp && QYApp.remeasurePin) QYApp.remeasurePin();
   }
   if (native) {
     const boot = function () {

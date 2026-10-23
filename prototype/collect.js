@@ -1143,6 +1143,7 @@
     } else if (action === 'c-save') {
       saveForm();
     } else if (action === 'c-detail') {
+      if (UI().rememberScroll) UI().rememberScroll();   // 返回时还原列表位置
       state.detailId = id;
       UI().mount();
     } else if (action === 'c-back') {

@@ -16,6 +16,10 @@
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-flash',
     visionModel: '',            // 留空表示和 model 用同一个
+    // 深度思考：换用推理模型（答得更细、更慢更贵）。
+    // 视觉调用不走推理模型（识图本身够慢了）。
+    think: false,
+    reasonerModel: 'deepseek-reasoner',
     key: '',
     enabled: true,
     // 联网搜索：默认博查（bochaai.com，支持跨域、中文结果好）。
@@ -70,6 +74,8 @@
       baseUrl: String(c.baseUrl || DEFAULTS.baseUrl).replace(/\/+$/, ''),
       model: c.model || DEFAULTS.model,
       visionModel: c.visionModel || c.model || DEFAULTS.model,
+      think: c.think === true,
+      reasonerModel: c.reasonerModel || DEFAULTS.reasonerModel,
       key: c.key || '',
       enabled: c.enabled !== false,
       webSearch: c.webSearch === true,
@@ -199,6 +205,15 @@
 
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeout || 60000) : null;
+    // 深度思考开着时，纯文字对话换推理模型；识图仍用视觉模型。
+    // 推理模型普遍不吃 temperature（部分网关会直接 400），干脆不传。
+    const useThink = c.think === true && !opts.vision && !opts.noThink;
+    const payload = {
+      model: opts.vision ? c.visionModel : (useThink ? c.reasonerModel : c.model),
+      messages: messages,
+      max_tokens: opts.maxTokens || 2000
+    };
+    if (!useThink) payload.temperature = opts.temperature == null ? 0 : opts.temperature;
 
     let res;
     try {
@@ -208,12 +223,7 @@
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ' + c.key
         },
-        body: JSON.stringify({
-          model: opts.vision ? c.visionModel : c.model,
-          messages: messages,
-          temperature: opts.temperature == null ? 0 : opts.temperature,
-          max_tokens: opts.maxTokens || 2000
-        }),
+        body: JSON.stringify(payload),
         signal: ctrl ? ctrl.signal : undefined
       });
     } catch (err) {

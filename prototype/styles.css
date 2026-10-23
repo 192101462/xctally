@@ -172,6 +172,24 @@ body {
   transition: transform 0.12s ease, opacity 0.12s ease, background 0.2s ease;
 }
 .btn:active { transform: scale(0.96); }
+/* 详情行内的小按钮（状态「改」、归档「归档」）：贴着 pill 显示 */
+.btn.mini {
+  margin-left: 10px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  background: var(--fill);
+  color: var(--label-2);
+}
+.btn.mini:active { background: var(--fill-2); }
+/* 时间线标题行右侧：条数 + 记一笔 */
+.sec-tools { display: inline-flex; align-items: center; gap: 8px; }
+.sec-tools .btn.mini { margin-left: 0; background: rgba(0, 122, 255, 0.12); color: var(--blue); }
+/* 时间线条目支持长按修改：提示可交互、长按时不选中文本 */
+.tl-item { -webkit-user-select: none; user-select: none; cursor: pointer; }
+.tl-item:active { background: var(--fill-2); }
+/* 聊天面板头部的「深度思考」开关 */
+.chip.think { flex: none; align-self: center; padding: 6px 12px; font-size: 12.5px; }
+.chip.think.active { background: rgba(88, 86, 214, 0.14); color: var(--purple); }
 .btn.ghost {
   background: var(--card);
   color: var(--label);
@@ -1854,35 +1872,24 @@ html.scrolling .ai-ball { transition: none; }
 }
 .ai-balance:active { opacity: 0.55; }
 
-/* 往下滑时，页面标题变成顶部的小长圆条：点它回到最上方 */
-.to-top {
-  position: fixed;
-  /* 顶部是固定的页头（.page-top），长条要落在它下面：
-     --pin-h 由 JS 渲染后按实际页头高度写入 */
-  top: calc(var(--pin-h, 120px) + 12px + var(--safe-top, 0px));
-  left: 50%;
-  transform: translate(-50%, -16px);
+/* 回顶按钮：页头"新增"旁边常驻占位（不出现时不占视觉但占宽度，
+   避免亮起时把新增按钮挤走），滚动超过一屏（html.can-top）才亮起 */
+.head-btns { display: flex; gap: 8px; align-items: flex-start; flex: none; }
+.icon-btn.to-top-btn {
+  background: var(--fill-2);
+  color: var(--label-2);
   opacity: 0;
   pointer-events: none;
-  padding: 7px 17px;
-  border-radius: 999px;
-  background: var(--tabbar);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.14), 0 0 0 0.5px var(--hairline);
-  font-size: 13.5px;
-  font-weight: 650;
-  color: var(--label);
-  z-index: 5;
-  transition: opacity var(--fade-ms, 200ms) ease,
-              transform var(--fade-ms, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform: translateY(4px) scale(0.9);
+  transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+              background 0.15s ease;
 }
-.to-top.show {
+html.can-top .icon-btn.to-top-btn {
   opacity: 1;
-  transform: translate(-50%, 0);
   pointer-events: auto;
+  transform: translateY(0) scale(1);
 }
-.to-top:active { transform: translate(-50%, 0) scale(0.95); }
+html.can-top .icon-btn.to-top-btn:active { transform: scale(0.92); }
 
 /* 首页：DeepSeek 账号卡片（单击刷新金额，双击打开助手） */
 .ds-card {

@@ -114,7 +114,13 @@
     lent: { label: '借出', emoji: '🤝' },
     returned: { label: '归还', emoji: '↩️' },
     disposed: { label: '处置', emoji: '🗑' },
-    reading: { label: '抄表', emoji: '📟' }
+    reading: { label: '抄表', emoji: '📟' },
+    // 以下由 App 动作自动记录（改状态 / 归档 / 编辑），
+    // 手动"记一笔"时也可以选
+    status: { label: '状态', emoji: '🔄' },
+    archived: { label: '归档', emoji: '📥' },
+    unarchived: { label: '恢复使用', emoji: '📤' },
+    edited: { label: '修改', emoji: '✏️' }
   };
 
   /* ---------------- 日期工具 ---------------- */

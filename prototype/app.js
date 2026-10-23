@@ -197,7 +197,16 @@
       '<div>' +
         '<h1 class="screen-title">' + title + '</h1>' +
         '<p class="screen-sub">' + sub + '</p>' +
-      '</div>' + (btn || '') +
+      '</div>' +
+      // 回顶按钮：常驻占位（避免出现时把"新增"挤走），滚动超过一屏才亮起。
+      // 所有带页头的页面共用这一份，显隐由 html.can-top 统一控制。
+      '<div class="head-btns">' +
+        '<button class="icon-btn to-top-btn" data-action="to-top" aria-label="回到顶部">' +
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"' +
+            ' stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+            '<path d="M6 14l6-6 6 6" /></svg>' +
+        '</button>' + (btn || '') +
+      '</div>' +
     '</div>';
   }
   function iconBtn(action, label) {
@@ -789,15 +798,6 @@
     }
   }
 
-  /* 实测固定页头高度，喂给回顶长条的落点（--pin-h）：
-     物品页的固定区带筛选和搜索，比首页高得多，写死会挡住内容。
-     安全区变化时（原生推 _applyInsets）也要重算一次。 */
-  function remeasurePin() {
-    const pin = $('#view .page-top');
-    document.documentElement.style.setProperty('--pin-h', (pin ? pin.offsetHeight : 0) + 'px');
-  }
-  window.QYApp = { remeasurePin: remeasurePin };
-
   function mount() {
     const view = $('#view');
     const QYV = window.QYV;
@@ -824,7 +824,6 @@
       html = viewMe();
     }
     view.innerHTML = html;
-    remeasurePin();
     // 余额在首页卡片上查，这里不再自动拉取
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
@@ -916,9 +915,9 @@
       const v2 = $('#view');
       resetScrollUi();                 // 回顶是程序滚动，同样不播动画
       if (v2) v2.scrollTo({ top: 0, behavior: 'smooth' });
-      const pill = document.getElementById('to-top');
-      if (pill) pill.classList.remove('show');
+      document.documentElement.classList.remove('can-top');
     } else if (action === 'detail') {
+      rememberScroll();
       state.detailId = id;
       mount();
     } else if (action === 'back') {
@@ -1043,6 +1042,7 @@
 
   // 跳到某个物品的详情（首页的临期/最近列表也用它）
   function goItem(id) {
+    rememberScroll();             // 记住来路的滚动位置，返回时还原
     state.detailFrom = state.tab;      // 记住从哪个页面点进来的
     state.tab = 'items';
     state.detailId = null;
@@ -1355,6 +1355,8 @@
     goItem: goItem,
     backFromDetail: backFromDetail,
     detailBackLabel: detailBackLabel,
+    // 进详情前记一下列表位置（backFromDetail 返回时会还原）
+    rememberScroll: rememberScroll,
     ui: ui,
     uiSet: uiSet,
     itemById: function (id) { return itemById(id); },
@@ -1492,15 +1494,6 @@
     }, delay == null ? 130 : delay);
   }
 
-  (function initTopPill() {
-    const el = document.createElement('div');
-    el.id = 'to-top';
-    el.className = 'to-top';
-    el.setAttribute('data-action', 'to-top');
-    el.innerHTML = '<span id="to-top-label"></span>';
-    document.body.appendChild(el);
-  })();
-
   function viewEl() { return document.getElementById('view'); }
 
   /* 是否处在"某条记录的详情页"（物品详情 / 随笔详情） */
@@ -1532,14 +1525,12 @@
     updateTopPill();
   }
 
+  /* 回顶按钮显隐：滚动超过 200px 亮起页头里那个向上箭头（html.can-top）。
+     详情页 / 设置页没有页头按钮，一律不亮。 */
   function updateTopPill() {
-    const pill = document.getElementById('to-top');
-    if (!pill) return;
-    const lbl = document.getElementById('to-top-label');
-    if (lbl) lbl.textContent = PAGE_TITLES[state.tab] || '';
     const v = viewEl();
-    // 详情页里既不要底部标签栏，也不要这个回顶长条
-    pill.classList.toggle('show', !!(v && !state.setting && !inDetail() && v.scrollTop > 200));
+    const on = !!(v && !state.setting && !inDetail() && v.scrollTop > 200);
+    document.documentElement.classList.toggle('can-top', on);
   }
 
   document.addEventListener('scroll', function (e) {

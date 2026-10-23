@@ -102,16 +102,13 @@
     '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/><path d="M10 11v6M14 11v6"/></svg>';
 
   /* ---------------- 拖到垃圾桶关闭 ----------------
-   * 拖动时露出垃圾桶与顶部提示；把球拖进垃圾桶并【按住 2 秒】才关闭。
-   * 单纯拖过去放一下不会关 —— 避免只是想挪个位置却把球弄没了。
+   * 拖动时底部露出垃圾桶：把球拖进去（高亮变红）松手即关闭。
+   * 之前要"放进垃圾桶再按住 1.5 秒"，很难精准按住不动，实际没人能顺利关掉。
+   * 误触防护靠三条：垃圾桶只在拖动时出现、球心要真正进入热区才高亮、
+   * 没高亮时松手只是挪位置；关掉后 toast 告诉你去哪里重新打开。
    */
   let trashEl = null;
   let hintEl = null;
-  let trashTimer = null;
-  let hintTimer = null;
-  let closedByTrash = false;
-  const HOLD_MS = 1500;      // 放进垃圾桶并按住这么久才关闭
-  const HINT_MS = 500;       // 放进垃圾桶多久后给出提示
 
   function showDragUi() {
     if (!trashEl) {
@@ -125,49 +122,31 @@
       hintEl = document.createElement('div');
       hintEl.id = 'ball-hint';
       hintEl.className = 'ball-hint';
-      hintEl.textContent = '按住 1.5 秒删除';
       document.body.appendChild(hintEl);
     }
     trashEl.classList.add('show');
+    hintEl.classList.add('show');
+    hintEl.textContent = '拖到垃圾桶处松手关闭';
   }
 
   function hideDragUi() {
     if (trashEl) trashEl.classList.remove('show', 'hot');
     if (hintEl) hintEl.classList.remove('show');
-    if (trashTimer) { clearTimeout(trashTimer); trashTimer = null; }
-    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
   }
 
-  /* 放进垃圾桶满 1.5 秒才真的关闭；位置一并重置，下次打开回右下角初始位置 */
+  function overTrash(cx, cy) {
+    if (!trashEl || !trashEl.classList.contains('show')) return false;
+    const r = trashEl.getBoundingClientRect();
+    const pad = 10;
+    return cx >= r.left - pad && cx <= r.right + pad && cy >= r.top - pad && cy <= r.bottom + pad;
+  }
+
+  /* 松手即关：位置一并重置，下次打开回右下角初始位置 */
   function closeByTrash() {
-    trashTimer = null;
-    closedByTrash = true;
     hideDragUi();
     saveBall({ x: null, y: null, hidden: true });
     syncBall();
-    UI().toast('已关闭悬浮球，可在「我的 → 设置 → AI」里重新打开');
-  }
-
-  function updateTrashHover(cx, cy) {
-    if (!trashEl || !trashEl.classList.contains('show')) return;
-    const r = trashEl.getBoundingClientRect();
-    const pad = 16;
-    const over = cx >= r.left - pad && cx <= r.right + pad && cy >= r.top - pad && cy <= r.bottom + pad;
-    trashEl.classList.toggle('hot', over);
-    if (over) {
-      if (!trashTimer) trashTimer = setTimeout(closeByTrash, HOLD_MS);
-      if (!hintTimer) {
-        hintTimer = setTimeout(function () {
-          hintTimer = null;
-          if (hintEl && trashEl.classList.contains('hot')) hintEl.classList.add('show');
-        }, HINT_MS);
-      }
-    } else {
-      // 手指离开就全部重来，避免"蹭一下"就关掉
-      if (trashTimer) { clearTimeout(trashTimer); trashTimer = null; }
-      if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
-      if (hintEl) hintEl.classList.remove('show');
-    }
+    UI().toast('已关闭悬浮球，可在「我的 → AI 助手」里重新打开');
   }
 
   function bindDrag() {
@@ -200,7 +179,12 @@
           drag.el.style.top = drag.ty + 'px';
         });
       }
-      updateTrashHover(drag.tx + size / 2, drag.ty + size / 2);
+      // 球心进了垃圾桶热区：高亮 + 提示改为"松手关闭"
+      const hot = overTrash(drag.tx + size / 2, drag.ty + size / 2);
+      if (trashEl) trashEl.classList.toggle('hot', hot);
+      if (hintEl && hintEl.classList.contains('show')) {
+        hintEl.textContent = hot ? '松手关闭悬浮球' : '拖到垃圾桶处松手关闭';
+      }
     }, { passive: true });
 
     function end() {
@@ -209,9 +193,10 @@
       drag = null;
       if (d.raf) cancelAnimationFrame(d.raf);
       d.el.classList.remove('dragging');
+      const hot = trashEl && trashEl.classList.contains('hot');
       hideDragUi();
-      if (closedByTrash) {           // 已经被垃圾桶关掉了，别再写位置
-        closedByTrash = false;
+      if (hot) {                    // 在垃圾桶上松手 → 关闭
+        closeByTrash();
         return;
       }
       if (d.moved) {
@@ -278,6 +263,8 @@
   }
 
   function renderChat() {
+    const c = window.QYA ? QYA.cfg() : {};
+    const think = c.think === true;
     const body = msgs.length
       ? msgs.map(bubble).join('')
       : '<div class="ai-hint">可以这样说：<br>' +
@@ -288,6 +275,9 @@
     return '<div class="sheet ai-sheet"><div class="grabber"></div>' +
       '<div class="ai-head">' +
         '<div><h3>助手</h3><div class="ai-sub">' + esc(usageLine()) + '</div></div>' +
+        // 深度思考开关：换用推理模型（答得更细，也更慢更贵）
+        '<button type="button" class="chip think ' + (think ? 'active' : '') +
+          '" data-ai="think" aria-label="深度思考">' + (think ? '✦ 深度思考' : '✧ 深度思考') + '</button>' +
       '</div>' +
       '<div class="ai-log" id="ai-log">' + body + '</div>' +
       (pendingImage
@@ -530,6 +520,13 @@
     if (act === 'hide') { UI().closeSheet(); hideBall(); return; }
     if (act === 'pick') { pickImage(); return; }
     if (act === 'unpick') { pendingImage = null; rerenderChat(); return; }
+    if (act === 'think') {
+      const c = window.QYA ? QYA.cfg() : {};
+      QYA.update({ think: !(c.think === true) });
+      rerenderChat();
+      UI().toast(c.think === true ? '已关闭深度思考（更快）' : '已开启深度思考（答得更细，更慢更贵）');
+      return;
+    }
     if (act === 'send') {
       const input = document.getElementById('ai-text');
       send(input ? input.value : '');

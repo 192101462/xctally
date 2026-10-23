@@ -22,6 +22,7 @@
   }
 
   let draft = null;      // { order:{platform,date,paidTotal}, items:[{include,name,price,qty,category,sub,confidence,note,source}] }
+  let draftPhoto = null; // 识别原图的缩略图，入库时带给每个物品当详情图
   let busy = false;
   let lastError = '';
 
@@ -113,12 +114,38 @@
     UI().openSheet(sheetHtml());
   }
 
+  /* 识别用的图压到 1280 就够了；入库再带一张 640 的缩略图，
+     详情页有图看、localStorage 又不会爆 */
+  function makeThumb(dataUrl, maxSide, quality) {
+    return new Promise(function (resolve) {
+      const img = new Image();
+      img.onload = function () {
+        try {
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(img.width * scale));
+          cv.height = Math.max(1, Math.round(img.height * scale));
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', quality));
+        } catch (err) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = dataUrl;
+    });
+  }
+
   function recognize(source) {
     busy = true;
     lastError = '';
     rerender();
     window.QYV.pickImage(function (dataUrl, info) {
       if (!dataUrl) { busy = false; rerender(); return; }
+      // 先生成入库用的缩略图，识别照常用原图。
+      // 一张订单往往出好几件商品，每件都带图的话 localStorage 会胀，
+      // 所以入库版压得比识别版更狠（480 / 0.62 ≈ 每张几十 KB）。
+      makeThumb(dataUrl, 480, 0.62).then(function (thumb) {
+        draftPhoto = thumb;
+      });
       const data = UI().data();
       QYA.vision(dataUrl, window.QYP.visionPrompt(data)).then(function (text) {
         let obj;
@@ -176,13 +203,13 @@
         cost: x.price,
         qty: x.qty || 1,
         unit: '个',
-        status: '在用',
+        status: QY.catStatuses(cat, d)[0] || '在用',
         location: '',
         expiresAt: null,
         openedAt: null,
         warrantyUntil: null,
         note: x.note || '',
-        photo: null,
+        photo: draftPhoto,
         pinned: false,
         archived: false,
         costTrack: QY.catOf(cat, d).costTrack !== false
@@ -220,6 +247,13 @@
           '<input id="ai-model" class="input" value="' + esc(raw.model || QYA.DEFAULTS.model) + '" /></div>' +
         '<div class="field"><label>Base URL</label>' +
           '<input id="ai-base" class="input" value="' + esc(raw.baseUrl || QYA.DEFAULTS.baseUrl) + '" /></div>' +
+        '<label class="check-row"><input type="checkbox" id="ai-think"' +
+          (c.think ? ' checked' : '') + ' />' +
+          '<span>深度思考</span><b>对话换用推理模型，答得更细，更慢更贵</b></label>' +
+        '<div class="field" id="ai-reasonerrow" style="display:' + (c.think ? 'block' : 'none') + '">' +
+          '<label>推理模型</label>' +
+          '<input id="ai-reasoner" class="input" value="' +
+            esc(raw.reasonerModel || QYA.DEFAULTS.reasonerModel) + '" /></div>' +
         '<label class="check-row"><input type="checkbox" id="ai-web"' +
           (c.webSearch ? ' checked' : '') + ' />' +
           '<span>联网搜索</span><b>回答前先搜网页，需搜索 Key</b></label>' +
@@ -235,11 +269,16 @@
           '<button class="btn primary" data-action="i-ai-save">保存</button>' +
         '</div>' +
       '</div>');
-    // 开关联动搜索 Key 字段的显隐
+    // 开关联动：联网搜索 → 搜索 Key 字段；深度思考 → 推理模型字段
     const webBox = document.getElementById('ai-web');
     const searchRow = document.getElementById('ai-searchrow');
     if (webBox && searchRow) webBox.addEventListener('change', function () {
       searchRow.style.display = webBox.checked ? 'block' : 'none';
+    });
+    const thinkBox = document.getElementById('ai-think');
+    const reasonerRow = document.getElementById('ai-reasonerrow');
+    if (thinkBox && reasonerRow) thinkBox.addEventListener('change', function () {
+      reasonerRow.style.display = thinkBox.checked ? 'block' : 'none';
     });
   }
 
@@ -250,8 +289,12 @@
     const enabled = document.getElementById('ai-enabled').checked;
     const webBox = document.getElementById('ai-web');
     const searchKeyEl = document.getElementById('ai-searchkey');
+    const thinkBox = document.getElementById('ai-think');
+    const reasonerEl = document.getElementById('ai-reasoner');
     QYA.update({
       key: key, model: model, baseUrl: baseUrl, enabled: enabled,
+      think: !!(thinkBox && thinkBox.checked),
+      reasonerModel: reasonerEl && reasonerEl.value.trim() ? reasonerEl.value.trim() : QYA.DEFAULTS.reasonerModel,
       webSearch: !!(webBox && webBox.checked),
       searchKey: searchKeyEl ? (searchKeyEl.value || '').trim() : ''
     });
@@ -384,7 +427,7 @@
     e.stopPropagation();
     if (act === 'i-ocr') openOcr();
     else if (act === 'i-ocr-pick') recognize(el.getAttribute('data-src'));
-    else if (act === 'i-ocr-again') { draft = null; lastError = ''; rerender(); }
+    else if (act === 'i-ocr-again') { draft = null; draftPhoto = null; lastError = ''; rerender(); }
     else if (act === 'i-ocr-add') addAll();
     else if (act === 'i-ai-cfg') openAiConfig();
     else if (act === 'i-ai-save') saveAiConfig();
