@@ -350,6 +350,21 @@
   /* 时间线手动记一笔允许的类型（与 items.js 的 MANUAL_EVENT_TYPES 保持一致） */
   const EVENT_TYPES_ALLOWED = ['used', 'opened', 'repaired', 'replaced', 'lent', 'returned', 'disposed', 'status'];
 
+  /* 背景 preset 归一：接受编码（p3）、中文名（雾蓝）、混写（p3雾蓝），
+     归一不成的返回 null（丢弃）。 */
+  function normalizeBgPreset(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (!s) return null;
+    const byCode = ['default', 'p1', 'p2', 'p3', 'p4', 'p5'].filter(function (c) { return s === c; })[0];
+    if (byCode) return byCode;
+    const names = { 奶油: 'p1', 淡粉: 'p2', 粉: 'p2', 雾蓝: 'p3', 蓝: 'p3', 薄荷: 'p4', 绿: 'p4', 浅紫: 'p5', 紫: 'p5', 默认: 'default' };
+    if (names[s]) return names[s];
+    const m = s.match(/^(p[1-5])/);
+    if (m) return m[1];                       // "p3雾蓝" → p3
+    const hit = Object.keys(names).filter(function (k) { return s.indexOf(k) >= 0; })[0];
+    return hit ? names[hit] : null;           // "换成雾蓝" → p3
+  }
+
   /* delete_records 影响范围（描述和二确都展示具体条数，用户看得见代价） */
   function countRecords(a) {
     const d = UI().data();
@@ -519,9 +534,11 @@
         return;
       }
       if (a.type === 'set_bg') {
-        const ok = ['default', 'p1', 'p2', 'p3', 'p4', 'p5'].indexOf(a.preset) >= 0;
-        if (!ok) { dropped++; return; }
-        UI().uiSet({ bg: { preset: a.preset, img: null } });
+        // 模型有时会照提示词里的标签文字返回"奶油"/"p1奶油"之类，
+        // 统一归一成编码再校验，别让改背景永远"被丢弃"
+        const norm = normalizeBgPreset(a.preset);
+        if (!norm) { dropped++; return; }
+        UI().uiSet({ bg: { preset: norm, img: null } });
         if (UI().applyBackground) UI().applyBackground();
         applied++;
         return;

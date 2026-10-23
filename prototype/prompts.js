@@ -86,7 +86,7 @@
 { "type":"delete_category",  "name":"" }
 { "type":"add_reading",  "meter":"表具名（{{METERS}}）", "value":本月用量数字 }
 { "type":"set_theme",    "mode":"dark|light|auto" }
-{ "type":"set_bg",       "preset":"default|p1奶油|p2淡粉|p3雾蓝|p4薄荷|p5浅紫" }
+{ "type":"set_bg",       "preset":"default 或 p1 或 p2 或 p3 或 p4 或 p5（p1奶油/p2淡粉/p3雾蓝/p4薄荷/p5浅紫，preset 只填编码不要带中文）" }
 { "type":"set_sort",     "group":"items|collect|energy", "value":"排序值（词表见【当前数据】末行）" }
 { "type":"set_tabs",     "collect":true|false, "energy":true|false }
 { "type":"goto",         "tab":"home|items|collect|energy|me" }
