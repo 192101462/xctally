@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 中文系统显示「琪遇台账」，其他语言回退 values/ 里的 xctally -->
+<resources>
+    <string name="app_name">琪遇台账</string>
+</resources>
