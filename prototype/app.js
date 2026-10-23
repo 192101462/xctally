@@ -15,12 +15,11 @@
 
   let data = QY.load();
   const state = { tab: 'home', detailId: null, category: '全部', query: '' };
-  // 网页版本号只是兜底：优先用原生注入的 versionName（发版后不会再出现
-  // "装的明明是 1.2、设置里却写当前 v1.0"的错位）
-  const APP_VERSION = '1.2';
-  function currentVersion() {
-    const v = (window.QYPlatform && QYPlatform.appVersion && QYPlatform.appVersion()) || '';
-    return v || APP_VERSION;
+  // 版本号只认原生注入的 versionName（真实安装版本）。
+  // 不设网页兜底常量：它会跟发行进度脱节（写 1.2 时发行版可能还在 1.1），
+  // 浏览器里拿不到原生版本就干脆不显示，避免误导。
+  function nativeVersion() {
+    return (window.QYPlatform && QYPlatform.appVersion && QYPlatform.appVersion()) || '';
   }
 
   function save() { QY.save(data); }
@@ -1279,7 +1278,7 @@
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
         '</div>' +
         '<div class="group" style="margin-top:14px">' +
-          setRow('upd-check', '检查更新', { side: '当前 v' + currentVersion(), chev: true }) +
+          setRow('upd-check', '检查更新', { side: nativeVersion() ? '当前 v' + nativeVersion() : '', chev: true }) +
         '</div>';
     }
 
