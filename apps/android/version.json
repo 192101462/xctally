@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.3",
-  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.3/xctally-1.3.apk",
-  "notes": "1.优化卓易通显示"
+  "versionCode": 6,
+  "versionName": "1.4",
+  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.4/xctally-1.4.apk",
+  "notes": "应用名改为中文显示「琪遇台账」（其他语言显示 xctally） 修复应用内更新在卓易通等系统上没有下载进度、下载完不弹安装的问题 下载与安装改为应用自己完成，进度百分比实时显示在通知栏"
 }
