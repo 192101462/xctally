@@ -1,6 +1,6 @@
 {
-  "versionCode": 3,
-  "versionName": "1.1",
-  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.1/xctally-1.1.apk",
-  "notes": "页头固定与列表滚动优化、SF 风格图标、AI 输入框多行、AI 联网搜索、应用内检查更新、鸿蒙工程、开源（MIT）"
+  "versionCode": 4,
+  "versionName": "1.2",
+  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.2/xctally-1.2.apk",
+  "notes": "修复卓易通上内容钻到状态栏底下、底部露白条的问题\n物品页搜索栏重新固定到页头，固定区更紧凑、整体上移\n检查更新显示真实安装版本，弹窗内直接查看更新说明\n导出备份改为系统\"另存为\"自选位置，导入时找得到文件\nAI 助手可代写收藏记录；备份包含 AI 配置与用量"
 }

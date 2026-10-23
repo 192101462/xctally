@@ -32,6 +32,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # chmod +x gradlew 会改文件可执行位；仓库在 Windows 上建的、gradlew 以
+      # 非执行位入库，Linux 上 chmod 后就成了"未暂存修改"，发布回推时的
+      # git rebase 会被它挡住。这里让 git 无视文件模式变化。
+      - name: Ignore file-mode changes
+        run: git config core.fileMode false
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

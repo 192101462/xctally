@@ -211,9 +211,14 @@ def cmd_publish(version, apk_path, notes):
     r = git("push", "gitee", "HEAD:main", check=False)
     if r.returncode != 0:
         print("      push rejected, rebasing onto gitee/main ...")
+        # chmod +x gradlew 会留下"文件模式变化"的未暂存修改，rebase 前先收进 stash
+        # （本地跑也一样：工作区可能不干净，发布不该被它挡住）
+        git("stash", "push", "--include-untracked", "-m", "ci-publish-dirty", check=False)
         git("fetch", "gitee", "main")
         git("rebase", "gitee/main")
         git("push", "gitee", "HEAD:main")
+        # 恢复现场（多半是构建产物，恢复失败也不影响发布结果）
+        git("stash", "pop", check=False)
     print("\nDONE. apk url:\n" + apk_url)
 
 
