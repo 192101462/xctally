@@ -1357,6 +1357,8 @@
     detailBackLabel: detailBackLabel,
     // 进详情前记一下列表位置（backFromDetail 返回时会还原）
     rememberScroll: rememberScroll,
+    // AI 改主题后要重铺 data-theme + 通知原生换系统栏颜色
+    applyTheme: applyTheme,
     ui: ui,
     uiSet: uiSet,
     itemById: function (id) { return itemById(id); },

@@ -318,6 +318,24 @@
     return (UI().data().items || []).filter(function (i) { return i.id === id; })[0] || null;
   }
 
+  /* 按名字找物品：精确 → 唯一包含；多个/零个都返回 null（宁可不做也别改错） */
+  function findByName(name) {
+    const n = String(name || '').trim();
+    if (!n) return null;
+    let m = UI().data().items.filter(function (i) { return i.name === n; });
+    if (!m.length) m = UI().data().items.filter(function (i) { return (i.name || '').indexOf(n) >= 0; });
+    return m.length === 1 ? m[0] : null;
+  }
+
+  /* delete_records 影响范围（描述和二确都展示具体条数，用户看得见代价） */
+  function countRecords(a) {
+    const d = UI().data();
+    if (a.scope === 'items') {
+      return d.items.filter(function (i) { return i.acquiredAt && i.acquiredAt < a.before; }).length;
+    }
+    return (d.events || []).filter(function (e) { return e.at && e.at < a.before; }).length;
+  }
+
   function describe(a) {
     if (!a || !a.type) return '（无法识别的动作）';
     const it = a.id ? itemById(a.id) : null;
@@ -342,9 +360,22 @@
         return k + ' → ' + a.fields[k];
       }).join('，') : '（没有具体字段）');
     }
+    if (a.type === 'set_status') {
+      const target = it || findByName(a.name);
+      return '把「' + (target ? target.name : (a.name || '未找到')) + '」的状态改为 ' + (a.status || '?');
+    }
     if (a.type === 'set_archived') return (a.archived ? '归档「' : '取消归档「') + name + '」';
     if (a.type === 'set_pinned') return (a.pinned ? '置顶「' : '取消置顶「') + name + '」';
     if (a.type === 'delete_item') return '删除「' + name + '」（进回收站，30 天内可恢复）';
+    if (a.type === 'set_theme') {
+      return '切换' + (a.mode === 'dark' ? '深色' : a.mode === 'light' ? '浅色' : '跟随系统') + '模式';
+    }
+    if (a.type === 'check_update') return '检查应用更新（结果会自动弹出）';
+    if (a.type === 'delete_records') {
+      const n = countRecords(a);
+      return '删除 ' + a.before + ' 之前的' + (a.scope === 'items' ? '物品（进回收站）' : '时间线记录（不可恢复）') +
+        '，共 ' + n + ' 条' + (n ? '' : '（没有符合条件的）');
+    }
     return a.type;
   }
 
@@ -394,6 +425,66 @@
           plugins: plugins,
           body: a.body || ''
         });
+        applied++;
+        return;
+      }
+      /* ---- 不针对具体物品的动作 ---- */
+      if (a.type === 'set_theme') {
+        const mode = a.mode === 'dark' || a.mode === 'light' || a.mode === 'auto' ? a.mode : null;
+        if (!mode) { dropped++; return; }
+        UI().uiSet({ theme: mode });
+        if (UI().applyTheme) UI().applyTheme();
+        applied++;
+        return;
+      }
+      if (a.type === 'check_update') {
+        // 和设置页同一个入口：结果由原生回调 QYUpd.onResult 自动弹出
+        if (window.QYAndroid && QYAndroid.checkUpdate) {
+          UI().toast('正在检查更新…');
+          QYAndroid.checkUpdate();
+          applied++;
+        } else if (window.QYPlatform && QYPlatform.kind === 'harmony') {
+          UI().toast('鸿蒙版请在应用市场更新');
+          dropped++;
+        } else {
+          UI().toast('请在手机 App 里让我检查更新');
+          dropped++;
+        }
+        return;
+      }
+      if (a.type === 'delete_records') {
+        // 危险动作：真正的执行在 doApplyActions 之前已被二次确认拦过一道
+        if (!a.before || !/^\d{4}-\d{2}-\d{2}$/.test(a.before)) { dropped++; return; }
+        if (a.scope === 'items') {
+          d.trash = d.trash || [];
+          const cut = d.items.filter(function (i) { return i.acquiredAt && i.acquiredAt < a.before; });
+          cut.forEach(function (i) {
+            d.trash.push({
+              id: QY.uid('tr'), kind: 'item', deletedAt: QY.iso(QY.today()),
+              item: i, events: d.events.filter(function (e) { return e.itemId === i.id; })
+            });
+          });
+          const ids = cut.map(function (i) { return i.id; });
+          d.items = d.items.filter(function (i) { return ids.indexOf(i.id) < 0; });
+          d.events = d.events.filter(function (e) { return ids.indexOf(e.itemId) < 0; });
+          UI().toast('已删 ' + cut.length + ' 件物品（回收站 30 天）');
+          applied++;
+        } else {
+          const before = (d.events || []).filter(function (e) { return e.at && e.at < a.before; }).length;
+          d.events = (d.events || []).filter(function (e) { return !(e.at && e.at < a.before); });
+          UI().toast('已删 ' + before + ' 条时间线记录');
+          applied++;
+        }
+        return;
+      }
+      if (a.type === 'set_status') {
+        // 优先 id，其次唯一匹配的名字；状态词必须是该分类词表里的
+        const st = (a.id ? itemById(a.id) : null) || findByName(a.name);
+        if (!st || !a.status) { dropped++; return; }
+        const vocab = QY.catStatuses(st.category, d);
+        if (vocab.indexOf(a.status) < 0) { dropped++; return; }
+        if (window.QYI && QYI.applyStatus) QYI.applyStatus(st, a.status);
+        else st.status = a.status;
         applied++;
         return;
       }
@@ -535,13 +626,26 @@
     if (act === 'apply') {
       const last = msgs[msgs.length - 1];
       if (!last || !last.actions) return;
-      const r = applyActions(last.actions);
-      last.applied = true;
-      last.dropped = r.dropped;
-      last.text = (last.text ? last.text + '\n' : '') +
-        '已执行 ' + r.applied + ' 个动作' + (r.dropped ? '，丢弃 ' + r.dropped + ' 个' : '') + '。';
-      rerenderChat();
-      UI().toast('已执行 ' + r.applied + ' 个动作');
+      const run = function () {
+        const r = applyActions(last.actions);
+        last.applied = true;
+        last.dropped = r.dropped;
+        last.text = (last.text ? last.text + '\n' : '') +
+          '已执行 ' + r.applied + ' 个动作' + (r.dropped ? '，丢弃 ' + r.dropped + ' 个' : '') + '。';
+        rerenderChat();
+        UI().toast('已执行 ' + r.applied + ' 个动作');
+      };
+      // 批量删除是危险动作：执行按钮算第一确，这里再弹一道红色确认（二确）
+      const danger = last.actions.filter(function (a) {
+        return a.type === 'delete_records' && /^\d{4}-\d{2}-\d{2}$/.test(a.before || '');
+      });
+      if (danger.length && window.QYI && QYI.confirmSheet) {
+        QYI.confirmSheet(
+          danger.map(describe).join('\n') + '\n\n确定执行？', { danger: true, ok: '仍要删除' }
+        ).then(function (yes) { if (yes) run(); });
+      } else {
+        run();
+      }
       return;
     }
     if (act === 'skip') {

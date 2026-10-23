@@ -64,12 +64,20 @@
 { "type":"add_item",     "name":"", "price":数字或null, "qty":数字, "category":"", "sub":"", "acquiredAt":"YYYY-MM-DD", "source":"", "location":"", "note":"" }
 { "type":"add_note",     "title":"", "cat":"收藏分类", "date":"YYYY-MM-DD", "tags":[""], "rating":1-5或null, "price":数字或null, "mood":"", "body":"随笔正文（纯文本，可多行）" }
 { "type":"update_item",  "id":"", "fields":{ 要改的字段 } }
+{ "type":"set_status",   "id":"物品id（优先）；说不清id时填name", "name":"", "status":"状态词" }
 { "type":"set_archived", "id":"", "archived":true|false }
 { "type":"set_pinned",   "id":"", "pinned":true|false }
 { "type":"delete_item",  "id":"" }
+{ "type":"set_theme",    "mode":"dark|light|auto" }
+{ "type":"check_update" }
+{ "type":"delete_records", "scope":"events|items", "before":"YYYY-MM-DD" }
+
+各分类的状态词表（set_status 的 status 只能从这里选，按物品所属分类）：
+{{STATUS_VOCAB}}
 
 【铁律】
 1. 只能使用上面清单里真实存在的 id。清单里没有的 id 一律不许编造。
+   set_status 优先用 id；用 name 时要能唯一对上，对不上就在 reply 里问。
 2. 信息不全时（例如用户没给价格、没给日期）不要瞎填：actions 留空，
    在 reply 里问清楚。日期缺失可以默认今天，但要说明"按今天记"。
 3. 删除、归档这类会改变数据的动作，只生成动作，不要声称已经完成——App 会先让用户确认。
@@ -81,6 +89,13 @@
 7. 统计、筛选类问题（"这个月食品花了多少""哪些快过期了"）直接用 reply 回答，
    actions 留空。清单里没有的信息就说不知道，不要推算。
 8. 语气像同事帮你记账：简短、直接，不要客套，不要复述用户的话。
+9. "牛奶喝完了/用完了/坏了"这类话 = set_status（如 已吃完/已用完/已损坏）；
+   只有明确说"扔了/不要了/归档"才用 set_archived 或 delete_item。
+10. set_theme：用户说"深色/夜间"→ dark，"浅色/白天"→ light，"跟随系统"→ auto。
+11. delete_records 是危险操作（App 会二次确认）："删除X之前的记录"时把 X 换算成
+    YYYY-MM-DD 填 before；用户说的"记录"指时间线就用 events，明确说"物品"才用 items。
+    reply 里说清楚将要删什么、多少条以内，不要说"已删除"。
+12. "看看有没有新版本/更新"→ check_update（结果 App 会自动弹出，reply 简单说在查即可）。
 
 【用户发图片时】
 用户可能直接发订单截图或购物小票。这时按下面的规则提取，然后用动作入库：
@@ -105,6 +120,16 @@
     const names = list.map(function (c) { return c.name; });
     if (names.indexOf('其他') < 0) names.push('其他');
     return names.join(' / ');
+  }
+
+  /* 分类状态词表：让模型知道每个分类有哪些合法状态词，
+     set_status 才能直接给出"已吃完/使用中"这类正确词 */
+  function statusVocab(data) {
+    const list = (window.QY && QY.catList) ? QY.catList(data) : [];
+    if (!list.length) return '未开封 / 使用中 / 已用完';
+    return list.map(function (c) {
+      return c.name + '：' + (c.statuses || []).join(' / ');
+    }).join('；');
   }
 
   function itemsTable(data) {
@@ -147,7 +172,8 @@
         WASTED: s.wasted.toFixed(2),
         TODAY: QY.iso(QY.today()),
         CATEGORIES: catNames(data),
-        NOTE_CATS: noteCats
+        NOTE_CATS: noteCats,
+        STATUS_VOCAB: statusVocab(data)
       });
     }
   };

@@ -846,27 +846,33 @@
 
   /* ---------------- 其它动作 ---------------- */
 
+  /* 改状态的实际落库（手动弹窗和 AI 动作共用）：
+     记时间线，状态换成"开封"类且没记过开封日期时顺手补上 */
+  function applyStatus(item, v) {
+    const from = item.status;
+    item.status = v;
+    if (/开封/.test(v) && !item.openedAt) {
+      item.openedAt = QY.iso(QY.today());
+      data().events.push({
+        id: QY.uid('ev'), itemId: item.id, type: 'opened',
+        at: item.openedAt, amount: null, note: null
+      });
+    }
+    if (v !== from) {
+      data().events.push({
+        id: QY.uid('ev'), itemId: item.id, type: 'status',
+        at: QY.iso(QY.today()), amount: null, note: from + ' → ' + v
+      });
+    }
+    return v !== from;
+  }
+
   function changeStatus(id) {
     const item = byId(id);
     if (!item) return;
     const cur = item.status;
     const onPick = function (v) {
-      const from = item.status;
-      item.status = v;
-      // 联动：状态换成"开封"类且还没记开封日期时，顺手补上
-      if (/开封/.test(v) && !item.openedAt) {
-        item.openedAt = QY.iso(QY.today());
-        data().events.push({
-          id: QY.uid('ev'), itemId: item.id, type: 'opened',
-          at: item.openedAt, amount: null, note: null
-        });
-      }
-      if (v !== from) {
-        data().events.push({
-          id: QY.uid('ev'), itemId: item.id, type: 'status',
-          at: QY.iso(QY.today()), amount: null, note: from + ' → ' + v
-        });
-      }
+      applyStatus(item, v);
       UI().save();
       UI().closeSheet();
       UI().mount();
@@ -1541,7 +1547,10 @@
     openCatManager: openCatManager,
     openTrash: openTrash,
     handleAction: handleAction,
-    handleInput: handleInput
+    handleInput: handleInput,
+    // AI 动作也走它，保证时间线/开封联动和手动一致
+    applyStatus: applyStatus,
+    confirmSheet: confirmSheet
   };
 
   /* 拖动刚结束时，吃掉浏览器补发的 click（否则会点到遮罩/按钮上） */
