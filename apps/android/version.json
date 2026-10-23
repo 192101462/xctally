@@ -1,6 +1,6 @@
 {
-  "versionCode": 8,
-  "versionName": "1.6",
-  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.6/xctally-1.6.apk",
-  "notes": "AI 助手可以操作的动作业已扩展到全部常用功能：\n「牛奶喝完了」→ 弹出确认后自动改状态（按分类状态词表）\n「帮我改成深色模式」→ 直接切换深色/浅色/跟随系统\n「看看有没有更新」→ 直接触发应用内检查更新\n「删除昨天之前的记录」→ 弹出红色二次确认框后才执行（含条数与范围）"
+  "versionCode": 9,
+  "versionName": "1.7",
+  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.7/xctally-1.7.apk",
+  "notes": "设置新增「到期提醒」：显示提醒策略（提前3天 · 早9点），点击立即发一条测试通知\n到期提醒本就无需后台常驻（系统 WorkManager 每天定时唤醒），测试通知用于验证通知权限与系统的省电拦截"
 }
