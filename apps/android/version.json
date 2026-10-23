@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "1.2",
-  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.2/xctally-1.2.apk",
-  "notes": "修复卓易通上内容钻到状态栏底下、底部露白条的问题\n物品页搜索栏重新固定到页头，固定区更紧凑、整体上移\n检查更新显示真实安装版本，弹窗内直接查看更新说明\n导出备份改为系统\"另存为\"自选位置，导入时找得到文件\nAI 助手可代写收藏记录；备份包含 AI 配置与用量"
+  "versionCode": 5,
+  "versionName": "1.3",
+  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.3/xctally-1.3.apk",
+  "notes": "1.优化卓易通显示"
 }
