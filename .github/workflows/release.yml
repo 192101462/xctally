@@ -1,27 +1,32 @@
 # xctally 云端自动构建（GitHub Actions）
 # ============================================================
-# 链路：日常只 push gitee → gitee「推送镜像」自动同步本仓库 →
-#       在 Actions 页手动触发（填版本号+更新说明）→ 云端构建签名 APK →
-#       发布回 gitee Release 并更新 version.json → 手机检查更新即可升级。
+# 链路：改 RELEASE.md（版本号 + 更新说明）→ push gitee → 镜像同步到本仓库
+#       → 本流水线自动触发：版本号比已发布的高就构建、签名、发布回
+#       gitee Release 并更新 version.json → 手机检查更新即可升级。
 #
 # 一次性配置见 docs/ci-setup.md（镜像 + Secrets 清单）。
 #
-# 触发：只在 Actions 页手动 Run workflow（workflow_dispatch）。
-#       【不要】用 push 标签触发：发布脚本调 gitee API 建 Release 时会
-#       顺手创建标签，镜像晚一步把它同步过来时会再次触发流水线——
-#       而且标签指向的是旧提交（不含刚修好的流水线代码），白白重跑一遍
-#       还容易失败。手动触发永远是最新代码。
+# 触发：
+#   push main    发版主通道。版本号没变（普通代码提交）时流水线秒退不构建。
+#   手动 Run     应急/重发用；填的版本号和更新说明优先于 RELEASE.md，
+#                版本留空则只构建不发布（冒烟测试）。
+#
+# 注意【不要】用标签触发：发布脚本调 gitee API 建 Release 时会顺手创建
+# 标签，镜像晚一步把它同步过来时会再次触发流水线——而且标签指向的是旧
+# 提交（不含刚修好的流水线代码），白白重跑一遍还容易失败。
 name: release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: '版本号（如 1.2），留空则只构建不发布'
+        description: '版本号（如 1.4）。留空 = 只构建不发布；填了则优先于 RELEASE.md'
         required: false
         default: ''
       notes:
-        description: '更新说明（每行一条）。同一份文字会显示在 gitee 发行版说明和 App 内"检查更新"弹窗'
+        description: '更新说明（每行一条）。仅在版本号填了时使用，否则读 RELEASE.md'
         required: false
         default: ''
         type: string
@@ -39,34 +44,31 @@ jobs:
       - name: Ignore file-mode changes
         run: git config core.fileMode false
 
+      # 发版决策：要不要发、发什么版本、更新说明是什么。
+      # 输出 version / publish / build / reason / notes 四个结果门控后面所有步骤。
+      - name: Decide release
+        id: ver
+        env:
+          EV_NAME: ${{ github.event_name }}
+          IN_VER: ${{ github.event.inputs.version }}
+          IN_NOTES: ${{ github.event.inputs.notes }}
+        run: python tools/ci_decide.py >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
+        if: steps.ver.outputs.build == 'yes'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Accept Android SDK licenses + best-effort preinstall
+        if: steps.ver.outputs.build == 'yes'
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           # runner 自带的 sdkmanager 索引可能偏旧，装不上新平台也不要紧：
           # 许可证已接受，下面 Gradle 会自动下载缺失的 SDK 组件
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0" \
             || echo "(preinstall skipped — gradle will auto-download)"
-
-      - name: Set version from inputs
-        id: ver
-        env:
-          INPUT_NOTES: ${{ github.event.inputs.notes }}
-        run: |
-          VER="${{ github.event.inputs.version }}"
-          NOTES="$INPUT_NOTES"
-          {
-            echo "version=$VER"
-            echo "publish=$( [ -n "$VER" ] && echo yes || echo no )"
-            echo "notes<<NOTES_EOF"
-            printf '%s\n' "$NOTES"
-            echo "NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
 
       # 版本号处理 + 产出 versionCode：ci_publish.py bump 负责改 build.gradle.kts
       - name: Bump versionCode / versionName
@@ -87,12 +89,14 @@ jobs:
           EOF
 
       - name: Build release APK
+        if: steps.ver.outputs.build == 'yes'
         run: |
           cd apps/android
           chmod +x gradlew
           ./gradlew assembleRelease --console=plain
 
       - name: Show build result
+        if: steps.ver.outputs.build == 'yes'
         run: ls -la apps/android/app/build/outputs/apk/release/
 
       # 发布回 gitee：建 Release + 传 APK + 更新 version.json 并推回
@@ -108,7 +112,8 @@ jobs:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           REL_NOTES: ${{ steps.ver.outputs.notes }}
 
-      - name: Upload APK artifact (workflow 手动触发/留档)
+      - name: Upload APK artifact (手动只构建/留档)
+        if: steps.ver.outputs.build == 'yes'
         uses: actions/upload-artifact@v4
         with:
           name: xctally-apk

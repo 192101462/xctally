@@ -92,18 +92,32 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 `.github/workflows/release.yml` 和 `tools/ci_publish.py` 已在仓库里，
 随代码一起 push 到 gitee，镜像同步到 GitHub 后即生效。
 
-## 五、发版 = Actions 页手动触发
+## 五、发版 = 改 RELEASE.md 然后 push
 
-GitHub 仓库 → **Actions** → **release** → **Run workflow**：
+仓库根目录的 **RELEASE.md** 是发版入口：
 
-- **version** 填版本号（如 `1.3`），留空则只构建不发布
-- **notes** 填更新说明，**每行一条**（如"修复某某问题"、"新增某某功能"）。
-  这份文字会同时显示在 gitee 发行版的说明里和 App 内「检查更新」的弹窗里，
-  用户升级前就能看到这次更新了什么。
+```markdown
+version: 1.5
 
-> v1.2 及之前的标签名（v1.1、v1.2）只是发布脚本建 Release 时自动生成的标记，
-> 现在流水线只认 Actions 页手动触发，**不要**再推标签触发（镜像晚一步把标签
-> 同步到 GitHub 时会再跑一遍旧代码的流水线，白白重构建还容易失败）。
+notes:
+- 新增某某功能
+- 修复某某问题
+```
+
+改好版本号和更新说明（每行一条）→ `git add RELEASE.md && git commit && git push` →
+gitee 镜像同步到 GitHub → 流水线自动构建、签名、发布回 gitee Release、更新
+version.json —— 全程不用去 GitHub 点任何东西。
+
+- **版本号没变的普通提交**（改代码、改文档）：流水线检查到版本号没变会
+  秒退，不占构建时间
+- **忘改版本号**：同样跳过，不会重复发同一个版本
+- 发布后 RELEASE.md 不用改回来——下次发版把版本号再改大即可
+- **应急/重发**：GitHub Actions 页 → release → Run workflow，填的版本号和
+  说明优先于 RELEASE.md；版本留空则只构建不发布（冒烟测试）
+- App 内「检查更新」弹窗显示的就是 notes 里的内容，gitee 发行版说明同源
+
+> v1.2 及之前的标签名（v1.1、v1.2…）只是发布脚本建 Release 时自动生成的
+> 标记，现在流水线只认 main 分支的 push 和手动触发，**不要**推标签。
 
 构建进度看 GitHub 仓库的 **Actions** 页（一次约 5-8 分钟）。
 完成后 gitee 的"发行版"页面出现新 Release，`version.json` 已更新，
