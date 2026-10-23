@@ -55,13 +55,19 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
         return Result.success()
     }
 
-    private fun notify(ctx: Context, id: String, title: String, body: String) {
-        val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    companion object {
+        private const val PREFS = "xctally"
+        private const val KEY = "reminders"
+        private const val CHANNEL = "xctally_due"
+        private const val WORK = "xctally_reminders"
+
+        private fun notify(ctx: Context, id: String, title: String, body: String) {
+            val mgr = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(CHANNEL, "到期提醒", NotificationManager.IMPORTANCE_DEFAULT)
             ch.description = "物品保质期 / 保修到期的提醒"
             mgr.createNotificationChannel(ch)
-        }
+            }
 
         val open = PendingIntent.getActivity(
             ctx, 0,
@@ -86,11 +92,11 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
         }
     }
 
-    companion object {
-        private const val PREFS = "xctally"
-        private const val KEY = "reminders"
-        private const val CHANNEL = "xctally_due"
-        private const val WORK = "xctally_reminders"
+        /** 设置页「发条测试通知」：立刻弹一条，验证权限/通道/ROM 放行整条链路 */
+        fun postTest(ctx: Context) {
+            notify(ctx, "test", "琪遇台账 · 测试通知",
+                "到期提醒链路是通的。真正的提醒会在到期前 3 天的早上 9 点左右弹出。")
+        }
 
         private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

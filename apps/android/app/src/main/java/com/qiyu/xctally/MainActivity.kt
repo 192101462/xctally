@@ -670,6 +670,12 @@ class MainActivity : AppCompatActivity() {
             ReminderWorker.save(this@MainActivity, json)
         }
 
+        /** 设置页「发条测试通知」：立即验证通知链路 */
+        @JavascriptInterface
+        fun testReminder() {
+            ReminderWorker.postTest(this@MainActivity)
+        }
+
         /** 检查更新：结果通过 window.QYUpd.onResult(json) 回调给网页 */
         @JavascriptInterface
         fun checkUpdate() {

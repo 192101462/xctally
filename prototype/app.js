@@ -976,6 +976,16 @@
       (state.setting || []).pop();
       if (!(state.setting || []).length) state.setting = null;
       mount();
+    } else if (action === 'test-reminder') {
+      // 立即发一条测试通知，验证权限/通道/ROM 放行整条链路
+      if (window.QYAndroid && QYAndroid.testReminder) {
+        QYAndroid.testReminder();
+        toast('已发测试通知，去通知栏看看；没看到就是被系统拦了（见电池/自启动设置）');
+      } else if (window.QYPlatform && QYPlatform.kind === 'harmony') {
+        toast('鸿蒙版请在应用市场的版本里测试通知');
+      } else {
+        toast('测试通知要在手机 App 里发（浏览器无法弹系统通知）');
+      }
     } else if (action === 'set-go') {
       state.setting = (state.setting || []).concat([el.getAttribute('data-k')]);
       mount();
@@ -1274,6 +1284,7 @@
         '<div class="group" style="margin-top:16px">' +
           setRow('set-go', 'AI助手', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
+          setRow('test-reminder', '到期提醒', { side: '提前3天 · 早9点', chev: true }) +
           setRow('set-go', '外观', { k: 'look', chev: true }) +
           setRow('set-go', '内存', { k: 'mem', side: humanBytes(memBytes), chev: true }) +
         '</div>' +
