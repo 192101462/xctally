@@ -1,6 +1,6 @@
 {
-  "versionCode": 12,
-  "versionName": "1.10",
-  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.10/xctally-1.10.apk",
-  "notes": "修复输入法遮挡输入框：安卓 15 起强制全面屏导致窗口不再为键盘让位（卓易通同理），"
+  "versionCode": 13,
+  "versionName": "1.11",
+  "apkUrl": "https://gitee.com/qiyu_server/xctally/releases/download/v1.11/xctally-1.11.apk",
+  "notes": "深度思考按 DeepSeek 新接口改为 thinking 参数开关（deepseek-flash 直接支持，不再依赖已废弃的 deepseek-reasoner），回复附带可展开的\"思考过程\"；关闭时显式禁用，识图和快速调用不再被服务端默认思考拖慢\n发送图片直接弹系统选图面板，相机排在第一项，拍照/选图一步到位，不再弹\"拍照还是相册\"的选择面板"
 }
