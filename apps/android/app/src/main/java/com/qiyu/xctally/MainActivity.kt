@@ -298,27 +298,37 @@ class MainActivity : AppCompatActivity() {
             addJavascriptInterface(Bridge(), "QYAndroid")
             loadUrl("https://appassets.androidplatform.net/assets/index.html")
         }
-        setContentView(webView)
+        // WebView 装进 FrameLayout：键盘弹出时用【底部边距】缩小 WebView。
+        // 边距改变的是视图真实尺寸 → 网页整体重排 → WebView 自带的
+        // "聚焦输入框滚进可视区"就能工作。（给 WebView 加 padding 没用：
+        // WebView 不按 padding 裁剪内容，之前试过"完全没变化"。）
+        val root = android.widget.FrameLayout(this)
+        root.addView(webView, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+        setContentView(root)
 
-        // 键盘遮挡输入框：回到"系统窗口给键盘让位"的经典行为。
+        // 键盘遮挡输入框：走统一的 edge-to-edge 方案。
         //
-        // 走过两次弯路，结论记在这里：
-        //   - targetSdk 35+ 强制 edge-to-edge 后，manifest 的 adjustResize 不再缩小窗口，
-        //     页面底部一直延伸到键盘下面，所以输入框被挡住。
-        //   - 我试过自己按 ime insets 给 WebView 加底部内边距：在多数设备/兼容层上
-        //     insets 不上报或与窗口缩小相互抵消，结果是"完全没变化"。
-        // 所以直接退出 edge-to-edge：窗口重新为系统栏和键盘让位，
-        // adjustResize 就会正常把 WebView 缩小，WebView 自己的"聚焦即滚入可视区"也就能工作了。
-        WindowCompat.setDecorFitsSystemWindows(window, true)
+        // 走过三次弯路，结论记在这里：
+        //   1. manifest 的 adjustResize：targetSdk 35+（安卓 15 起）强制全面屏，
+        //      setDecorFitsSystemWindows(true) 会被无视，窗口不再为键盘缩小 ——
+        //      卓易通一直如此，安卓 15/16 的真机也一样，输入框就被键盘压住。
+        //   2. 给 WebView 加 padding：WebView 不按 padding 裁剪内容，无效。
+        //   3. 正解：全面屏 + 监听 ime insets，给 WebView 设底部边距。
+        //      键盘弹起 → WebView 变矮 → 底部的输入行自然在键盘上方；
+        //      状态栏/导航栏的重叠量继续走 --safe-top/--safe-bottom（pushInsets）。
+        WindowCompat.setDecorFitsSystemWindows(window, false)
 
         ViewCompat.requestApplyInsets(webView)
 
-        // 部分兼容层（如鸿蒙卓易通）不尊重 setDecorFitsSystemWindows(true)，
-        // WebView 会整屏铺开、内容钻到状态栏/导航栏底下。这里【实测】WebView
-        // 与系统栏重叠了多少像素，通过桥推给网页写进 --safe-top/--safe-bottom。
-        // 标准安卓上窗口本来就让位了，重叠量是 0，一切照旧；只有重叠时网页才留白。
+        // 系统栏重叠实测（卓易通等兼容层不报 env()，只能原生量）；
+        // 键盘开着时跳过重算——那时的"底部重叠"其实是键盘，不该算进安全区
         ViewCompat.setOnApplyWindowInsetsListener(webView) { _, insets ->
-            pushInsets()
+            val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            applyImeMargin(imeBottom)
+            if (imeBottom == 0) pushInsets()
             insets
         }
         webView.post { pushInsets() }   // 有的兼容层不派发 insets，布局后主动量一次
@@ -566,6 +576,14 @@ class MainActivity : AppCompatActivity() {
     private fun cssRound(px: Int): Double {
         val d = resources.displayMetrics.density
         return Math.round(px / d * 10.0) / 10.0
+    }
+
+    /** 键盘弹起/收起时给 WebView 设底部边距（真实缩小视图，网页随之重排） */
+    private fun applyImeMargin(imeBottom: Int) {
+        val lp = webView.layoutParams as? android.widget.FrameLayout.LayoutParams ?: return
+        if (lp.bottomMargin == imeBottom) return
+        lp.bottomMargin = imeBottom
+        webView.layoutParams = lp
     }
 
     /** 量一遍重叠量，变了就推给网页（网页没起来时静默跳过，开机时会自己拉） */
