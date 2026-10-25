@@ -249,11 +249,7 @@
           '<input id="ai-base" class="input" value="' + esc(raw.baseUrl || QYA.DEFAULTS.baseUrl) + '" /></div>' +
         '<label class="check-row"><input type="checkbox" id="ai-think"' +
           (c.think ? ' checked' : '') + ' />' +
-          '<span>深度思考</span><b>对话换用推理模型，答得更细，更慢更贵</b></label>' +
-        '<div class="field" id="ai-reasonerrow" style="display:' + (c.think ? 'block' : 'none') + '">' +
-          '<label>推理模型</label>' +
-          '<input id="ai-reasoner" class="input" value="' +
-            esc(raw.reasonerModel || QYA.DEFAULTS.reasonerModel) + '" /></div>' +
+          '<span>深度思考</span><b>回复前先思考再答，更细但更慢更贵</b></label>' +
         '<label class="check-row"><input type="checkbox" id="ai-web"' +
           (c.webSearch ? ' checked' : '') + ' />' +
           '<span>联网搜索</span><b>回答前先搜网页，需搜索 Key</b></label>' +
@@ -269,16 +265,11 @@
           '<button class="btn primary" data-action="i-ai-save">保存</button>' +
         '</div>' +
       '</div>');
-    // 开关联动：联网搜索 → 搜索 Key 字段；深度思考 → 推理模型字段
+    // 开关联动：联网搜索 → 搜索 Key 字段
     const webBox = document.getElementById('ai-web');
     const searchRow = document.getElementById('ai-searchrow');
     if (webBox && searchRow) webBox.addEventListener('change', function () {
       searchRow.style.display = webBox.checked ? 'block' : 'none';
-    });
-    const thinkBox = document.getElementById('ai-think');
-    const reasonerRow = document.getElementById('ai-reasonerrow');
-    if (thinkBox && reasonerRow) thinkBox.addEventListener('change', function () {
-      reasonerRow.style.display = thinkBox.checked ? 'block' : 'none';
     });
   }
 
@@ -290,11 +281,9 @@
     const webBox = document.getElementById('ai-web');
     const searchKeyEl = document.getElementById('ai-searchkey');
     const thinkBox = document.getElementById('ai-think');
-    const reasonerEl = document.getElementById('ai-reasoner');
     QYA.update({
       key: key, model: model, baseUrl: baseUrl, enabled: enabled,
       think: !!(thinkBox && thinkBox.checked),
-      reasonerModel: reasonerEl && reasonerEl.value.trim() ? reasonerEl.value.trim() : QYA.DEFAULTS.reasonerModel,
       webSearch: !!(webBox && webBox.checked),
       searchKey: searchKeyEl ? (searchKeyEl.value || '').trim() : ''
     });

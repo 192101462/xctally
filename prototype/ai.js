@@ -16,10 +16,10 @@
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-flash',
     visionModel: '',            // 留空表示和 model 用同一个
-    // 深度思考：换用推理模型（答得更细、更慢更贵）。
-    // 视觉调用不走推理模型（识图本身够慢了）。
+    // 深度思考：不换模型，请求里带 thinking:{type:'enabled'} 即可
+    //（deepseek-flash 直接支持，deepseek-reasoner 已废弃）。
+    // 视觉调用不开思考（识图本身够慢了）。
     think: false,
-    reasonerModel: 'deepseek-reasoner',
     key: '',
     enabled: true,
     // 联网搜索：默认博查（bochaai.com，支持跨域、中文结果好）。
@@ -75,7 +75,6 @@
       model: c.model || DEFAULTS.model,
       visionModel: c.visionModel || c.model || DEFAULTS.model,
       think: c.think === true,
-      reasonerModel: c.reasonerModel || DEFAULTS.reasonerModel,
       key: c.key || '',
       enabled: c.enabled !== false,
       webSearch: c.webSearch === true,
@@ -205,14 +204,22 @@
 
     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, opts.timeout || 60000) : null;
-    // 深度思考开着时，纯文字对话换推理模型；识图仍用视觉模型。
-    // 推理模型普遍不吃 temperature（部分网关会直接 400），干脆不传。
+    // 深度思考（2026-10 起 DeepSeek 的方式）：不再换模型——deepseek-flash
+    // 直接用 thinking 参数开关（思考模式默认开启，要关必须显式 disabled），
+    // 思维链照旧从 reasoning_content 返回。思考模式不吃 temperature，干脆不传。
+    // 只对 DeepSeek 端点/模型传这个参数，第三方网关不认识会 400。
+    const isDeepSeek = /deepseek/i.test(c.baseUrl) || /^deepseek/.test(c.model) || /^deepseek/.test(c.visionModel);
     const useThink = c.think === true && !opts.vision && !opts.noThink;
     const payload = {
-      model: opts.vision ? c.visionModel : (useThink ? c.reasonerModel : c.model),
+      model: opts.vision ? c.visionModel : c.model,
       messages: messages,
       max_tokens: opts.maxTokens || 2000
     };
+    // 识图/快速调用也要显式关：思考模式是服务端默认开，不关会白等思维链
+    if (isDeepSeek) {
+      payload.thinking = { type: useThink ? 'enabled' : 'disabled' };
+      if (useThink) payload.reasoning_effort = 'high';
+    }
     if (!useThink) payload.temperature = opts.temperature == null ? 0 : opts.temperature;
 
     let res;
@@ -252,6 +259,10 @@
     const content = msg && msg.content;
     if (content == null) throw new Error('返回里没有内容');
     addUsage(data.usage);          // 记账：token 由接口原样给出
+    // 推理模型（深度思考）会把思考过程放在 reasoning_content：
+    // 通过 opts.out 引用带出去给调用方展示（不改变返回 string 的约定）
+    const reasoning = msg && msg.reasoning_content;
+    if (reasoning && opts.out) opts.out.reasoning = String(reasoning);
     return String(content);
   }
 

@@ -1913,6 +1913,41 @@ html.scrolling .ai-ball { transition: none; }
 }
 .ai-pic:active { background: var(--fill); }
 /* 待发送的图片预览 */
+/* 深度思考：等待提示条 + 气泡里的思考过程（默认收起） */
+.ai-thinking {
+  padding: 6px 14px;
+  font-size: 12.5px;
+  color: var(--purple);
+  animation: fade 0.2s ease;
+}
+.ai-think {
+  margin: 6px 0 2px;
+  border-radius: 12px;
+  background: var(--fill-2);
+  overflow: hidden;
+}
+.ai-think summary {
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--purple);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.ai-think summary::before { content: '▸ '; }
+.ai-think[open] summary::before { content: '▾ '; }
+.ai-think-body {
+  padding: 0 12px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--label-2);
+  white-space: pre-wrap;
+  max-height: 40vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--hairline);
+  padding-top: 8px;
+}
 .ai-attach {
   position: relative;
   align-self: flex-start;

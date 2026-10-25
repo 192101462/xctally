@@ -139,7 +139,10 @@ class MainActivity : AppCompatActivity() {
             deliverImage(id, null)
             return@registerForActivityResult
         }
-        val uri = fromCamera ?: result.data?.data
+        // 相册把 Uri 放在 data 里回传；拍照走 EXTRA_OUTPUT 写文件、data 为空。
+        // 注意顺序：相机意图是预建好放进系统选择器的，cameraUri 可能已设置
+        // 但用户实际选了相册——必须先取相册的 data，取不到才是拍照的产物。
+        val uri = result.data?.data ?: fromCamera
         if (uri == null) {
             deliverImage(id, null)
             return@registerForActivityResult
@@ -153,35 +156,50 @@ class MainActivity : AppCompatActivity() {
         deliverImage(id, dataUrl)
     }
 
+    /** 组装拍照意图：照片写到私有缓存（FileProvider 授权），并记下 cameraUri 供回传辨认 */
+    private fun buildCameraIntent(): Intent {
+        val dir = File(cacheDir, "camera").apply { mkdirs() }
+        val file = File(dir, "shot_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        cameraUri = uri
+        return Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+            putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+    }
+
     private fun launchCamera(id: String) {
         try {
-            val dir = File(cacheDir, "camera").apply { mkdirs() }
-            val file = File(dir, "shot_${System.currentTimeMillis()}.jpg")
-            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            cameraUri = uri
-            imageLauncher.launch(
-                Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
-                    putExtra(MediaStore.EXTRA_OUTPUT, uri)
-                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                }
-            )
+            imageLauncher.launch(buildCameraIntent())
         } catch (e: Exception) {
             pendingImageId = null
+            cameraUri = null
             deliverImage(id, null)
             toast("打不开相机：${e.message}")
         }
     }
 
+    /**
+     * 系统选图面板：图库为主，相机放在第一项（EXTRA_INITIAL_INTENTS）。
+     * 相册类 App 的通行做法——点一下直接弹系统面板，第一眼就是"拍照"，
+     * 往下才是图库/文件。拍摄由相机 App 完成且没在清单里声明 CAMERA 权限，
+     * 不需要运行时授权；卓易通/鸿蒙会自己弹"允许使用相机"的系统确认。
+     */
     private fun launchGallery(id: String) {
         try {
+            val camera = buildCameraIntent()
+            val gallery = Intent(Intent.ACTION_GET_CONTENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "image/*"
+            }
             imageLauncher.launch(
-                Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "image/*"
+                Intent.createChooser(gallery, "选择图片").apply {
+                    putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(camera))
                 }
             )
         } catch (e: Exception) {
             pendingImageId = null
+            cameraUri = null
             deliverImage(id, null)
             toast("打不开相册：${e.message}")
         }
@@ -666,19 +684,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         /**
-         * 选图片。source 是网页侧已经选好的来源（camera / gallery / 空），
-         * 网页用自己的底部面板问过用户了，这里不再弹安卓原生对话框——
-         * 那种原生弹窗和 App 的设计完全不搭。
+         * 选图片。source 显式为 "camera" 时直接调相机（网页端已没有来源面板），
+         * 其余（''/gallery）都走系统选图面板——相机排在第一项，往下是图库。
          */
         @JavascriptInterface
         fun pickImage(id: String, source: String) {
             runOnUiThread {
                 pendingImageId = id
-                when (source) {
-                    "camera" -> launchCamera(id)
-                    "gallery" -> launchGallery(id)
-                    else -> launchGallery(id)      // 没指定就默认相册
-                }
+                if (source == "camera") launchCamera(id)
+                else launchGallery(id)
             }
         }
 

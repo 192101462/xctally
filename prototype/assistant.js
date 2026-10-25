@@ -237,6 +237,11 @@
         esc(m.text) + '</div>';
     }
     let html = '<div class="ai-msg bot">' + esc(m.text) + '</div>';
+    // 深度思考的思考过程：默认收起，点开看全文
+    if (m.reasoning) {
+      html += '<details class="ai-think"><summary>✦ 思考过程</summary>' +
+        '<div class="ai-think-body">' + esc(m.reasoning) + '</div></details>';
+    }
     if (m.actions && m.actions.length) {
       const items = m.actions.map(function (a) { return '<li>' + esc(describe(a)) + '</li>'; }).join('');
       const done = m.applied === true;
@@ -275,11 +280,14 @@
     return '<div class="sheet ai-sheet"><div class="grabber"></div>' +
       '<div class="ai-head">' +
         '<div><h3>助手</h3><div class="ai-sub">' + esc(usageLine()) + '</div></div>' +
-        // 深度思考开关：换用推理模型（答得更细，也更慢更贵）
+        // 深度思考开关：同一个模型开启思考模式（答得更细，也更慢更贵）
         '<button type="button" class="chip think ' + (think ? 'active' : '') +
           '" data-ai="think" aria-label="深度思考">' + (think ? '✦ 深度思考' : '✧ 深度思考') + '</button>' +
       '</div>' +
       '<div class="ai-log" id="ai-log">' + body + '</div>' +
+      (busy && think
+        ? '<div class="ai-thinking">✦ 深度思考中，思考会花一些时间…</div>'
+        : '') +
       (pendingImage
         ? '<div class="ai-attach"><img src="' + pendingImage + '" alt="" />' +
           '<button class="ai-attach-x" data-ai="unpick" aria-label="移除图片">×</button></div>'
@@ -763,34 +771,15 @@
 
   /* ---------------- 发消息 ---------------- */
 
-  /* 选一张图（拍照/相册），压缩后挂在输入框上方等发送。
-   * 原生壳里先问来源（相机/相册）；浏览器没有原生选择器，直接走文件选择。 */
+  /* 选一张图，压缩后挂在输入框上方等发送。
+   * 原生壳里来源由系统选图面板提供（相机排在第一项），浏览器走文件选择。 */
   function pickImage() {
     if (!window.QYV || !QYV.pickImage) { UI().toast('图片功能不可用'); return; }
-    const go = function (source) {
-      QYV.pickImage(function (dataUrl) {
-        if (!dataUrl) return;
-        pendingImage = dataUrl;
-        rerenderChat();
-      }, { maxSide: 1280, quality: 0.8, source: source });
-    };
-    if (!window.QYPlatform || !QYPlatform.native) { go(''); return; }
-    UI().openSheet('<div class="sheet"><div class="grabber"></div>' +
-      '<h3>图片来源</h3>' +
-      '<div class="group">' +
-        '<div class="picker-opt" data-ai="pick-camera"><span>拍照</span><span class="chev">›</span></div>' +
-        '<div class="picker-opt" data-ai="pick-gallery"><span>从相册选择</span><span class="chev">›</span></div>' +
-      '</div></div>');
-  }
-
-  /* 来源选择面板的落地：按来源调起原生相机/相册 */
-  function pickImageWith(source) {
-    if (!window.QYV || !QYV.pickImage) return;
     QYV.pickImage(function (dataUrl) {
       if (!dataUrl) return;
       pendingImage = dataUrl;
       rerenderChat();
-    }, { maxSide: 1280, quality: 0.8, source: source });
+    }, { maxSide: 1280, quality: 0.8 });
   }
 
   async function send(text) {
@@ -799,6 +788,7 @@
     if ((!t && !img) || busy) return;
     busy = true;
     pending = null;
+    const meta = {};   // QYA.call 的 out 引用：深度思考时带回 reasoning_content
     msgs.push({ role: 'user', text: t || '(图片)', img: !!img, image: img });
     pendingImage = null;
     rerenderChat();
@@ -837,7 +827,7 @@
       return { role: m.role === 'user' ? 'user' : 'assistant', content: m.text || '' };
     });
 
-    QYA.call([sys].concat(history), { vision: !!img }).then(function (out) {
+    QYA.call([sys].concat(history), { vision: !!img, out: meta }).then(function (out) {
       let obj;
       try {
         obj = QYA.parseJson(out);
@@ -846,7 +836,11 @@
       }
       const actions = Array.isArray(obj.actions) ? obj.actions.slice(0, 10) : [];
       busy = false;
-      msgs.push({ role: 'assistant', text: obj.reply || '（没说话）', actions: actions });
+      msgs.push({
+        role: 'assistant', text: obj.reply || '（没说话）',
+        actions: actions,
+        reasoning: meta.reasoning || null      // 深度思考的思考过程（可能没有）
+      });
       rerenderChat();
     }).catch(function (err) {
       busy = false;
@@ -870,8 +864,6 @@
     if (act === 'close') { hideBall(); return; }
     if (act === 'hide') { UI().closeSheet(); hideBall(); return; }
     if (act === 'pick') { pickImage(); return; }
-    if (act === 'pick-camera') { UI().closeSheet(); pickImageWith('camera'); return; }
-    if (act === 'pick-gallery') { UI().closeSheet(); pickImageWith('gallery'); return; }
     if (act === 'unpick') { pendingImage = null; rerenderChat(); return; }
     if (act === 'think') {
       const c = window.QYA ? QYA.cfg() : {};
