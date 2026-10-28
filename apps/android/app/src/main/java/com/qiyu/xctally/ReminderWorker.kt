@@ -78,7 +78,7 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, param
 
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title.ifEmpty { "xctally 提醒" })
+            .setContentTitle(title.ifEmpty { "琪遇台账 提醒" })
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)

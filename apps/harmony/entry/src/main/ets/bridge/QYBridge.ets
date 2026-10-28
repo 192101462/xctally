@@ -55,6 +55,19 @@ export class QYBridge {
           if (cb) { cb.click(); } else { cf.remove(); }
           return 'handled';
         }
+        var dm = document.querySelector('.seg-dd-menu');
+        if (dm) { dm.remove(); return 'handled'; }
+        var zen = document.getElementById('zen-root');
+        if (zen) {
+          var zd = zen.querySelector('[data-action="c-zen-done"]');
+          if (zd) { zd.click(); return 'handled'; }
+          zen.remove(); return 'handled';
+        }
+        var fp = document.getElementById('fp-root');
+        if (fp && fp.classList.contains('open')) {
+          var fb = fp.querySelector('[data-action="fp-back"]');
+          if (fb) { fb.click(); return 'handled'; }
+        }
         var sheet = document.getElementById('sheet-root');
         if (sheet && sheet.classList.contains('open')) {
           var scrim = sheet.querySelector('.scrim');

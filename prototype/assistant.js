@@ -326,6 +326,16 @@
     return (UI().data().items || []).filter(function (i) { return i.id === id; })[0] || null;
   }
 
+  /* 提醒时间解析：收 9 / "9" / "9:30"，缺省 9:00 */
+  function parseRemindHM(v) {
+    if (typeof v === 'string' && v.indexOf(':') >= 0) {
+      const p = v.split(':');
+      return { h: Math.max(0, Math.min(23, parseInt(p[0], 10) || 0)),
+               m: Math.max(0, Math.min(59, parseInt(p[1], 10) || 0)) };
+    }
+    return { h: Math.max(0, Math.min(23, parseInt(v, 10) || 9)), m: 0 };
+  }
+
   /* 按名字找物品：精确 → 唯一包含；多个/零个都返回 null（宁可不做也别改错） */
   function findByName(name) {
     const n = String(name || '').trim();
@@ -428,6 +438,51 @@
       const n = countRecords(a);
       return '删除 ' + a.before + ' 之前的' + (a.scope === 'items' ? '物品（进回收站）' : '时间线记录（不可恢复）') +
         '，共 ' + n + ' 条' + (n ? '' : '（没有符合条件的）');
+    }
+    /* 回收站动作的匹配求解：ids 优先，否则按 filter（kind/query/latest）。
+     * 清单顺序 = 删除时间从新到旧（和【回收站】提示里一致）。 */
+    if (a.type === 'set_item_reminder') {
+      const it = a.id ? (UI().data().items.filter(function (x) { return x.id === a.id; })[0] || null) : findByName(a.name);
+      const nm = it ? it.name : (a.name || '未找到');
+      if (a.on === false) return '关闭「' + nm + '」的每日提醒';
+      const hm = parseRemindHM(a.hour);
+      return '开启「' + nm + '」每日提醒：' + hm.h + ':' + (hm.m < 10 ? '0' : '') + hm.m +
+        (a.alarm ? '（闹铃）' : '');
+    }
+    if (a.type === 'clear_item_reminders') {
+      if (a.all) return '清除全部每日提醒';
+      const it = a.id ? (UI().data().items.filter(function (x) { return x.id === a.id; })[0] || null) : findByName(a.name);
+      return '清除「' + (it ? it.name : (a.name || '未找到')) + '」的每日提醒';
+    }
+    if (a.type === 'trash_restore' || a.type === 'trash_purge') {
+      const d = UI().data();
+      let list = (d.trash || []).slice().sort(function (x, y) {
+        return x.deletedAt < y.deletedAt ? 1 : -1;
+      });
+      const f = a.filter || {};
+      if (Array.isArray(a.ids) && a.ids.length) {
+        const want = {};
+        a.ids.forEach(function (id) { want[id] = true; });
+        list = list.filter(function (t) { return want[t.id]; });
+      } else {
+        if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+        if (f.query) {
+          const q = String(f.query).toLowerCase();
+          list = list.filter(function (t) {
+            const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+            return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
+              .toLowerCase().indexOf(q) >= 0;
+          });
+        }
+        if (f.latest) list = list.slice(0, Math.max(1, Number(f.latest) || 1));
+      }
+      const verb = a.type === 'trash_restore' ? '从回收站恢复' : '从回收站彻底删除';
+      if (!list.length) return verb + '（没有匹配的条目）';
+      return verb + ' ' + list.length + ' 项：' +
+        list.slice(0, 5).map(function (t) {
+          const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+          return t.kind === 'collect' ? (it.title || '随笔') : (it.name || '物品');
+        }).join('、') + (list.length > 5 ? ' 等' : '');
     }
     if (a.type === 'restore_item') {
       const t = (UI().data().trash || []).filter(function (x) {
@@ -595,6 +650,107 @@
         (t[0].events || []).forEach(function (e) { d.events.push(e); });
         d.trash = d.trash.filter(function (x) { return x.id !== t[0].id; });
         UI().toast('已恢复「' + t[0].item.name + '」');
+        applied++;
+        return;
+      }
+      if (a.type === 'set_item_reminder') {
+        const it = a.id ? (d.items.filter(function (x) { return x.id === a.id; })[0] || null)
+          : findByName(a.name);
+        if (!it) { dropped++; return; }
+        if (a.on === false) {
+          delete it.reminder;
+          UI().toast('已关闭「' + it.name + '」的每日提醒');
+        } else {
+          const hm = parseRemindHM(a.hour);
+          it.reminder = { on: true, hour: hm.h, minute: hm.m, alarm: a.alarm === true };
+          UI().toast('已开启每日提醒：' + hm.h + ':' + (hm.m < 10 ? '0' : '') + hm.m + '「' + it.name + '」' + (it.reminder.alarm ? '（闹铃）' : ''));
+        }
+        if (window.QYI && QYI.pushReminders) QYI.pushReminders();
+        applied++;
+        return;
+      }
+      if (a.type === 'clear_item_reminders') {
+        if (a.all) {
+          let n = 0;
+          d.items.forEach(function (it) { if (it.reminder) { delete it.reminder; n++; } });
+          UI().toast(n ? '已清除 ' + n + ' 条每日提醒' : '本来就没有每日提醒');
+        } else {
+          const it = a.id ? (d.items.filter(function (x) { return x.id === a.id; })[0] || null)
+          : findByName(a.name);
+          if (!it || !it.reminder) { dropped++; return; }
+          delete it.reminder;
+          UI().toast('已清除「' + it.name + '」的每日提醒');
+        }
+        if (window.QYI && QYI.pushReminders) QYI.pushReminders();
+        applied++;
+        return;
+      }
+      if (a.type === 'trash_restore') {
+        // 与 describe 同一套匹配：ids 优先，否则 filter(kind/query/latest)
+        let list = (d.trash || []).slice().sort(function (x, y) {
+          return x.deletedAt < y.deletedAt ? 1 : -1;
+        });
+        const f = a.filter || {};
+        if (Array.isArray(a.ids) && a.ids.length) {
+          const want = {};
+          a.ids.forEach(function (id) { want[id] = true; });
+          list = list.filter(function (t) { return want[t.id]; });
+        } else {
+          if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+          if (f.query) {
+            const q = String(f.query).toLowerCase();
+            list = list.filter(function (t) {
+              const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+              return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
+                .toLowerCase().indexOf(q) >= 0;
+            });
+          }
+          if (f.latest) list = list.slice(0, Math.max(1, Number(f.latest) || 1));
+        }
+        if (!list.length) { dropped++; return; }
+        let n = 0;
+        const gone = {};
+        list.forEach(function (t) {
+          gone[t.id] = true;
+          if (t.kind === 'collect') {
+            if (window.QYV && QYV.restoreEntry && QYV.restoreEntry(t.entry)) n++;
+          } else {
+            d.items.push(t.item);
+            (t.events || []).forEach(function (ev) { d.events.push(ev); });
+            n++;
+          }
+        });
+        d.trash = d.trash.filter(function (x) { return !gone[x.id]; });
+        UI().toast('已从回收站恢复 ' + n + ' 项');
+        applied++;
+        return;
+      }
+      if (a.type === 'trash_purge') {
+        // 危险动作：执行前已被红色二确拦过（dangerTypes 里登记）
+        let list = (d.trash || []).slice();
+        const f = a.filter || {};
+        if (Array.isArray(a.ids) && a.ids.length) {
+          const want = {};
+          a.ids.forEach(function (id) { want[id] = true; });
+          list = list.filter(function (t) { return want[t.id]; });
+        } else {
+          list.sort(function (x, y) { return x.deletedAt < y.deletedAt ? 1 : -1; });
+          if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+          if (f.query) {
+            const q = String(f.query).toLowerCase();
+            list = list.filter(function (t) {
+              const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+              return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
+                .toLowerCase().indexOf(q) >= 0;
+            });
+          }
+          if (f.latest) list = list.slice(0, Math.max(1, Number(f.latest) || 1));
+        }
+        if (!list.length) { dropped++; return; }
+        const gone = {};
+        list.forEach(function (t) { gone[t.id] = true; });
+        d.trash = d.trash.filter(function (x) { return !gone[x.id]; });
+        UI().toast('已彻底删除 ' + list.length + ' 项');
         applied++;
         return;
       }
@@ -891,7 +1047,7 @@
       };
       // 不可逆/大批量动作：执行按钮算第一确，这里再弹一道红色确认（二确）。
       // clear_data 不在列——它自带三步确认。
-      const dangerTypes = ['delete_records', 'empty_trash'];
+      const dangerTypes = ['delete_records', 'empty_trash', 'trash_purge'];
       const danger = last.actions.filter(function (a) {
         if (dangerTypes.indexOf(a.type) < 0) return false;
         if (a.type === 'delete_records') return /^\d{4}-\d{2}-\d{2}$/.test(a.before || '');

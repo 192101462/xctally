@@ -418,9 +418,20 @@
         '<div class="tl-sub">' + QY.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div></div>';
     }).join('');
 
+    const navIco = function (act, icon, label) {
+      return '<button type="button" class="nav-ico" data-action="' + act + '" data-id="' + item.id +
+        '" title="' + label + '" aria-label="' + label + '">' +
+        (window.QYIcon ? QYIcon.svg(icon, 19) : label) + '</button>';
+    };
     return '' +
       '<div class="navbar"><button class="back" data-action="i-back">‹ ' +
-        esc(UI().detailBackLabel ? UI().detailBackLabel() : '物品') + '</button></div>' +
+        esc(UI().detailBackLabel ? UI().detailBackLabel() : '物品') + '</button>' +
+        '<span class="nav-acts">' +
+          navIco('i-edit', 'pencil', '编辑') +
+          navIco('i-tl', 'timeline', '时间线') +
+          '<button type="button" class="nav-more" data-action="i-menu" data-id="' + item.id +
+            '" aria-label="更多操作">' + (window.QYIcon ? QYIcon.svg('more', 20) : '···') + '</button>' +
+        '</span></div>' +
       hero +
       '<div style="padding:18px 4px 0">' +
         '<h1 style="margin:0;font-size:25px;font-weight:700;letter-spacing:-0.025em">' + esc(item.name) +
@@ -435,15 +446,209 @@
           (extra > 0 ? '含维修/更换 ' + QY.fmtMoney(extra) + ' · ' : '') + '用得越久，每天越便宜</div>' : '') +
       '</div>' +
       '<div class="section"><div class="section-head"><h2>详情</h2></div><div class="group">' + rows + '</div></div>' +
-      '<div class="section"><div class="section-head"><h2>时间线</h2>' +
-        '<span class="sec-tools"><span>' + events.length + ' 条 · 长按可改</span>' +
-          '<button class="btn mini" data-action="i-ev-add" data-id="' + item.id + '">＋ 记一笔</button></span></div>' +
-        '<div class="group timeline">' + (timeline ||
-          '<div class="empty" style="padding:22px 14px"><p>还没有记录</p></div>') + '</div></div>' +
-      '<div class="section"><div class="sheet-actions" style="flex-wrap:wrap">' +
-        '<button class="btn primary" data-action="i-edit" data-id="' + item.id + '">编辑</button>' +
-        '<button class="btn plain" data-action="i-del" data-id="' + item.id + '" style="color:var(--red)">删除</button>' +
-      '</div></div>';
+      '<div style="height:26px"></div>';
+  }
+
+  /* 时间线按钮 → 独立面板：事件列表 + 记一笔（长按修改沿用原手势） */
+  function openTimeline(item) {
+    const events = QY.eventsOf(data(), item.id);
+    const rows = events.map(function (e) {
+      const t = QY.EVENT_TYPES[e.type] || { label: e.type, emoji: '•' };
+      return '<div class="tl-item" data-ev-id="' + e.id + '" data-id="' + item.id + '">' +
+        '<div class="tl-dot">' + (window.QYIcon ? QYIcon.forEvent(e.type, 15) : t.emoji) + '</div>' +
+        '<div class="tl-body"><div class="tl-title">' + t.label +
+          (e.amount ? ' <span class="amount">' + QY.fmtMoney(e.amount) + '</span>' : '') + '</div>' +
+        '<div class="tl-sub">' + QY.fmtDate(e.at) + (e.note ? ' · ' + esc(e.note) : '') + '</div></div></div>';
+    }).join('');
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>' + esc(item.name) + ' · 时间线</h3>' +
+        '<p class="hint">长按可修改</p>' +
+        '<div class="group timeline">' + (rows ||
+          '<div class="empty" style="padding:22px 14px"><p>还没有记录</p></div>') + '</div>' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn primary" data-action="i-ev-add" data-id="' + item.id + '">＋ 记一笔</button>' +
+          '<button class="btn plain" data-action="i-close">关闭</button></div>' +
+      '</div>');
+  }
+
+  /* ── 每日提醒：item.reminder = { hour, alarm }（没有 = 关） ──
+   * 用途是"每天吃药 / 喝牛奶"这类打卡提醒；排程交给原生壳的
+   * ItemReminderWorker（网页侧只负责收集清单推过去）。 */
+  function pushItemReminders() {
+    if (!window.QYPlatform || !QYPlatform.scheduleItemReminders) return;
+    const list = data().items.filter(function (it) {
+      return it.reminder && it.reminder.on !== false;
+    }).map(function (it) {
+      return {
+        id: it.id, name: it.name,
+        hour: it.reminder.hour || 9,
+        minute: it.reminder.minute || 0,
+        alarm: it.reminder.alarm === true
+      };
+    });
+    try { QYPlatform.scheduleItemReminders(JSON.stringify(list)); } catch (err) { /* 壳不支持就跳过 */ }
+  }
+
+  function openReminderSheet(item) {
+    const r = item.reminder || { hour: 9, minute: 0, alarm: false };
+    const QUICK = ['10:00', '12:00', '16:00', '18:00', '20:00'];
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>每日提醒</h3>' +
+        '<p class="hint">每天 ' + (r.hour == null ? 9 : r.hour) + ':' + ((r.minute || 0) < 10 ? '0' : '') + (r.minute || 0) + ' 提醒「' + esc(item.name) + '」</p>' +
+        '<div class="fsec">提醒时间</div>' +
+        '<div class="fcard">' +
+          '<div class="frow">' +
+            '<span class="fl">时间</span>' +
+            '<input id="r-hour" class="input finput" type="number" min="0" max="23" step="1" inputmode="numeric" ' +
+              'style="flex:none;width:64px;text-align:center" value="' + (r.hour == null ? 9 : r.hour) + '" />' +
+            '<span style="flex:none;color:var(--label-3);font-weight:600">:</span>' +
+            '<input id="r-minute" class="input finput" type="number" min="0" max="59" step="1" inputmode="numeric" ' +
+              'style="flex:none;width:64px;text-align:center" value="' + pad2(r.minute || 0) + '" />' +
+            '<span style="flex:1"></span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="chip-row" style="margin-top:8px" id="r-quick"></div>' +
+        '<label class="frow wide" style="margin-top:14px;background:var(--card);border-radius:var(--r-lg)">' +
+          '<span class="fl">闹铃</span>' +
+          '<span class="fsw"><input type="checkbox" id="r-alarm"' + (r.alarm ? ' checked' : '') + ' /><i></i></span>' +
+        '</label>' +
+        '<div class="sheet-actions" style="margin-top:16px">' +
+          (item.reminder
+            ? '<button class="btn plain" data-action="i-remind-off" data-id="' + item.id + '" style="color:var(--red)">关闭提醒</button>' +
+              '<button class="btn primary" data-action="i-remind-save" data-id="' + item.id + '">保存</button>'
+            : '<button class="btn primary" data-action="i-remind-save" data-id="' + item.id + '">开启提醒</button>') +
+        '</div>' +
+      '</div>');
+    const box = document.getElementById('r-quick');
+    if (box) box.innerHTML = QUICK.map(function (q) {
+      return '<button type="button" class="chip small" data-action="i-remind-quick" data-v="' + q + '">' + q + '</button>';
+    }).join('');
+  }
+
+  /* ── ··· 菜单：生成长图 / 提醒我（带开启态）/ 删除 ── */
+  function openItemMenu(item) {
+    const exist = document.querySelector('.navbar .seg-dd-menu');
+    if (exist) { exist.remove(); return true; }
+    const ic = function (n) { return window.QYIcon ? QYIcon.svg(n, 16) : ''; };
+    const r = item.reminder;
+    const menu = document.createElement('div');
+    menu.className = 'seg-dd-menu act-menu';
+    menu.innerHTML =
+      '<button data-action="i-long" data-id="' + item.id + '">' + ic('image') + '生成长图</button>' +
+      '<button data-action="i-remind" data-id="' + item.id + '"' + (r ? ' class="on"' : '') + '>' +
+        ic('bell') + (r ? '每天 ' + (r.hour || 9) + ':' + pad2(r.minute || 0) + ' 提醒中 ✓' : '提醒我（每天）') + '</button>' +
+      '<button data-action="i-del" data-id="' + item.id + '" class="danger">' + ic('trash') + '删除</button>';
+    const nav = document.querySelector('.navbar');
+    if (nav) nav.appendChild(menu);
+    menu.addEventListener('click', function (ev) {
+      if (ev.target.closest && ev.target.closest('[data-action]')) menu.remove();
+    });
+  }
+
+  /* ── 物品长图：把详情渲染成一张竖图（标题 / 指标 / 详情 / 时间线） ── */
+  const ILW = 1080, ILPAD = 56, ILFONT = '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+  function makeItemLongImage(item) {
+    const d = data();
+    const events = QY.eventsOf(d, item.id);
+    const rows = [];
+    const kv = function (k, v) { rows.push([k, v]); };
+    kv('分类', item.category + (item.sub ? ' · ' + item.sub : ''));
+    if (item.acquiredAt) kv('获得', QY.fmtCN(item.acquiredAt));
+    if (item.location) kv('位置', item.location);
+    if (item.status) kv('状态', item.status);
+    if (item.openedAt) kv('开封', QY.fmtCN(item.openedAt));
+    if (item.expiresAt) kv('到期', QY.fmtCN(item.expiresAt));
+    if (item.note) kv('备注', item.note);
+
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    cv.width = ILW;
+    const LH = 44, PAD2 = 18;
+    let h = ILPAD * 2 + 96 + 70 + rows.length * (LH + PAD2 - 8) + 60 + events.length * 96 + 40;
+    h = Math.max(h, 800);
+    cv.height = h;
+    ctx.fillStyle = '#f2f2f7';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+
+    const card = function (y, hh) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      const r2 = 28;
+      ctx.moveTo(ILPAD + r2, y);
+      ctx.arcTo(ILPAD + ILW - ILPAD * 2, y, ILPAD + ILW - ILPAD * 2, y + hh, r2);
+      ctx.arcTo(ILPAD + ILW - ILPAD * 2, y + hh, ILPAD, y + hh, r2);
+      ctx.arcTo(ILPAD, y + hh, ILPAD, y, r2);
+      ctx.arcTo(ILPAD, y, ILPAD + ILW - ILPAD * 2, y, r2);
+      ctx.fill();
+    };
+
+    let y = ILPAD;
+    ctx.fillStyle = '#1c1c1e';
+    ctx.font = '700 52px ' + ILFONT;
+    ctx.fillText(item.name, ILPAD + 8, y + 56);
+    y += 96;
+    ctx.fillStyle = 'rgba(60,60,67,.62)';
+    ctx.font = '400 30px ' + ILFONT;
+    ctx.fillText('琪遇台账 · ' + QY.fmtDate(QY.iso(QY.today())), ILPAD + 8, y);
+    y += 70;
+
+    const infoH = rows.length * (LH + PAD2 - 8) + 40;
+    card(y, infoH);
+    let yy = y + 20;
+    rows.forEach(function (rw) {
+      ctx.fillStyle = 'rgba(60,60,67,.62)';
+      ctx.font = '500 28px ' + ILFONT;
+      ctx.fillText(rw[0], ILPAD + 32, yy + 34);
+      ctx.fillStyle = '#1c1c1e';
+      ctx.font = '600 32px ' + ILFONT;
+      ctx.fillText(String(rw[1]).slice(0, 18), ILPAD + 200, yy + 34);
+      yy += LH + PAD2 - 8;
+    });
+    y += infoH + 30;
+
+    const tlH = Math.max(120, events.length * 96 + 50);
+    card(y, tlH);
+    ctx.fillStyle = '#1c1c1e';
+    ctx.font = '700 34px ' + ILFONT;
+    ctx.fillText('时间线（' + events.length + ' 条）', ILPAD + 32, y + 52);
+    let ty = y + 96;
+    events.slice(0, 12).forEach(function (e) {
+      const t = QY.EVENT_TYPES[e.type] || { label: e.type };
+      ctx.fillStyle = '#007aff';
+      ctx.beginPath();
+      ctx.arc(ILPAD + 44, ty + 16, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1c1c1e';
+      ctx.font = '600 30px ' + ILFONT;
+      ctx.fillText(t.label + (e.amount ? ' · ¥' + e.amount : ''), ILPAD + 76, ty + 26);
+      ctx.fillStyle = 'rgba(60,60,67,.62)';
+      ctx.font = '400 26px ' + ILFONT;
+      ctx.fillText(QY.fmtCN(e.at) + (e.note ? ' · ' + e.note : ''), ILPAD + 76, ty + 62);
+      ty += 96;
+    });
+    if (!events.length) {
+      ctx.fillStyle = 'rgba(60,60,67,.4)';
+      ctx.font = '400 28px ' + ILFONT;
+      ctx.fillText('还没有记录', ILPAD + 32, y + 110);
+    }
+
+    // 和收藏的长图同一套交互：先预览，再点"保存图片"下载
+    const url = cv.toDataURL('image/png');
+    const name = 'xctally-' + String(item.name).replace(/[^\w\u4e00-\u9fa5]+/g, '') + '.png';
+    UI().openSheet('' +
+      '<div class="sheet">' +
+        '<div class="grabber"></div>' +
+        '<h3>长图已生成</h3>' +
+        '<p class="hint">1080 × ' + cv.height + ' · ' + esc(item.name) + ' 的详情与时间线</p>' +
+        '<div style="border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-card);max-height:46vh;overflow-y:auto">' +
+          '<img src="' + url + '" style="width:100%;display:block" /></div>' +
+        '<div class="sheet-actions">' +
+          '<button class="btn plain" data-action="i-close">关闭</button>' +
+          '<a class="btn primary" href="' + url + '" download="' + name + '" style="text-align:center;text-decoration:none;line-height:1.4">保存图片</a>' +
+        '</div>' +
+      '</div>');
   }
 
   /* ---------------- 通用选择器（替代原生 select） ----------------
@@ -491,8 +696,11 @@
   function applyPick(key, value) {
     const input = document.getElementById('f-' + key);
     const label = document.getElementById('pf-' + key);
-    if (input) input.value = value;
-    if (label) label.textContent = value;
+    if (input) { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (label) {
+      label.textContent = value;
+      label.classList.remove('empty');   // 从"未选择"占位恢复成正常值样式
+    }
     // 分类变了：默认的"计入日均成本"跟着走；当前状态若不在新分类的词表里，换成第一个
     if (key === 'category') {
       if (!formCostTouched) {
@@ -522,6 +730,28 @@
       '<input type="hidden" id="f-' + key + '" value="' + esc(value == null ? '' : value) + '" /></div>';
   }
 
+  /* 新版表单的行结构（fsheet）：左标签右控件，见 styles.css .fsheet 一节。
+   * 一并维护旧的 pickerField：别的表单（OCR 等）还在用。 */
+  function frowText(id, label, val, ph, attrs) {
+    return '<div class="frow"><span class="fl">' + label + '</span>' +
+      '<input id="' + id + '" class="input finput" placeholder="' + esc(ph || '') + '" value="' +
+        esc(val == null ? '' : val) + '" autocomplete="off"' + (attrs || '') + ' /></div>';
+  }
+  function frowPicker(key, title, value, ph) {
+    const has = value != null && value !== '';
+    return '<div class="frow"><span class="fl">' + esc(title) + '</span>' +
+      '<button type="button" class="fpick" data-action="i-pick-open" data-k="' + key + '" data-title="' + esc(title) + '">' +
+        '<span class="fpick-v' + (has ? '' : ' empty') + '" id="pf-' + key + '">' + esc(has ? value : (ph || '未选择')) + '</span>' +
+        '<span class="chev">›</span>' +
+      '</button>' +
+      '<input type="hidden" id="f-' + key + '" value="' + esc(has ? value : '') + '" /></div>';
+  }
+  function frowDate(id, label, value) {
+    return '<div class="frow"><span class="fl">' + label + '</span>' +
+      '<input id="' + id + '" class="input finput fdate" type="date" readonly data-action="i-date"' +
+        ' data-target="' + id + '" value="' + (value || '') + '" /></div>';
+  }
+
   function formHTML(item) {
     const d = data();
     editingId = item ? item.id : null;
@@ -539,83 +769,72 @@
       : QY.catOf(e.category, d).costTrack !== false;
 
     return '' +
-      '<div class="sheet">' +
-        '<div class="grabber"></div>' +
-        '<h3>' + (item ? '编辑物品' : '新增物品') + '</h3>' +
-
-        '<div class="field"><label>名称</label>' +
-          '<input id="f-name" class="input" placeholder="例如：发卡" value="' + esc(e.name) + '" autocomplete="off" /></div>' +
-
-        pickerField('category', '分类', e.category) +
-
-        '<div class="field-row">' +
-          '<div class="field"><label>价格</label>' +
-            '<input id="f-cost" class="input" type="number" step="0.01" placeholder="9.90" value="' +
-              (e.cost != null ? e.cost : '') + '" /></div>' +
-          '<div class="field"><label>数量</label>' +
-            '<input id="f-qty" class="input" type="number" step="1" value="' + (e.qty || 1) + '" /></div>' +
+      '<div class="fsec">基本</div>' +
+        '<div class="fcard">' +
+          frowText('f-name', '名称', e.name, '例如：发卡') +
+          frowPicker('category', '分类', e.category) +
+          frowDate('f-date', '获得日期', e.acquiredAt) +
         '</div>' +
 
-        '<div class="field"><label>获得日期</label>' +
-          '<input id="f-date" class="input" type="date" readonly data-action="i-date"' +
-            ' data-target="f-date" value="' + e.acquiredAt + '" /></div>' +
+        '<div class="fsec">金额与数量</div>' +
+        '<div class="fcard">' +
+          '<div class="frow"><span class="fl">价格</span><span class="fpre">¥</span>' +
+            '<input id="f-cost" class="input finput" type="number" step="0.01" inputmode="decimal" placeholder="0.00" value="' +
+              (e.cost != null ? e.cost : '') + '" /></div>' +
+          '<div class="frow"><span class="fl">数量</span>' +
+            '<input id="f-qty" class="input finput" type="number" step="1" inputmode="numeric" value="' + (e.qty || 1) + '" />' +
+            '<button type="button" class="fpick unit" data-action="i-pick-open" data-k="unit" data-title="单位">' +
+              '<span class="fpick-v" id="pf-unit">' + esc(e.unit || '个') + '</span><span class="chev">›</span>' +
+            '</button>' +
+            '<input type="hidden" id="f-unit" value="' + esc(e.unit || '个') + '" /></div>' +
+          '<label class="frow wide"><span class="fl">计入日均成本</span>' +
+            '<span class="fsw"><input type="checkbox" id="f-costtrack"' + (costOn ? ' checked' : '') + ' /><i></i></span>' +
+          '</label>' +
+        '</div>' +
 
-        '<label class="check-row"><input type="checkbox" id="f-costtrack"' + (costOn ? ' checked' : '') + ' />' +
-          '<span>计入日均成本</span><b></b></label>' +
-
-        '<div class="field"><label>图片（可选，支持动图）</label>' +
-          '<div class="photo-row">' +
-            '<div class="photo-wrap' + (formPhoto ? ' has-img' : '') + '" id="f-photo-wrap">' +
-              '<div class="photo-thumb' + (formPhoto ? '' : ' empty') + '" id="f-photo"' +
-                ' data-action="i-photo"' +
-                (formPhoto ? ' style="background-image:url(' + formPhoto + ')"' : '') + '>' +
-                (formPhoto ? '' : '＋') + '</div>' +
-              '<button type="button" class="photo-del" data-action="i-photo-clear"' +
-                ' aria-label="删除图片">×</button>' +
-            '</div>' +
-          '</div></div>' +
-
-        '<button class="more-toggle" data-action="i-more">更多选项 ＋</button>' +
-        '<div class="more" id="i-more">' +
-          '<div class="field-row">' +
-            pickerField('source', '来源', e.source) +
-            pickerField('unit', '单位', e.unit) +
+        '<div class="fsec">图片<small>支持动图</small></div>' +
+        '<div class="fcard"><div class="fphoto">' +
+          '<div class="photo-wrap' + (formPhoto ? ' has-img' : '') + '" id="f-photo-wrap">' +
+            '<div class="photo-thumb' + (formPhoto ? '' : ' empty') + '" id="f-photo" data-action="i-photo"' +
+              (formPhoto ? ' style="background-image:url(' + formPhoto + ')"' : '') + '>' +
+              (formPhoto ? '' : (window.QYIcon ? QYIcon.svg('photoadd', 26) : '＋')) + '</div>' +
+            '<button type="button" class="photo-del" data-action="i-photo-clear" aria-label="删除图片">×</button>' +
           '</div>' +
-          pickerField('status', '状态', e.status) +
-          '<div class="field"><label>二级分类</label>' +
-            '<input id="f-sub" class="input" placeholder="装饰 / 生鲜 / 家电…" value="' + esc(e.sub || '') + '" /></div>' +
-          '<div class="field-row">' +
-            '<div class="field"><label>开封日期（可留空）</label>' +
-              '<input id="f-opened" class="input" type="date" readonly data-action="i-date"' +
-                ' data-target="f-opened" value="' + (e.openedAt || '') + '" /></div>' +
-            '<div class="field"><label>保修至（可留空）</label>' +
-              '<input id="f-warranty" class="input" type="date" readonly data-action="i-date"' +
-                ' data-target="f-warranty" value="' + (e.warrantyUntil || '') + '" /></div>' +
+          '<div class="fphoto-info"><b>' + (formPhoto ? '更换图片' : '添加图片') + '</b></div>' +
+        '</div></div>' +
+
+        '<div class="fmore-wrap">' +
+        '<button type="button" class="fmore-btn" data-action="i-more" id="i-more-btn">' +
+          '<span>更多选项</span><span class="chev">›</span>' +
+        '</button>' +
+        '<div class="fmore-body" id="i-more">' +
+          '<div class="fcard">' +
+            frowPicker('source', '来源', e.source) +
+            frowPicker('status', '状态', e.status) +
+            frowText('f-sub', '二级分类', e.sub, '装饰 / 生鲜 / 家电…') +
+            frowDate('f-opened', '开封日期', e.openedAt) +
+            frowDate('f-warranty', '保修至', e.warrantyUntil) +
+            frowDate('f-exp', '到期日', e.expiresAt) +
+            frowText('f-loc', '存放位置', e.location, '卧室抽屉') +
+            frowText('f-note', '备注', e.note, '补充说明…') +
           '</div>' +
-          '<div class="field"><label>到期日（可留空）</label>' +
-            '<input id="f-exp" class="input" type="date" readonly data-action="i-date"' +
-              ' data-target="f-exp" value="' + (e.expiresAt || '') + '" /></div>' +
-          '<div class="field"><label>存放位置</label>' +
-            '<input id="f-loc" class="input" placeholder="卧室抽屉" value="' + esc(e.location || '') + '" /></div>' +
-          '<div class="field"><label>备注</label>' +
-            '<input id="f-note" class="input" value="' + esc(e.note || '') + '" /></div>' +
+        '</div>' +
         '</div>' +
 
         '<div class="sheet-actions">' +
-          '<button class="btn plain" data-action="i-close">取消</button>' +
           '<button class="btn primary" data-action="i-save">' + (item ? '保存' : '添加') + '</button>' +
-        '</div>' +
-      '</div>';
+        '</div>';
   }
 
   function openForm(item) {
-    UI().openSheet(formHTML(item || null));
+    // 全屏编辑页（外壳和返回确认由 openFullpage 提供）
+    UI().openFullpage(item ? '编辑物品' : '新增物品', formHTML(item || null), { edit: !!item });
     if (item) {
       // 编辑时默认展开"更多"，让用户看到全部字段
       const more = document.getElementById('i-more');
-      const btn = document.querySelector('[data-action="i-more"]');
-      if (more) { more.classList.add('open'); }
-      if (btn) btn.innerHTML = '收起选项 ＋';
+      const btn = document.getElementById('i-more-btn');
+      if (more) more.classList.add('open');
+      if (btn) btn.classList.add('open');
     }
   }
 
@@ -623,6 +842,8 @@
     const box = document.getElementById('f-photo');
     const wrap = document.getElementById('f-photo-wrap');
     if (wrap) wrap.classList.toggle('has-img', !!formPhoto);
+    // 图片增删是程序改值，派发 input 让全屏编辑页标脏
+    if (wrap) wrap.dispatchEvent(new Event('input', { bubbles: true }));
     if (!box) return;
     if (formPhoto) {
       box.classList.remove('empty');
@@ -631,7 +852,7 @@
     } else {
       box.classList.add('empty');
       box.style.backgroundImage = '';
-      box.textContent = '＋';
+      box.innerHTML = window.QYIcon ? QYIcon.svg('photoadd', 26) : '＋';
     }
   }
 
@@ -1012,7 +1233,10 @@
       // 显示要用 'flex'，不能用 ''：CSS 默认 display:none，
       // 清空内联样式会回落成隐藏，按钮就永远出不来了
       more.style.display = 'flex';
-      hideFrom = fits(wrap.clientWidth - more.offsetWidth - gap);
+      // wrap 是 flex:1，⋯ 亮出来的瞬间它已经被挤窄了——
+      // 直接用新的 clientWidth，不能再手动减 ⋯ 的宽度（等于双重扣位，
+      // 会白白收起一个本放得下的分类，行尾留出一个空位）
+      hideFrom = fits(wrap.clientWidth);
       for (let i = hideFrom; i < chips.length; i++) chips[i].style.display = 'none';
       hiddenCats = chips.slice(hideFrom).map(function (c) { return c.getAttribute('data-cat'); });
     }
@@ -1033,7 +1257,7 @@
   document.addEventListener('click', function (e) {
     const menu = document.querySelector('.seg-dd-menu');
     if (!menu) return;
-    if (e.target.closest && e.target.closest('.seg-dd-menu, .seg-dd, .cat-more')) return;
+    if (e.target.closest && e.target.closest('.seg-dd-menu, .seg-dd, .cat-more, .nav-more')) return;
     menu.remove();
   }, true);
 
@@ -1288,83 +1512,193 @@
     });
   }
 
-  function openTrash() {
+  /* 回收站视图状态：分段 + 搜索 + 勾选（重渲染时保留） */
+  let trashView = { tab: 'all', query: '', sel: {} };
+
+  function trashEntries() {
     const d = data();
-    const list = (d.trash || []).slice().sort(function (a, b) {
+    return (d.trash || []).slice().sort(function (a, b) {
       return a.deletedAt < b.deletedAt ? 1 : -1;
     });
-    const rows = list.length ? list.map(function (t) {
-      const left = QY.trashDaysLeft(t);
-      const it = t.item || {};
-      return '<div class="row static">' +
-        thumb(it, true) +
-        '<div class="row-main">' +
-          '<div class="row-title">' + esc(it.name || '（无名称）') + '</div>' +
-          '<div class="row-sub">' + esc(it.category || '') + ' · ' + QY.fmtDate(it.acquiredAt) +
-            ' 获得 · 还有 ' + left + ' 天</div>' +
-        '</div>' +
-        '<div class="row-side" style="display:flex;gap:6px">' +
-          '<button class="btn plain" data-action="i-restore" data-id="' + t.id + '" ' +
-            'style="padding:8px 12px;font-size:13px">恢复</button>' +
-          '<button class="btn plain" data-action="i-purge" data-id="' + t.id + '" ' +
-            'style="padding:8px 12px;font-size:13px;color:var(--red)">彻底删除</button>' +
-        '</div></div>';
-    }).join('') : '<div class="empty"><div class="emoji">🗑</div><p>回收站是空的</p></div>';
-
-    UI().openSheet('' +
-      '<div class="sheet"><div class="grabber"></div>' +
-        '<h3>回收站</h3>' +
-        '<p class="hint">删除的物品会在这里保留 ' + QY.TRASH_DAYS + ' 天，过期自动清理</p>' +
-        '<div class="group">' + rows + '</div>' +
-        (list.length ? '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-empty" style="color:var(--red)">清空回收站</button>' +
-          '<button class="btn primary" data-action="i-close">完成</button></div>'
-        : '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-close">关闭</button></div>') +
-      '</div>');
   }
 
-  function restoreTrash(trashId) {
+  function trashMatches(t) {
+    if (trashView.tab !== 'all' && (t.kind || 'item') !== trashView.tab) return false;
+    const q = trashView.query.trim().toLowerCase();
+    if (!q) return true;
+    const it = t.kind === 'collect' ? t.entry : t.item;
+    const hay = [(it && it.name) || '', (it && it.title) || '', (it && it.category) || '', (it && it.cat) || '']
+      .join(' ').toLowerCase();
+    return hay.indexOf(q) >= 0;
+  }
+
+  function openTrash() {
+    trashView.sel = {};
+    UI().openSheet('' +
+      '<div class="sheet trash-sheet"><div class="grabber"></div>' +
+        '<h3>回收站</h3>' +
+        '<p class="hint">保留 ' + QY.TRASH_DAYS + ' 天，过期自动清理</p>' +
+        '<div class="trash-search"><input id="t-query" class="input" placeholder="搜索" autocomplete="off" /></div>' +
+        '<div class="segmented" id="trash-seg"></div>' +
+        '<div id="trash-list"></div>' +
+        '<div id="trash-foot"></div>' +
+      '</div>');
+    const q = document.getElementById('t-query');
+    if (q) q.addEventListener('input', function () {
+      trashView.query = q.value;
+      renderTrashParts();
+    });
+    renderTrashParts();
+  }
+
+  function trashRowHTML(t) {
+    const isCollect = t.kind === 'collect';
+    const it = isCollect ? (t.entry || {}) : (t.item || {});
+    const title = isCollect ? (it.title || '（无标题）') : (it.name || '（无名称）');
+    const sub = (isCollect ? '收藏 · ' + (it.cat || '') + ' · ' + QY.fmtDate(it.date) :
+        (it.category || '') + ' · ' + QY.fmtDate(it.acquiredAt) + ' 获得') +
+      ' · ' + QY.fmtDate(t.deletedAt) + ' 删除 · 还有 ' + QY.trashDaysLeft(t) + ' 天';
+    const sel = !!trashView.sel[t.id];
+    return '<div class="row static trow' + (sel ? ' sel' : '') + '" data-tid="' + t.id + '">' +
+      '<span class="tsel' + (sel ? ' on' : '') + '" data-action="i-tsel" data-id="' + t.id + '" role="checkbox" aria-checked="' + sel + '">' +
+        (sel ? (window.QYIcon ? QYIcon.svg('check', 14) : '✓') : '') + '</span>' +
+      (isCollect
+        ? '<span class="tthumb">' + (window.QYIcon ? QYIcon.svg('book', 20) : '📝') + '</span>'
+        : thumb(it, true)) +
+      '<div class="row-main">' +
+        '<div class="row-title">' + esc(title) + '</div>' +
+        '<div class="row-sub">' + esc(sub) + '</div>' +
+      '</div>' +
+      '<div class="row-side"><button class="btn plain" data-action="i-restore" data-id="' + t.id + '" ' +
+        'style="padding:8px 12px;font-size:13px">恢复</button></div>' +
+    '</div>';
+  }
+
+  function renderFootOnly() {
+    const foot = document.getElementById('trash-foot');
+    if (!foot) return;
+    const all = trashEntries();
+    const nSel = Object.keys(trashView.sel).filter(function (k) { return trashView.sel[k]; }).length;
+    foot.innerHTML = nSel
+      ? '<div class="sheet-actions" style="margin-top:12px">' +
+          '<button class="btn plain" data-action="i-purge-sel" style="color:var(--red)">彻底删除 ' + nSel + ' 项</button>' +
+          '<button class="btn primary" data-action="i-restore-sel">恢复 ' + nSel + ' 项</button>' +
+        '</div>'
+      : '<div class="sheet-actions" style="margin-top:12px">' +
+          (all.length ? '<button class="btn plain" data-action="i-empty" style="color:var(--red)">清空回收站</button>' : '') +
+          '<button class="btn ' + (all.length ? 'plain' : 'primary') + '" data-action="i-close">完成</button>' +
+        '</div>';
+  }
+
+  function renderTrashParts() {
+    const all = trashEntries();
+    const list = all.filter(trashMatches);
+    const seg = document.getElementById('trash-seg');
+    if (seg) {
+      const nItem = all.filter(function (t) { return (t.kind || 'item') === 'item'; }).length;
+      const nCol = all.filter(function (t) { return t.kind === 'collect'; }).length;
+      const segBtn = function (k, label, n) {
+        return '<button class="' + (trashView.tab === k ? 'active' : '') + '" data-action="i-ttab" data-tab="' + k + '">' +
+          label + (n ? ' ' + n : '') + '</button>';
+      };
+      seg.innerHTML = segBtn('all', '全部', all.length) + segBtn('item', '物品', nItem) + segBtn('collect', '随笔', nCol);
+    }
+    const box = document.getElementById('trash-list');
+    if (box) {
+      box.innerHTML = list.length
+        ? list.map(trashRowHTML).join('')
+        : '<div class="empty" style="padding:26px 0"><div class="emoji">🗑</div><p>' +
+          (all.length ? '没有匹配的结果' : '回收站是空的') + '</p></div>';
+    }
+    renderFootOnly();
+  }
+
+  function restoreOne(trashId, quiet) {
     const d = data();
     const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
-    if (!t) return;
-    d.items.push(t.item);
-    (t.events || []).forEach(function (e) { d.events.push(e); });
+    if (!t) return false;
+    let label = '';
+    if (t.kind === 'collect') {
+      if (!window.QYV || !QYV.restoreEntry || !QYV.restoreEntry(t.entry)) return false;
+      label = (t.entry && t.entry.title) || '随笔';
+    } else {
+      d.items.push(t.item);
+      (t.events || []).forEach(function (e) { d.events.push(e); });
+      label = (t.item && t.item.name) || '物品';
+    }
     d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
+    delete trashView.sel[trashId];
     UI().save();
     UI().mount();
-    openTrash();
-    UI().toast('已恢复「' + (t.item && t.item.name ? t.item.name : '') + '」');
+    if (!quiet) UI().toast('已恢复「' + label + '」');
+    return true;
   }
 
-  function purgeOne(trashId) {
+  function purgeOne(trashId, quiet) {
     const d = data();
     const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
     if (!t) return;
-    const nm = (t.item && t.item.name) ? t.item.name : '';
-    confirmSheet('彻底删除「' + nm + '」？这一步不可恢复。',
-      { title: '彻底删除', ok: '彻底删除', danger: true }
-    ).then(function (ok) {
-      if (!ok) return;
+    const label = t.kind === 'collect' ? ((t.entry && t.entry.title) || '随笔') : ((t.item && t.item.name) || '物品');
+    const doPurge = function () {
       d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
+      delete trashView.sel[trashId];
       UI().save();
       UI().mount();
-      openTrash();
-      UI().toast('已彻底删除');
-    });
+      renderTrashParts();
+      if (!quiet) UI().toast('已彻底删除「' + label + '」');
+    };
+    if (quiet) { doPurge(); return; }
+    confirmSheet('彻底删除「' + label + '」？这一步不可恢复。',
+      { title: '彻底删除', ok: '彻底删除', danger: true }
+    ).then(function (ok) { if (ok) doPurge(); });
   }
 
   // 回收站里的动作单独挂一个监听，不占用 app.js 的动作表
   document.addEventListener('click', function (e) {
-    const btn = e.target.closest && e.target.closest('[data-action="i-restore"],[data-action="i-purge"],[data-action="i-empty"]');
+    const btn = e.target.closest && e.target.closest('[data-action="i-restore"],[data-action="i-purge"],[data-action="i-empty"],[data-action="i-tsel"],[data-action="i-ttab"],[data-action="i-restore-sel"],[data-action="i-purge-sel"]');
     if (!btn) return;
     e.stopPropagation();
     const act = btn.getAttribute('data-action');
     const d = data();
     if (act === 'i-restore') {
-      restoreTrash(btn.getAttribute('data-id'));
+      if (restoreOne(btn.getAttribute('data-id'))) renderTrashParts();
     } else if (act === 'i-purge') {
       purgeOne(btn.getAttribute('data-id'));
+    } else if (act === 'i-tsel') {
+      // 只更新这一行和底部条——整列重绘会让连点丢事件、滚动跳回顶部
+      const id = btn.getAttribute('data-id');
+      trashView.sel[id] = !trashView.sel[id];
+      if (!trashView.sel[id]) delete trashView.sel[id];
+      const row = btn.closest('.trow');
+      if (row) {
+        const on = !!trashView.sel[id];
+        row.classList.toggle('sel', on);
+        const c = row.querySelector('.tsel');
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-checked', on);
+        c.innerHTML = on ? (window.QYIcon ? QYIcon.svg('check', 14) : '✓') : '';
+      }
+      renderFootOnly();
+    } else if (act === 'i-ttab') {
+      trashView.tab = btn.getAttribute('data-tab') || 'all';
+      trashView.sel = {};
+      renderTrashParts();
+    } else if (act === 'i-restore-sel') {
+      const ids = Object.keys(trashView.sel);
+      let n = 0;
+      ids.forEach(function (id) { if (restoreOne(id, true)) n++; });
+      if (n) { UI().toast('已恢复 ' + n + ' 项'); renderTrashParts(); }
+    } else if (act === 'i-purge-sel') {
+      const ids = Object.keys(trashView.sel);
+      if (!ids.length) return;
+      confirmSheet('彻底删除选中的 ' + ids.length + ' 项？这一步不可恢复。',
+        { title: '彻底删除', ok: '彻底删除', danger: true }
+      ).then(function (ok) {
+        if (!ok) return;
+        ids.forEach(function (id) { purgeOne(id, true); });
+        UI().toast('已彻底删除 ' + ids.length + ' 项');
+        renderTrashParts();
+      });
     } else if (act === 'i-empty') {
       const n = (d.trash || []).length;
       if (!n) return;
@@ -1373,9 +1707,10 @@
       ).then(function (ok) {
         if (!ok) return;
         d.trash = [];
+        trashView.sel = {};
         UI().save();
         UI().mount();
-        openTrash();
+        renderTrashParts();
         UI().toast('回收站已清空');
       });
     }
@@ -1465,6 +1800,43 @@
 
     if (action === 'i-add') openForm(null);
     else if (action === 'i-edit') openForm(byId(id));
+    else if (action === 'i-tl') { const it = byId(id); if (it) openTimeline(it); }
+    else if (action === 'i-menu') { const it = byId(id); if (it) openItemMenu(it); }
+    else if (action === 'i-long') { const it = byId(id); if (it) makeItemLongImage(it); }
+    else if (action === 'i-remind') { const it = byId(id); if (it) openReminderSheet(it); }
+    else if (action === 'i-remind-quick') {
+      // 快捷时间 chips：填进时/分输入框
+      const q = String(el.getAttribute('data-v') || '').split(':');
+      const hEl = document.getElementById('r-hour');
+      const mEl = document.getElementById('r-minute');
+      if (hEl && mEl && q.length === 2) { hEl.value = q[0]; mEl.value = pad2(Number(q[1]) || 0); }
+    }
+    else if (action === 'i-remind-save') {
+      const it = byId(id);
+      if (!it) return true;
+      const hEl = document.getElementById('r-hour');
+      const mEl = document.getElementById('r-minute');
+      const alarmEl = document.getElementById('r-alarm');
+      const h = Math.max(0, Math.min(23, parseInt(hEl && hEl.value, 10) || 0));
+      const m = Math.max(0, Math.min(59, parseInt(mEl && mEl.value, 10) || 0));
+      it.reminder = { on: true, hour: h, minute: m, alarm: !!(alarmEl && alarmEl.checked) };
+      UI().save();
+      pushItemReminders();
+      UI().closeSheet();
+      UI().mount();
+      UI().toast('已开启每日提醒：' + h + ':' + pad2(m) + '「' + it.name + '」' +
+        (it.reminder.alarm ? '（闹铃）' : ''));
+    }
+    else if (action === 'i-remind-off') {
+      const it = byId(id);
+      if (!it) return true;
+      delete it.reminder;
+      UI().save();
+      pushItemReminders();
+      UI().closeSheet();
+      UI().mount();
+      UI().toast('已关闭「' + it.name + '」的每日提醒');
+    }
     else if (action === 'i-open') {
       // 记住列表位置，详情返回时还原（goItem 内部也会记）
       if (UI().rememberScroll) UI().rememberScroll();
@@ -1520,7 +1892,7 @@
       const m = document.getElementById('i-more');
       if (m) {
         m.classList.toggle('open');
-        el.innerHTML = (m.classList.contains('open') ? '收起选项' : '更多选项') + ' ＋';
+        el.classList.toggle('open', m.classList.contains('open'));
       }
     } else if (action === 'i-pick-open') {
       openPicker(el.getAttribute('data-k'), el.getAttribute('data-title'));
@@ -1548,7 +1920,8 @@
     } else if (action === 'i-cal-ok') {
       if (calState) {
         const inp = document.getElementById(calState.inputId);
-        if (inp) inp.value = calState.picked;
+        // 写回后派发 input 让全屏编辑页标脏（程序改值不会自动触发）
+        if (inp) { inp.value = calState.picked; inp.dispatchEvent(new Event('input', { bubbles: true })); }
       }
       closeOverlay();
     } else if (action === 'i-cal-cancel') {
@@ -1645,6 +2018,7 @@
     openForm: openForm,
     openCatManager: openCatManager,
     openTrash: openTrash,
+    pushReminders: pushItemReminders,
     handleAction: handleAction,
     handleInput: handleInput,
     // 首页/重挂载后按实际宽度收纳分类行（app.js 的 mount 会调）
@@ -1749,4 +2123,7 @@
 
   // 用户手动动过"计入日均成本"开关后，切换分类不再覆盖它
   document.addEventListener('qy-costtouch', function () { formCostTouched = true; });
+
+  // 启动时把每日提醒清单同步给原生壳一次（之后开/关/改时间会即时推）
+  setTimeout(pushItemReminders, 1200);
 })();

@@ -62,6 +62,10 @@
 用户自己的物品分类：{{CATEGORIES}}
 用户自己的收藏分类：{{NOTE_CATS}}
 表具（名称 | 当前用量 | 单价）：{{METERS}}
+回收站（id | 类型 | 名称或标题 | 删除日期，按删除时间从新到旧）：
+{{TRASH_TABLE}}
+每日提醒（物品名 | 时间 | 闹铃）：
+{{ITEM_REMINDERS}}
 物品排序词表：items=date/dateAsc/price/daily/expiry/name；collect=recent/oldest/title；energy=amount/name
 
 【输出】严格按这个结构，不要有其他文字：
@@ -78,6 +82,10 @@
 { "type":"set_pinned",   "id":"", "pinned":true|false }
 { "type":"delete_item",  "id":"" }
 { "type":"restore_item", "name":"回收站里的物品名" }
+{ "type":"set_item_reminder", "id":"物品id（优先）或name", "name":"", "on":true|false, "hour":"提醒时间，9 或 9:30 这种（可省默认 9）", "alarm":true|false（闹铃，可省） }
+{ "type":"clear_item_reminders", "all":true|false, "id":"或name（all=false 时清这一个）" }
+{ "type":"trash_restore", "ids":["回收站条目id（从【回收站】清单里选）"] 或 "filter":{ "kind":"item|collect（可省）", "query":"名称或标题关键词（可省）", "latest":最近删除的N条（可省） } }
+{ "type":"trash_purge",  "ids":["…"] 或 "filter":{ 同 trash_restore } }
 { "type":"add_event",    "id":"或name", "name":"", "evType":"used|opened|repaired|replaced|lent|returned|disposed|status", "at":"YYYY-MM-DD", "amount":数字或null, "note":"" }
 { "type":"delete_records", "scope":"events|items", "before":"YYYY-MM-DD" }
 { "type":"empty_trash" }
@@ -118,12 +126,20 @@
     YYYY-MM-DD 填 before；用户说的"记录"指时间线就用 events，明确说"物品"才用 items。
     reply 里说清楚将要删什么、多少条以内，不要说"已删除"。empty_trash 同理。
 12. "看看有没有新版本/更新"→ check_update（结果 App 会自动弹出，reply 简单说在查即可）。
-13. 用户问"回收站里有什么/能不能找回"→ 按 name 用 restore_item；
+13. 回收站操作用 trash_restore（恢复）/ trash_purge（彻底删，App 会二次确认）/ empty_trash（清空）。
+    按【回收站】清单理解用户意图，能列出 ids 就填 ids；说不清就按 filter 表达：
+    · "把刚刚删掉的都恢复" → trash_restore filter.latest = 最近删除的那几条（看清单排最前的几项）
+    · "物品和收藏各恢复最新删的一条" → 两个动作：filter:{kind:"item",latest:1} 和 filter:{kind:"collect",latest:1}
+    · "把删掉的牛奶恢复" → trash_restore filter:{query:"牛奶"}
+    · "回收站里那些雨伞不要了" → trash_purge filter:{query:"雨伞"}
+    这些只是例子——任何说法都先看清单再决定 ids 或 filter，不限于上述句式。
     抄表（"电费抄表/水表记一下"）→ add_reading，meter 从 {{METERS}} 里选。
-14. 随笔的修改/删除靠 title 唯一匹配，匹配不上就在 reply 里问。
-15. 排序/背景/标签显隐/切页面：按用户口吻选 value/preset/tab；
+14. 每日提醒（吃药/喝牛奶打卡）：加/改用 set_item_reminder（on=false 关单个），
+    全部清掉用 clear_item_reminders {all:true}；"哪些在每天提醒"直接用 reply 按【每日提醒】清单回答。
+15. 随笔的修改/删除靠 title 唯一匹配，匹配不上就在 reply 里问。
+16. 排序/背景/标签显隐/切页面：按用户口吻选 value/preset/tab；
     set_sort 的 value 只能从【当前数据】末行的词表里选。
-16. clear_data 只有用户明确说"清空所有数据"才用（App 会连问三次）。
+17. clear_data 只有用户明确说"清空所有数据"才用（App 会连问三次）。
 
 【用户发图片时】
 用户可能直接发订单截图或购物小票。这时按下面的规则提取，然后用动作入库：
@@ -185,6 +201,29 @@
     }).join('；');
   }
 
+  /* 回收站清单：id | 类型 | 名称/标题 | 删除日期（从新到旧），给 AI 挑条目用 */
+  function trashTable(data) {
+    const list = (data.trash || []).slice().sort(function (a, b) {
+      return a.deletedAt < b.deletedAt ? 1 : -1;
+    });
+    if (!list.length) return '（回收站是空的）';
+    return list.map(function (t) {
+      const isCollect = t.kind === 'collect';
+      const it = isCollect ? (t.entry || {}) : (t.item || {});
+      const name = isCollect ? (it.title || '（无标题）') : (it.name || '（无名称）');
+      return (t.id || '?') + ' | ' + (isCollect ? '收藏' : '物品') + ' | ' + name + ' | ' + t.deletedAt + '删除';
+    }).join('\n');
+  }
+
+  /* 每日提醒清单：物品名 | 时间 | 闹铃 */
+  function itemRemindersTable(data) {
+    const list = (data.items || []).filter(function (it) { return it.reminder && it.reminder.on !== false; });
+    if (!list.length) return '（没有设置每日提醒）';
+    return list.map(function (it) {
+      return it.name + ' | ' + (it.reminder.hour || 9) + ':' + ((it.reminder.minute || 0) < 10 ? '0' : '') + (it.reminder.minute || 0) + (it.reminder.alarm ? ' | 闹铃' : '');
+    }).join('\n');
+  }
+
   window.QYP = {
     VISION: VISION,
     ASSISTANT: ASSISTANT,
@@ -211,6 +250,8 @@
         CATEGORIES: catNames(data),
         NOTE_CATS: noteCats,
         METERS: metersTable(data),
+        TRASH_TABLE: trashTable(data),
+        ITEM_REMINDERS: itemRemindersTable(data),
         STATUS_VOCAB: statusVocab(data)
       });
     }

@@ -369,11 +369,16 @@
       : '<div class="hero-cover" style="background:linear-gradient(150deg,#E7ECF5,#C9D6E8)">' +
         (window.QYIcon ? QYIcon.forEmoji(catEmoji(e.cat), 44) : catEmoji(e.cat)) + '</div>';
 
+    // meta 数组只放纯文本（复制文案 shareText 也用它）；分类图标是 HTML，
+    // 必须在拼接处单独注入——之前混进 meta 又整体 esc()，页面上显示的是 SVG 源码
     const meta = [];
-    if (e.cat) meta.push((window.QYIcon ? QYIcon.forEmoji(catEmoji(e.cat), 13) + ' ' : catEmoji(e.cat) + ' ') + e.cat);
+    if (e.cat) meta.push(esc(e.cat));
     meta.push(QY.fmtDate(e.date));
     const n = imageCount(e.bodyHtml);
     if (n) meta.push(n + ' 张图');
+    const catIcon = e.cat
+      ? (window.QYIcon ? QYIcon.forEmoji(catEmoji(e.cat), 13) + ' ' : esc(catEmoji(e.cat)) + ' ')
+      : '';
 
     const tags = (e.tags && e.tags.length)
       ? '<div class="section"><div class="section-head"><h2>标签</h2></div><div class="tag-row">' +
@@ -381,33 +386,34 @@
       : '';
 
     return '' +
-      '<div class="navbar"><button class="back" data-action="c-back">‹ 收藏</button></div>' +
+      '<div class="navbar"><button class="back" data-action="c-back">‹ 收藏</button>' +
+        '<span class="nav-acts">' +
+          '<button type="button" class="nav-ico" data-action="c-edit" data-id="' + e.id + '" aria-label="编辑" title="编辑">' +
+            (window.QYIcon ? QYIcon.svg('pencil', 19) : '✎') + '</button>' +
+          '<button type="button" class="nav-more" data-action="c-menu" data-id="' + e.id + '" aria-label="更多操作">' +
+            (window.QYIcon ? QYIcon.svg('more', 20) : '···') + '</button>' +
+        '</span></div>' +
       cover +
       '<div style="padding:18px 4px 0">' +
         '<h1 style="margin:0;font-size:25px;font-weight:700;letter-spacing:-0.025em">' + esc(e.title) + '</h1>' +
-        '<p style="margin:6px 0 0;font-size:13px;color:var(--label-2)">' + esc(meta.join(' · ')) + '</p>' +
+        '<p style="margin:6px 0 0;font-size:13px;color:var(--label-2)">' + catIcon + meta.join(' · ') + '</p>' +
       '</div>' +
-      pluginView(e) +
+      // 新结构：插件芯片穿插在正文里（见 sanitize 的 SPAN 白名单），
+      // 已经在 rich-body 里渲染，就不再单独出指标/位置/链接区块；老数据照旧
+      (String(e.bodyHtml || '').indexOf('inline-plug') >= 0 ? '' : pluginView(e)) +
       '<div class="card" style="margin-top:16px"><div class="rich-body">' + (e.bodyHtml || '<p style="color:var(--label-3)">还没有正文</p>') + '</div></div>' +
       tags +
-      '<div class="section">' +
-        '<div class="sheet-actions" style="flex-wrap:wrap">' +
-          '<button class="btn plain" data-action="c-copy" data-id="' + e.id + '">复制文案</button>' +
-          '<button class="btn primary" data-action="c-long" data-id="' + e.id + '">生成长图</button>' +
-          '<button class="btn plain" data-action="c-edit" data-id="' + e.id + '">编辑</button>' +
-          '<button class="btn plain" data-action="c-del" data-id="' + e.id + '" style="color:var(--red)">删除</button>' +
-        '</div>' +
-      '</div>';
+      '<div style="height:26px"></div>';
   }
 
   /* ---------------- 富文本：净化 / 编辑 ---------------- */
 
-  const ALLOWED = { P: 1, BR: 1, STRONG: 1, EM: 1, B: 1, I: 1, IMG: 1 };
+  const ALLOWED = { P: 1, BR: 1, STRONG: 1, EM: 1, B: 1, I: 1, IMG: 1, SPAN: 1, VIDEO: 1 };
   // 这些标签必须整块删掉，不能只拆标签 —— 否则 <script>alert(1)</script>
   // 会被"拆"成正文里的 alert(1) 文本
   const DROP_WHOLE = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, NOSCRIPT: 1, TEMPLATE: 1, SVG: 1, MATH: 1 };
 
-  // 只保留 p / br / strong / em / img，其余标签拆掉、属性删掉
+  // 只保留 p / br / strong / em / img / span(内嵌插件) / video，其余标签拆掉、属性删掉
   function sanitize(html) {
     const box = document.createElement('div');
     box.innerHTML = html || '';
@@ -428,6 +434,23 @@
         Array.prototype.slice.call(el.attributes).forEach(function (a) {
           if (el.tagName === 'IMG' && (a.name === 'src' || a.name === 'alt')) {
             if (a.name === 'src' && String(el.getAttribute('src')).indexOf('data:image/') !== 0) {
+              el.parentNode.removeChild(el);
+              changed = true;
+            }
+            return;
+          }
+          // 内嵌插件芯片：只留 inline-plug 这一种 span，class 本身也在白名单里
+          // （属性是逐个检查的，class 若先被剥掉，后面的 data-* 就对不上号了）
+          if (el.tagName === 'SPAN' &&
+              ((a.name === 'class' && a.value === 'inline-plug') ||
+               (el.getAttribute('class') === 'inline-plug' &&
+                /^(data-k|data-v|data-lat|data-lng|contenteditable)$/.test(a.name)))) {
+            if (a.name === 'contenteditable' && a.value !== 'false') { el.removeAttribute(a.name); changed = true; }
+            return;
+          }
+          // 视频：src 必须是本机 data:video/，其余只留控制类布尔属性
+          if (el.tagName === 'VIDEO' && /^(src|controls|playsinline|preload)$/.test(a.name)) {
+            if (a.name === 'src' && String(el.getAttribute('src')).indexOf('data:video/') !== 0) {
               el.parentNode.removeChild(el);
               changed = true;
             }
@@ -549,7 +572,8 @@
     });
   }
 
-  function insertImage(editor, dataUrl) {
+  /* 把光标放回编辑器（优先恢复原选区，否则落在末尾），再执行 execCommand */
+  function execAtCaret(editor, cmd, val) {
     editor.focus();
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount || !editor.contains(sel.anchorNode)) {
@@ -559,13 +583,185 @@
       sel.removeAllRanges();
       sel.addRange(range);
     }
-    document.execCommand('insertImage', false, dataUrl);
+    return document.execCommand(cmd, false, val);
+  }
+
+  function insertImage(editor, dataUrl) {
+    execAtCaret(editor, 'insertImage', dataUrl);
     Array.prototype.forEach.call(editor.querySelectorAll('img'), function (im) {
       im.setAttribute('alt', im.getAttribute('alt') || '图片');
     });
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function insertHTML(editor, html) {
+    execAtCaret(editor, 'insertHTML', html);
+  }
+
+  /* ---------------- 内嵌插件芯片：穿插在正文里的内容块 ----------------
+   * span.inline-plug（contenteditable=false）跟文字一起流动：
+   * 退格整颗删掉、点一下改值。保存时既留在正文 HTML 里、
+   * 也抽取成 plugins[]（AI / 搜索 / 老数据结构都照常用）。 */
+  function plugChipLabel(k, v) {
+    if (k === 'rating') return (v || 3) + ' 分';
+    if (k === 'price') return v ? ('¥ ' + v) : '价格';
+    if (k === 'place') return (v && v.name) || '地点';
+    if (k === 'link') {
+      const s = String(v || '');
+      return s ? (s.length > 18 ? s.slice(0, 18) + '…' : s) : '链接';
+    }
+    if (k === 'mood') return v || MOODS[0];
+    return k;
+  }
+
+  function plugChipHTML(k, v, coord) {
+    const p = PLUGINS[k] || {};
+    const val = k === 'place' ? ((v && v.name) || '') : (v == null ? '' : v);
+    return '<span class="inline-plug" contenteditable="false" data-k="' + k + '"' +
+      ' data-v="' + esc(String(val)) + '"' +
+      (coord && coord.lat ? ' data-lat="' + coord.lat + '" data-lng="' + coord.lng + '"' : '') +
+      '>' + (window.QYIcon ? QYIcon.forEmoji(p.icon || '⬦', 13) : (p.icon || '⬦')) +
+      ' ' + esc(plugChipLabel(k, v)) + '</span>&nbsp;';
+  }
+
+  function refreshPlugChip(chip) {
+    const k = chip.getAttribute('data-k');
+    let v = chip.getAttribute('data-v') || '';
+    if (k === 'place') v = { name: v, lat: chip.getAttribute('data-lat'), lng: chip.getAttribute('data-lng') };
+    chip.textContent = '';
+    chip.insertAdjacentHTML('afterbegin',
+      (window.QYIcon ? QYIcon.forEmoji((PLUGINS[k] || {}).icon || '⬦', 13) : (PLUGINS[k] || {}).icon || '⬦') +
+      ' ' + esc(plugChipLabel(k, k === 'place' ? v : v)));
+  }
+
+  /* 编辑器内"最后的已知光标"：选区一旦离开编辑器（点工具栏/对话框），
+   * 浏览器会把 focus 的光标重置到开头，插卡片就会插错位置。
+   * 这里持续记录编辑器内的选区，插入时优先用它。 */
+  let lastCaret = null;
+  document.addEventListener('selectionchange', function () {
+    const sel = window.getSelection();
+    const ed = document.getElementById('c-body');
+    if (!ed || !sel || !sel.rangeCount) return;
+    if (ed.contains(sel.anchorNode)) lastCaret = sel.getRangeAt(0).cloneRange();
+  });
+
+  /* 在光标处直接落一颗芯片并返回它的引用。
+   * 不走 execCommand('insertHTML')：编辑对话框关掉后选区经常丢，
+   * execCommand 会把内容插到不可控的位置，也没法拿到"刚插的那颗"。 */
+  function insertChipAtCaret(editor, k, v, coord) {
+    editor.focus();
+    const tpl = document.createElement('div');
+    tpl.innerHTML = plugChipHTML(k, v, coord);
+    const chip = tpl.firstChild;
+    const nbsp = document.createTextNode('\u00A0');
+    const sel = window.getSelection();
+    let range = null;
+    if (lastCaret && editor.contains(lastCaret.startContainer) &&
+        editor.contains(lastCaret.endContainer)) {
+      range = lastCaret.cloneRange();
+    } else if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+      range = sel.getRangeAt(0).cloneRange();
+    }
+    if (range) {
+      range.collapse(false);
+      range.insertNode(nbsp);
+      range.insertNode(chip);          // 后插的在前面：[chip][nbsp]
+      const after = document.createRange();
+      after.setStartAfter(nbsp);
+      after.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(after);
+      lastCaret = after.cloneRange();
+    } else {
+      const p = document.createElement('p');
+      p.appendChild(chip);
+      p.appendChild(nbsp);
+      editor.appendChild(p);
+    }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    return chip;
+  }
+
+  /* 点芯片 → 按种类弹对应编辑器，改完写回芯片 */
+  function editPlugChip(chip, done) {
+    const k = chip.getAttribute('data-k');
+    let v = chip.getAttribute('data-v') || '';
+    const write = function (nv) {
+      if (nv != null && nv !== '') chip.setAttribute('data-v', String(nv));
+      refreshPlugChip(chip);
+      if (done) done();
+    };
+    if (k === 'rating') {
+      window.QYDialog.choose({
+        title: '评分', current: v || '3',
+        options: [1, 2, 3, 4, 5].map(function (n) {
+          return { v: String(n), t: '★'.repeat(n) + '☆'.repeat(5 - n) };
+        }),
+        onPick: write
+      });
+    } else if (k === 'mood') {
+      window.QYDialog.choose({
+        title: '心情', current: v || MOODS[0],
+        options: MOODS.map(function (m) { return { v: m, t: m }; }),
+        onPick: write
+      });
+    } else if (k === 'price') {
+      window.QYDialog.text({
+        title: '价格', value: v, placeholder: '38.5',
+        onOk: write
+      });
+    } else if (k === 'link') {
+      window.QYDialog.text({
+        title: '链接', value: v, placeholder: 'https://',
+        onOk: write
+      });
+    } else if (k === 'place') {
+      window.QYDialog.text({
+        title: '地点名', value: v, placeholder: '武汉 · 东湖绿道',
+        onOk: function (nv) {
+          chip.setAttribute('data-v', nv || '');
+          refreshPlugChip(chip);
+          if (done) done();
+        }
+      });
+    }
+  }
+
+  /* 从编辑器收 plugins[]：按芯片出现顺序，空值跳过，类型按 App 约定收口 */
+  function readInlinePlugins(editor) {
+    const out = [];
+    Array.prototype.forEach.call(editor.querySelectorAll('.inline-plug'), function (chip) {
+      const k = chip.getAttribute('data-k');
+      const v = chip.getAttribute('data-v') || '';
+      if (k === 'rating') {
+        const n = Number(v);
+        if (n) out.push({ k: k, v: n });
+      } else if (k === 'price') {
+        if (v !== '') out.push({ k: k, v: Number(v) });
+      } else if (k === 'mood') {
+        if (v) out.push({ k: k, v: v });
+      } else if (k === 'link') {
+        if (v) out.push({ k: k, v: v });
+      } else if (k === 'place') {
+        const lat = chip.getAttribute('data-lat');
+        out.push({ k: k, v: { name: v, lat: lat ? Number(lat) : null, lng: lat ? Number(chip.getAttribute('data-lng')) : null } });
+      }
+    });
+    return out;
   }
 
   function pickImage(editor) {
+    // 原生壳（安卓/卓易通/鸿蒙）里 <input type=file> 点了没反应——宿主没实现
+    // onShowFileChooser。走平台层的原生选图（系统面板：相机第一项），
+    // 原生侧已缩到长边 1600 / JPEG 重编码（顺带清掉 EXIF/GPS）。
+    if (window.QYPlatform && QYPlatform.native && QYPlatform.pickImage) {
+      QYPlatform.pickImage(function (dataUrl) {
+        if (!dataUrl) return;
+        insertImage(editor, dataUrl);
+        UI().toast('已插入图片');
+      }, '');
+      return;
+    }
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -584,10 +780,30 @@
     input.click();
   }
 
+  /* 选一段视频：纯前端没条件转码，所以限 2.5MB 内的短片原样内嵌 */
+  const VIDEO_MAX = 2.5 * 1024 * 1024;
+  function pickVideo(editor) {
+    if (!window.QYPlatform || !QYPlatform.pickVideo) { UI().toast('当前环境不支持选视频'); return; }
+    QYPlatform.pickVideo(function (dataUrl) {
+      if (!dataUrl) return;
+      const bytes = Math.round(dataUrl.length * 3 / 4);
+      if (bytes > VIDEO_MAX) {
+        UI().toast('视频太大（' + humanSize(bytes) + '）：只能内嵌 2.5MB 内的短片');
+        return;
+      }
+      insertVideo(editor, dataUrl);
+      UI().toast('已插入视频 ' + humanSize(bytes));
+    });
+  }
+
+  function insertVideo(editor, dataUrl) {
+    insertHTML(editor, '<video src="' + dataUrl + '" controls playsinline preload="metadata"></video><p><br></p>');
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   /* ---------------- 表单 ---------------- */
 
   let editingId = null;
-  let placeCoord = { lat: null, lng: null };
 
   function catOptions(selected) {
     return db.cats.map(function (c) {
@@ -595,152 +811,108 @@
     }).join('') + '<option value="__new">＋ 新建分类…</option>';
   }
 
-  function pluginFieldHTML(k, v) {
-    const p = PLUGINS[k];
-    let inner = '';
-    if (k === 'rating') {
-      inner = '<div class="stars pick" id="p-rating" data-k="rating">' +
-        [1, 2, 3, 4, 5].map(function (i) {
-          return '<span data-action="c-star" data-v="' + i + '" class="' +
-            (v && i <= v ? 'on' : '') + '">' + (v && i <= v ? '★' : '☆') + '</span>';
-        }).join('') + '</div>';
-    } else if (k === 'price') {
-      inner = '<input class="input" id="p-price" type="number" step="0.1" placeholder="12.9" value="' +
-        (v != null ? v : '') + '" />';
-    } else if (k === 'place') {
-      inner = '<div style="display:flex;gap:10px">' +
-        '<input class="input" id="p-place" placeholder="武汉 · 东湖绿道" value="' +
-          esc(v && v.name ? v.name : '') + '" />' +
-        '<button class="btn plain" data-action="c-locate" style="flex:none;border-radius:var(--r-sm);padding:0 14px">定位</button>' +
-        '</div><div class="mini-foot" id="p-coord" style="margin-top:6px">' +
-        (placeCoord.lat ? '已定位 ' + placeCoord.lat.toFixed(4) + ', ' + placeCoord.lng.toFixed(4) : '未取坐标（可只写地点名）') +
-        '</div>';
-    } else if (k === 'link') {
-      inner = '<input class="input" id="p-link" placeholder="https://" value="' + esc(v || '') + '" />';
-    } else if (k === 'mood') {
-      inner = '<button type="button" class="picker-field" data-action="c-pick" data-target="p-mood"' +
-        ' data-list="moods" data-label="pf-p-mood" data-title="心情">' +
-        '<span id="pf-p-mood">' + esc(v || MOODS[0]) + '</span><span class="chev">›</span></button>' +
-        '<input type="hidden" id="p-mood" value="' + esc(v || MOODS[0]) + '" />';
-    }
-    return '<div class="field plugin-field" data-plugin="' + k + '">' +
-      '<label>' + p.icon + ' ' + p.name +
-        '<button class="plugin-remove" data-action="c-remove-plugin" data-k="' + k + '" title="移除">×</button>' +
-      '</label>' + inner + '</div>';
-  }
-
   function formHTML(entry) {
     editingId = entry ? entry.id : null;
-    placeCoord = { lat: null, lng: null };
     const e = entry || { title: '', cat: (db.cats[0] && db.cats[0].name), date: QY.iso(QY.today()), tags: [], plugins: [], bodyHtml: '' };
-    if (entry) {
-      const pl = plug(entry, 'place');
-      if (pl && pl.v) placeCoord = { lat: pl.v.lat, lng: pl.v.lng };
+
+    // 旧版数据迁移：插件还是"表单底部一摞"的老结构，编辑时转成
+    // 正文里的内嵌芯片（追加在正文末尾），保存后就是新结构了
+    let bodyHtml = e.bodyHtml || '';
+    if ((e.plugins || []).length && bodyHtml.indexOf('inline-plug') < 0) {
+      bodyHtml += '<p>' + (e.plugins || []).map(function (p) {
+        return plugChipHTML(p.k, p.v, p.k === 'place' ? p.v : null);
+      }).join(' ') + '</p>';
     }
 
-    const addChips = PLUGIN_KEYS.filter(function (k) {
-      return !(e.plugins || []).some(function (p) { return p.k === k; });
-    }).map(function (k) {
-      return '<button class="chip small" data-action="c-add-plugin" data-k="' + k + '">' +
-        PLUGINS[k].icon + ' ' + PLUGINS[k].name + '</button>';
-    }).join('');
-
-    const fields = (e.plugins || []).map(function (p) {
-      return pluginFieldHTML(p.k, p.v);
-    }).join('');
-
     return '' +
-      '<div class="sheet">' +
-        '<div class="grabber"></div>' +
-        '<h3>' + (entry ? '编辑随笔' : '新增随笔') + '</h3>' +
-        '<p class="hint">正文可以插图片和动图；下面的插件想加就加</p>' +
-
-        '<div class="field"><label>标题</label>' +
-          '<input id="c-title" class="input" placeholder="例如：第一次自己做手冲" value="' +
-            esc(e.title) + '" autocomplete="off" /></div>' +
-
-        '<div class="field-row">' +
-          '<div class="field"><label>分类</label>' +
-            '<button type="button" class="picker-field" data-action="c-pick" data-target="c-cat"' +
-              ' data-list="cats" data-label="pf-c-cat" data-title="分类">' +
-              '<span id="pf-c-cat">' + esc(e.cat || '') + '</span><span class="chev">›</span></button>' +
-            '<input type="hidden" id="c-cat" value="' + esc(e.cat || '') + '" /></div>' +
-          '<div class="field"><label>日期</label>' +
-            '<input id="c-date" class="input" type="date" readonly data-action="i-date"' +
-              ' data-target="c-date" value="' + e.date + '" /></div>' +
+      '<div class="ftitle-row">' +
+          '<input id="c-title" class="ftitle" placeholder="例如：第一次自己做手冲" value="' +
+            esc(e.title) + '" autocomplete="off" />' +
+          '<span class="fcount" id="c-title-count">0/30</span>' +
+        '</div>' +
+        '<div class="fmeta">' +
+          '<button type="button" class="fmeta-pill" data-action="c-pick" data-target="c-cat"' +
+            ' data-list="cats" data-label="pf-c-cat" data-title="分类">' +
+            '<span id="pf-c-cat">' + esc(e.cat || '') + '</span><span class="chev">›</span></button>' +
+          '<input id="c-date" class="fmeta-pill fdate" type="date" readonly data-action="i-date"' +
+            ' data-target="c-date" value="' + e.date + '" />' +
+          '<input type="hidden" id="c-cat" value="' + esc(e.cat || '') + '" />' +
         '</div>' +
 
-        '<div class="field"><label>插件</label>' +
-          '<div class="plugin-box">' +
-            '<div id="plugin-fields">' + fields + '</div>' +
-            (addChips ? '<div class="chip-row" id="plugin-add">' + addChips + '</div>'
-                      : '<div class="mini-foot">所有插件都加上了</div>') +
-          '</div>' +
-        '</div>' +
-
-        '<div class="field"><label>随笔正文</label>' +
+        '<div class="fp-tool-bar">' +
           '<div class="editor-toolbar">' +
-            '<button data-action="c-bold" title="加粗"><b>B</b></button>' +
-            '<button data-action="c-italic" title="斜体"><i>I</i></button>' +
+            '<button data-action="c-bold" title="加粗" aria-label="加粗"><b>B</b></button>' +
+            '<button data-action="c-italic" title="斜体" aria-label="斜体"><i>I</i></button>' +
             '<span class="tb-sep"></span>' +
-            '<button data-action="c-image" title="插入图片">🖼 图片</button>' +
-            '<button data-action="c-gif" title="插入动图（GIF 不压缩）">✨ 动图</button>' +
+            '<button data-action="c-image" title="插入图片" aria-label="插入图片">🖼</button>' +
+            '<button data-action="c-gif" title="插入动图（GIF 不压缩）" aria-label="插入动图">✨</button>' +
+            '<button data-action="c-video" title="插入视频（限 2.5MB 内的短片）" aria-label="插入视频">🎬</button>' +
+            '<button data-action="c-plug" title="插入评分 / 地点 / 价格等卡片" aria-label="插入卡片">⬦</button>' +
             '<span class="tb-sep"></span>' +
-            '<button data-action="c-del-img" title="删除选中的图片" class="tb-danger">删图</button>' +
+            '<button data-action="c-del-img" title="删除选中的图片 / 视频" aria-label="删除选中内容" class="tb-danger">🗑</button>' +
           '</div>' +
+        '</div>' +
+
+        '<div class="fcard fedit">' +
           '<div id="c-body" class="rich-editor" contenteditable="true" ' +
-            'data-placeholder="写点什么…可以直接把图片拖进来，或粘贴截图">' + (e.bodyHtml || '') + '</div>' +
-          '<div class="mini-foot" style="margin-top:6px">图片自动压到长边 1600px 并重编码（顺带清掉 EXIF/GPS）· 动图保持原样</div>' +
+            'data-placeholder="记录此刻的想法…">' + bodyHtml + '</div>' +
+          '<button type="button" class="fzen-open" data-action="c-zen" title="全屏写作" aria-label="全屏写作">⤢ 全屏写作</button>' +
         '</div>' +
 
-        '<div class="field"><label>标签（用空格分隔）</label>' +
-          '<input id="c-tags" class="input" placeholder="咖啡 日常" value="' + esc((e.tags || []).join(' ')) + '" /></div>' +
-
-        '<div class="sheet-actions">' +
-          '<button class="btn plain" data-action="c-close">取消</button>' +
-          '<button class="btn primary" data-action="c-save">' + (entry ? '保存修改' : '保存') + '</button>' +
-        '</div>' +
-      '</div>';
+        '<div class="fsec">标签</div>' +
+        '<div class="fcard">' +
+          '<div class="frow"><span class="fl">标签</span>' +
+            '<input id="c-tags" class="input finput" placeholder="用空格分隔，例如：咖啡 日常" value="' +
+              esc((e.tags || []).join(' ')) + '" autocomplete="off" /></div>' +
+        '</div>';
   }
 
-  function setStars(v) {
-    const box = document.getElementById('p-rating');
-    if (!box) return;
-    Array.prototype.forEach.call(box.children, function (el) {
-      const on = Number(el.getAttribute('data-v')) <= v;
-      el.textContent = on ? '★' : '☆';
-      el.className = on ? 'on' : '';
-    });
+  /* ---------------- 全屏写作（专注模式）----------------
+   * 把编辑区和工具栏整个"搬"进覆盖层：整屏只剩文字 + 工具栏。
+   * DOM 搬家保内容保光标，所有 data-action 照常工作。 */
+  function openZen() {
+    const editor = document.getElementById('c-body');
+    const toolbar = document.querySelector('.fp-tool-bar .editor-toolbar');
+    if (!editor || !toolbar || document.getElementById('zen-root')) return;
+    const layer = document.createElement('div');
+    layer.id = 'zen-root';
+    layer.innerHTML =
+      '<div class="zen-head">' +
+        '<span class="zen-count" id="zen-count"></span>' +
+        '<button type="button" class="zen-done" data-action="c-zen-done">完成 ✓</button>' +
+      '</div>' +
+      '<div class="zen-body" id="zen-body"></div>' +
+      '<div class="zen-foot" id="zen-foot"></div>';
+    document.body.appendChild(layer);
+    layer.querySelector('#zen-body').appendChild(editor);
+    layer.querySelector('#zen-foot').appendChild(toolbar);
+    updateZenCount();
+    editor.focus();
   }
-  function currentStars() {
-    const box = document.getElementById('p-rating');
-    if (!box) return 0;
-    return box.querySelectorAll('span.on').length;
+
+  function closeZen() {
+    const layer = document.getElementById('zen-root');
+    if (!layer) return;
+    const editor = document.getElementById('c-body');
+    const toolbar = layer.querySelector('.editor-toolbar');
+    const card = document.querySelector('.fp .fedit');
+    if (editor && card) card.insertBefore(editor, card.querySelector('.fzen-open'));
+    const bar = document.querySelector('.fp-tool-bar');
+    if (toolbar && bar) bar.appendChild(toolbar);
+    layer.remove();
+  }
+
+  function updateZenCount() {
+    const editor = document.getElementById('c-body');
+    const el = document.getElementById('zen-count');
+    if (!editor || !el) return;
+    el.textContent = editor.textContent.replace(/\s+/g, ' ').trim().length + ' 字';
   }
 
   function readPlugins() {
-    const out = [];
-    Array.prototype.forEach.call(document.querySelectorAll('#plugin-fields .plugin-field'), function (f) {
-      const k = f.getAttribute('data-plugin');
-      if (k === 'rating') {
-        const v = currentStars();
-        if (v) out.push({ k: k, v: v });
-      } else if (k === 'price') {
-        const el = document.getElementById('p-price');
-        if (el && el.value !== '') out.push({ k: k, v: Number(el.value) });
-      } else if (k === 'place') {
-        const el = document.getElementById('p-place');
-        const name = el ? el.value.trim() : '';
-        if (name || placeCoord.lat) out.push({ k: k, v: { name: name, lat: placeCoord.lat, lng: placeCoord.lng } });
-      } else if (k === 'link') {
-        const el = document.getElementById('p-link');
-        if (el && el.value.trim()) out.push({ k: k, v: el.value.trim() });
-      } else if (k === 'mood') {
-        const el = document.getElementById('p-mood');
-        if (el) out.push({ k: k, v: el.value });
-      }
-    });
-    return out;
+    // 已被"正文内嵌芯片"取代：读一遍编辑器里的 .inline-plug 就是 plugins[]
+    const editor = document.getElementById('c-body');
+    return editor ? readInlinePlugins(editor) : [];
   }
 
   function saveForm() {
@@ -756,7 +928,7 @@
       cat: catSel.value === '__new' ? (db.cats[0] ? db.cats[0].name : '未分类') : catSel.value,
       date: document.getElementById('c-date').value || QY.iso(QY.today()),
       tags: (document.getElementById('c-tags').value || '').split(/[\s,，]+/).filter(Boolean),
-      plugins: readPlugins(),
+      plugins: editor ? readInlinePlugins(editor) : [],
       bodyHtml: bodyHtml
     };
 
@@ -1054,76 +1226,40 @@
     return clean;
   }
 
-  function locate() {
-    const box = document.getElementById('p-coord');
-    if (!navigator.geolocation) { UI().toast('这个环境不支持定位'); return; }
-    if (box) box.textContent = '定位中…';
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      placeCoord = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      if (box) box.textContent = '已定位 ' + placeCoord.lat.toFixed(4) + ', ' + placeCoord.lng.toFixed(4);
-      UI().toast('已获取当前位置');
-    }, function () {
-      if (box) box.textContent = '拿不到定位（本地文件打开时浏览器会拒绝）';
-    }, { timeout: 6000 });
-  }
-
-  function addPlugin(k) {
-    const wrap = document.getElementById('plugin-fields');
-    if (!wrap) return;
-    const div = document.createElement('div');
-    div.innerHTML = pluginFieldHTML(k, k === 'rating' ? 0 : '');
-    const node = div.firstChild;
-    wrap.appendChild(node);
-    const chip = document.querySelector('#plugin-add [data-k="' + k + '"]');
-    if (chip) chip.remove();
-    if (!document.querySelector('#plugin-add .chip')) {
-      const row = document.getElementById('plugin-add');
-      if (row) row.outerHTML = '<div class="mini-foot">所有插件都加上了</div>';
-    }
-  }
-
-  function removePlugin(k) {
-    const f = document.querySelector('#plugin-fields .plugin-field[data-plugin="' + k + '"]');
-    if (f) f.remove();
-    const add = document.getElementById('plugin-add');
-    if (add && !document.querySelector('#plugin-add [data-k="' + k + '"]')) {
-      const b = document.createElement('button');
-      b.className = 'chip small';
-      b.setAttribute('data-action', 'c-add-plugin');
-      b.setAttribute('data-k', k);
-      b.textContent = PLUGINS[k].icon + ' ' + PLUGINS[k].name;
-      add.appendChild(b);
-    } else if (!add) {
-      const box = document.querySelector('.plugin-box');
-      if (box) {
-        const row = document.createElement('div');
-        row.className = 'chip-row';
-        row.id = 'plugin-add';
-        row.innerHTML = '<button class="chip small" data-action="c-add-plugin" data-k="' + k + '">' +
-          PLUGINS[k].icon + ' ' + PLUGINS[k].name + '</button>';
-        box.appendChild(row);
-      }
-    }
-  }
-
   function handleAction(action, el) {
     if (action.indexOf('c-') !== 0) return false;
     const id = el.getAttribute('data-id');
 
     if (action === 'c-add') {
-      UI().openSheet(formHTML(null));
+      UI().openFullpage('新增随笔', formHTML(null), { save: { action: 'c-save', label: '保存' } });
       initEditor();
     } else if (action === 'c-edit') {
-      UI().openSheet(formHTML(byId(id)));
+      UI().openFullpage('编辑随笔', formHTML(byId(id)), { edit: true, save: { action: 'c-save', label: '保存修改' } });
       initEditor();
-    } else if (action === 'c-add-plugin') {
-      addPlugin(el.getAttribute('data-k'));
-    } else if (action === 'c-remove-plugin') {
-      removePlugin(el.getAttribute('data-k'));
-    } else if (action === 'c-star') {
-      setStars(Number(el.getAttribute('data-v')));
-    } else if (action === 'c-locate') {
-      locate();
+    } else if (action === 'c-plug') {
+      // 插入内嵌卡片：选种类 → 光标处落一颗芯片 → 顺手弹编辑改值
+      if (!window.QYDialog) return true;
+      window.QYDialog.choose({
+        title: '插入卡片',
+        current: '',
+        options: PLUGIN_KEYS.map(function (k) {
+          return { v: k, t: PLUGINS[k].name, e: PLUGINS[k].icon };
+        }),
+        onPick: function (k) {
+          const editor = document.getElementById('c-body');
+          if (!editor) return;
+          const def = k === 'rating' ? 3 : (k === 'mood' ? MOODS[0] : '');
+          const chip = insertChipAtCaret(editor, k, def);
+          editPlugChip(chip);
+        }
+      });
+    } else if (action === 'c-zen') {
+      openZen();
+    } else if (action === 'c-zen-done') {
+      closeZen();
+    } else if (action === 'c-video') {
+      const editor = document.getElementById('c-body');
+      if (editor) pickVideo(editor);
     } else if (action === 'c-bold') {
       document.execCommand('bold');
     } else if (action === 'c-italic') {
@@ -1132,16 +1268,32 @@
       const editor = document.getElementById('c-body');
       if (editor) pickImage(editor);
     } else if (action === 'c-del-img') {
-      if (!selectedImg || !selectedImg.parentNode) { UI().toast('先点一下正文里的图片'); return true; }
+      if (!selectedImg || !selectedImg.parentNode) { UI().toast('先点一下正文里的图片或视频'); return true; }
       selectedImg.parentNode.removeChild(selectedImg);
       selectedImg = null;
       syncDeleteBtn();
-      UI().toast('已删除这张图片');
+      UI().toast('已删除');
     } else if (action === 'c-close') {
       editingId = null;
       UI().closeSheet();
     } else if (action === 'c-save') {
       saveForm();
+    } else if (action === 'c-menu') {
+      // 右上角 ··· 的操作菜单：图标 + 文字；再点一下收起
+      const exist = document.querySelector('.navbar .seg-dd-menu');
+      if (exist) { exist.remove(); return true; }
+      const ic = function (n) { return window.QYIcon ? QYIcon.svg(n, 16) : ''; };
+      const menu = document.createElement('div');
+      menu.className = 'seg-dd-menu act-menu';
+      menu.innerHTML =
+        '<button data-action="c-copy" data-id="' + id + '">' + ic('copy') + '复制文案</button>' +
+        '<button data-action="c-long" data-id="' + id + '">' + ic('image') + '生成长图</button>' +
+        '<button data-action="c-del" data-id="' + id + '" class="danger">' + ic('trash') + '删除</button>';
+      el.parentNode.appendChild(menu);
+      // 选了任何一项就收起菜单（事件继续冒泡给对应 handler）
+      menu.addEventListener('click', function (ev) {
+        if (ev.target.closest && ev.target.closest('[data-action]')) menu.remove();
+      });
     } else if (action === 'c-detail') {
       if (UI().rememberScroll) UI().rememberScroll();   // 返回时还原列表位置
       state.detailId = id;
@@ -1163,15 +1315,25 @@
       const e = byId(id);
       if (!e) return true;
       const doDel = function () {
+        // 和物品一样进回收站（存在 prototype 库的 d.trash 里），30 天内可恢复
+        const d = UI().data();
+        d.trash = d.trash || [];
+        d.trash.push({
+          id: QY.uid('tr'),
+          kind: 'collect',
+          deletedAt: QY.iso(QY.today()),
+          entry: e
+        });
+        UI().save();
         db.entries = db.entries.filter(function (x) { return x.id !== id; });
         save();
         state.detailId = null;
         UI().mount();
-        UI().toast('已删除');
+        UI().toast('已移入回收站，' + QY.TRASH_DAYS + ' 天内可恢复');
       };
       if (window.QYDialog) {
-        window.QYDialog.confirm('删除「' + e.title + '」？此操作不可撤销。',
-          { title: '删除随笔', ok: '删除', danger: true }).then(function (ok) { if (ok) doDel(); });
+        window.QYDialog.confirm('把「' + e.title + '」移入回收站？保留 ' + QY.TRASH_DAYS + ' 天，期间可以恢复。',
+          { title: '删除随笔', ok: '移入回收站', cancel: '取消', danger: true }).then(function (ok) { if (ok) doDel(); });
       } else if (window.confirm('删除「' + e.title + '」？此操作不可撤销。')) {
         doDel();
       }
@@ -1191,6 +1353,22 @@
     selectedImg = null;
     const editor = document.getElementById('c-body');
     if (!editor) return;
+
+    // 正文输入顺带刷新全屏写作层的字数
+    editor.addEventListener('input', function () { if (document.getElementById('zen-root')) updateZenCount(); });
+    // 标题字数提示（小红书同款）：0/30，超了变橙——软上限，不拦保存
+    const titleEl = document.getElementById('c-title');
+    const countEl = document.getElementById('c-title-count');
+    if (titleEl && countEl) {
+      const upd = function () {
+        const n = titleEl.value.trim().length;
+        countEl.textContent = n + '/30';
+        countEl.classList.toggle('warn', n > 30);
+      };
+      titleEl.addEventListener('input', upd);
+      upd();
+    }
+
     try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (err) { /* 忽略 */ }
 
     editor.addEventListener('paste', function (ev) {
@@ -1217,15 +1395,18 @@
       }, Promise.resolve());
     });
 
-    // 点一下正文里的图片可以选中，再用工具栏的「删图」把它去掉
+    // 点一下正文里的卡片改值；点图片/视频选中，再用工具栏的「删图」去掉
     editor.addEventListener('click', function (ev) {
-      const im = ev.target && ev.target.tagName === 'IMG' ? ev.target : null;
-      Array.prototype.forEach.call(editor.querySelectorAll('img.img-selected'), function (x) {
+      const chip = ev.target && ev.target.closest ? ev.target.closest('.inline-plug') : null;
+      if (chip) { editPlugChip(chip); return; }
+      const t = ev.target;
+      const media = (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO')) ? t : null;
+      Array.prototype.forEach.call(editor.querySelectorAll('.img-selected'), function (x) {
         x.classList.remove('img-selected');
       });
-      if (im) {
-        im.classList.add('img-selected');
-        selectedImg = im;
+      if (media) {
+        media.classList.add('img-selected');
+        selectedImg = media;
       } else {
         selectedImg = null;
       }
@@ -1238,7 +1419,8 @@
     const el = ev.target && ev.target.closest ? ev.target.closest('[data-action]') : null;
     if (!el) return;
     const a = el.getAttribute('data-action');
-    if (a === 'c-bold' || a === 'c-italic' || a === 'c-image' || a === 'c-gif') ev.preventDefault();
+    if (a === 'c-bold' || a === 'c-italic' || a === 'c-image' || a === 'c-gif' ||
+        a === 'c-plug' || a === 'c-video') ev.preventDefault();
   });
 
   /* ---------------- 供 app.js / backup.js 调用 ---------------- */
@@ -1322,7 +1504,8 @@
       options: options,
       current: input ? input.value : '',
       onPick: function (v) {
-        if (input) input.value = v;
+        // 写回后派发 input，让全屏编辑页把这次选择记为"有改动"
+        if (input) { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); }
         const lbl = document.getElementById(labelId);
         if (lbl) lbl.textContent = v;
       }
@@ -1333,7 +1516,7 @@
     renderList: renderList,
     renderDetailIfAny: renderDetailIfAny,
     // 首页加号 / AI 用：直接打开"新增随笔"表单（等于点收藏页的 + ）
-    openForm: function () { UI().openSheet(formHTML(null)); initEditor(); },
+    openForm: function () { UI().openFullpage('新增随笔', formHTML(null), { save: { action: 'c-save', label: '保存' } }); initEditor(); },
     clearDetail: function () { state.detailId = null; },
     hasDetail: function () { return !!state.detailId; },
     openDetail: function (id) { state.detailId = id; },
@@ -1370,6 +1553,15 @@
       save();
       return entry.id;
     },
+    // 回收站恢复用：整条放回收藏库
+    restoreEntry: function (entry) {
+      if (!entry || !entry.id) return false;
+      if (db.entries.some(function (x) { return x.id === entry.id; })) return false;
+      db.entries.push(entry);
+      save();
+      return true;
+    },
+
     // 给 AI 助手用：按 id 改随笔（字段白名单）与删除随笔
     updateEntry: function (id, patch) {
       const e = db.entries.filter(function (x) { return x.id === id; })[0];

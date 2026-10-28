@@ -1,19 +1,56 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<!-- xctally launcher foreground: the depreciation curve shown inside the app -->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 前景：白色台账卡（标题条 + 两行清单）+ 右下角橙色对勾徽章。
+     画布 108dp，图形控制在中心 66dp 安全区内。 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- 白色圆角卡片 -->
     <path
-        android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="6.34"
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,26 H70 A8,8 0 0 1 78,34 V74 A8,8 0 0 1 70,82 H38 A8,8 0 0 1 30,74 V34 A8,8 0 0 1 38,26 Z" />
+
+    <!-- 标题条（深蓝） -->
+    <path
+        android:fillColor="#2E4A9E"
+        android:pathData="M41,36 H55 Q58,36 58,39 Q58,42 55,42 H41 Q38,42 38,39 Q38,36 41,36 Z" />
+
+    <!-- 清单行 1：圆点 + 横线 -->
+    <path
+        android:fillColor="#9DB4E8"
+        android:pathData="M41,51 m-2.2,0 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0" />
+    <path
+        android:strokeColor="#9DB4E8"
+        android:strokeWidth="3"
         android:strokeLineCap="round"
-        android:pathData="M25.69,31.15 C39.56,31.15 47.49,58.48 81.20,61.25" />
+        android:pathData="M47,50.5 H64" />
+
+    <!-- 清单行 2 -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M81.20,54.35 a6.94,6.94 0 1,0 0,13.88 a6.94,6.94 0 1,0 0,-13.88 z" />
+        android:fillColor="#9DB4E8"
+        android:pathData="M41,62 m-2.2,0 a2.2,2.2 0 1 0 4.4,0 a2.2,2.2 0 1 0 -4.4,0" />
     <path
-        android:fillColor="#2C7BF6"
-        android:pathData="M81.20,58.36 a2.87,2.87 0 1,0 0,5.74 a2.87,2.87 0 1,0 0,-5.74 z" />
+        android:strokeColor="#9DB4E8"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M47,61.5 H59" />
+
+    <!-- 橙色对勾徽章（骑在卡片右下角） -->
+    <path
+        android:fillColor="#FF9500"
+        android:pathData="M66,59 a11,11 0 1 0 0,22 a11,11 0 1 0 0,-22 Z" />
+    <!-- 徽章描一圈白边，和卡片拉开层次 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:pathData="M66,60.2 a9.8,9.8 0 1 0 0,19.6 a9.8,9.8 0 1 0 0,-19.6 Z" />
+    <!-- 白色对勾 -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M60.8,70 L64.4,73.6 L71.6,66.2" />
 </vector>

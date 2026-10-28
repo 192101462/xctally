@@ -19,10 +19,13 @@
   function esc(s) { return UI().esc(s); }
 
   let pending = null;
+  const UI_KEY = 'xctally.ui.v1';   // 和 app.js 的设置存储键保持一致
 
   /* ---------------- 导出 ---------------- */
 
-  function buildBackup() {
+  function buildBackup(sel) {
+    // 无参调用（演示导入）默认全选；传了 sel 则按勾选
+    const on = function (k) { return sel ? sel[k] !== false : true; };
     const d = appData();
     const snap = window.QYV ? QYV.snapshot() : { entries: [], cats: [] };
     // AI 配置（含 Key）与用量随备份走 —— 换手机不用重新配
@@ -38,25 +41,72 @@
       usage: c.usage || null,
       prices: c.prices || null
     } : null;
+    // App 设置：主题 / 背景 / 排序 / 标签页 / 到期提醒配置（存在 UI_KEY 里）
+    let settings = null;
+    try {
+      const raw = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {};
+      settings = {
+        theme: raw.theme,
+        bg: raw.bg,
+        sort: raw.sort,
+        tabs: raw.tabs,
+        reminder: raw.reminder
+      };
+      if (settings.theme == null && settings.bg == null && settings.sort == null &&
+          settings.tabs == null && settings.reminder == null) settings = null;
+    } catch (err) { settings = null; }
     return {
       format: FORMAT,
       version: VERSION,
       exportedAt: QY.iso(QY.today()),
       app: {
-        items: d.items.slice(),
-        events: d.events.slice(),
-        meters: d.meters.slice()
+        items: on('items') ? d.items.slice() : [],
+        events: on('items') ? d.events.slice() : [],
+        cats: on('items') ? (d.cats || []).slice() : [],
+        meters: on('energy') ? d.meters.slice() : []
       },
-      collect: {
+      collect: on('collect') ? {
         entries: snap.entries.slice(),
         cats: snap.cats.slice()
-      },
-      ai: ai
+      } : { entries: [], cats: [] },
+      settings: on('settings') ? settings : null,
+      ai: on('ai') ? ai : null
     };
   }
 
-  function doExport() {
-    const pkg = buildBackup();
+  /* 导出前的选择面板：要哪些就勾哪些（默认全选） */
+  function openExportSheet() {
+    const d = appData();
+    const snap = window.QYV ? QYV.snapshot() : { entries: [], cats: [] };
+    const c = window.QYA ? QYA.cfg() : null;
+    const groups = [
+      { key: 'items', label: '物品与记录', side: d.items.length + ' 件 · ' + d.events.length + ' 条记录（含每日提醒）' },
+      { key: 'collect', label: '收藏随笔', side: snap.entries.length + ' 篇 · ' + snap.cats.length + ' 个分类' },
+      { key: 'energy', label: '能源表具', side: d.meters.length + ' 只表具' },
+      { key: 'settings', label: 'App 设置', side: '主题 / 背景 / 排序 / 标签页 / 到期提醒' },
+      { key: 'ai', label: 'AI 配置', side: (c && c.key ? '已配 Key' : '未配置') + ' · 含明文 Key，注意保管' }
+    ];
+    UI().openSheet('' +
+      '<div class="sheet"><div class="grabber"></div>' +
+        '<h3>导出备份</h3>' +
+        '<div class="group">' +
+          groups.map(function (g) {
+            return '<label class="frow wide" style="padding:11px 14px">' +
+              '<span class="fsw"><input type="checkbox" class="exp-ck" data-k="' + g.key + '" checked /><i></i></span>' +
+              '<span class="fl" style="width:auto;flex:1"><b style="font-size:14.5px;font-weight:600">' + g.label + '</b>' +
+                '<small style="display:block;margin-top:2px;font-size:12px;color:var(--label-3);font-weight:450">' + g.side + '</small></span>' +
+            '</label>';
+          }).join('') +
+        '</div>' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="b-close">取消</button>' +
+          '<button class="btn primary" data-action="b-export-go">导出</button>' +
+        '</div>' +
+      '</div>');
+  }
+
+  function doExport(sel) {
+    const pkg = buildBackup(sel);
     const total = pkg.app.items.length + pkg.collect.entries.length + pkg.app.meters.length;
     const name = 'xctally-backup-' + pkg.exportedAt + '.json';
 
@@ -79,9 +129,13 @@
     d.lastBackup = pkg.exportedAt;
     UI().save();
     UI().mount();
-    UI().toast('备份已导出（物品 ' + pkg.app.items.length + ' · 随笔 ' + pkg.collect.entries.length +
-      ' · 表具 ' + pkg.app.meters.length + '，共 ' + total + ' 条' +
-      (pkg.ai && pkg.ai.key ? '，含 AI 配置——文件里有明文 Key，注意保管' : '') + '）');
+    const bits = [];
+    if (sel && sel.items !== false && pkg.app.items.length) bits.push('物品 ' + pkg.app.items.length);
+    if (sel && sel.collect && pkg.collect.entries.length) bits.push('随笔 ' + pkg.collect.entries.length);
+    if (sel && sel.energy && pkg.app.meters.length) bits.push('表具 ' + pkg.app.meters.length);
+    if (sel && sel.settings && pkg.settings) bits.push('App 设置');
+    if (sel && sel.ai && pkg.ai && pkg.ai.key) bits.push('AI 配置（文件里有明文 Key，注意保管）');
+    UI().toast('备份已导出：' + (bits.length ? bits.join(' · ') : total + ' 条'));
   }
 
   /* ---------------- 恢复 ---------------- */
@@ -274,13 +328,26 @@
       aiApplied = true;
     }
 
+    // App 设置（备份时勾了才有）：主题/背景/排序/标签页/到期提醒
+    let settingsApplied = false;
+    if (pkg.settings) {
+      try {
+        const raw = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {};
+        ['theme', 'bg', 'sort', 'tabs', 'reminder'].forEach(function (k) {
+          if (pkg.settings[k] != null) raw[k] = pkg.settings[k];
+        });
+        localStorage.setItem(UI_KEY, JSON.stringify(raw));
+        settingsApplied = true;
+      } catch (err) { /* 设置恢复失败不拦数据 */ }
+    }
+
     d.lastBackup = pkg.exportedAt || d.lastBackup;
     UI().save();
     pending = null;
     UI().closeSheet();
     UI().mount();
     UI().toast('恢复完成：新增 ' + added + ' 条' + (conflict ? '，' + conflict + ' 条冲突已保留当前版本' : '') +
-      (aiApplied ? '，AI 配置已恢复' : ''));
+      (aiApplied ? '，AI 配置已恢复' : '') + (settingsApplied ? '，App 设置已恢复' : ''));
   }
 
   /* ---------------- 演示：伪造一份"新手机上的备份" ---------------- */
@@ -329,7 +396,20 @@
 
   function handleAction(action, el) {
     if (action.indexOf('b-') !== 0) return false;
-    if (action === 'b-export') doExport();
+    if (action === 'b-export') openExportSheet();
+    else if (action === 'b-export-go') {
+      const sel = {};
+      document.querySelectorAll('.exp-ck').forEach(function (ck) {
+        sel[ck.getAttribute('data-k')] = ck.checked;
+      });
+      if (!sel.items && !sel.collect && !sel.energy && !sel.settings && !sel.ai) {
+        UI().toast('至少选一项再导出');
+        return true;
+      }
+      UI().closeSheet();
+      doExport(sel);
+    }
+    else if (action === 'b-close') UI().closeSheet();
     else if (action === 'b-import') pickFile();
     else if (action === 'b-do-import') doImport();
     else if (action === 'b-close') { pending = null; UI().closeSheet(); }
@@ -340,6 +420,7 @@
     handleAction: handleAction,
     buildBackup: buildBackup,
     doExport: doExport,
+    openExportSheet: openExportSheet,
     pickFile: pickFile,
     demoImport: demoImport
   };

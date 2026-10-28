@@ -545,10 +545,17 @@
     const cls = pct > 85 ? 'danger' : pct > 60 ? 'warn' : '';
     const trend = m.current.trend || 0;
 
+    // 柱子上的月份标签只写两位月（"03"），跨年的 1 月带上年份（"27.01"）——
+    // 十三根柱子挤在一张卡里，"26.03" 这种全宽标签会把两端顶出卡片
+    const barLabel = function (m) {
+      const p = String(m).split('-');
+      return p[1] === '01' ? p[0].slice(2) + '.' + p[1] : p[1];
+    };
     const bars = hist.map(function (h) {
-      return '<div class="bar-col">' +
+      return '<div class="bar-col" data-action="e-bar" data-m="' + h.m +
+        '" data-u="' + h.usage + '" data-c="' + (h.cost || 0) + '"' + (h.now ? ' data-now="1"' : '') + '>' +
         '<div class="bar ' + (h.now ? 'now' : '') + '" style="height:' + (h.usage / max * 100).toFixed(1) + '%"></div>' +
-        '<div class="bar-label">' + QY.fmtMonth(h.m) + '</div>' +
+        '<div class="bar-label">' + barLabel(h.m) + '</div>' +
       '</div>';
     }).join('');
 
@@ -577,8 +584,9 @@
         '<div class="track ' + cls + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
         '<div class="mini-foot">阶梯进度 ' + QY.fmtNum(m.tier.used, 0) + ' / ' + m.tier.cap + ' ' + m.unit + '</div>' +
 
-        '<div class="bars">' + bars + '</div>' +
-        '<div class="mini-foot" style="text-align:center">近 12 个月用量（' + m.unit + '）· 最后一根为本月预测</div>' +
+        '<div class="bars" data-meter="' + m.id + '">' + bars + '</div>' +
+        '<div class="bars-info"></div>' +
+        '<div class="mini-foot" style="text-align:center">近 12 个月用量（' + m.unit + '）· 末位为本月预测</div>' +
 
         '<button class="btn plain" style="width:100%;margin-top:16px" data-action="reading" data-id="' +
           m.id + '">抄表 / 记一笔</button>' +
@@ -674,6 +682,55 @@
     // 覆盖层挂在 body 上（picker / 确认框），关面板时一并清掉，避免留下孤儿浮层
     const stray = document.querySelectorAll('#picker-layer, #qy-confirm');
     Array.prototype.forEach.call(stray, function (el) { el.remove(); });
+    // 全屏编辑页也一并关掉：表单的"保存成功"路径调的就是 closeSheet
+    closeFullpage(true);
+  }
+
+  /* ---------------- 全屏编辑页 ----------------
+   * 新增 / 编辑这类一填半天的表单不再用底部弹窗——弹窗点一下暗背景就没了，
+   * 填了一半的内容全丢。全屏页没有暗背景，返回要走 ‹ 或系统返回键，
+   * 有改动时还会再问一次"确定放弃吗"。 */
+  let fpDirty = false;
+
+  function openFullpage(title, html, opts) {
+    opts = opts || {};
+    const root = $('#fp-root');
+    // 传了 save 就在顶栏右侧放保存按钮：常见的勾形保存图标（title 保留文字提示）
+    const right = opts.save
+      ? '<button type="button" class="fp-save" data-action="' + esc(opts.save.action) +
+          '" title="' + esc(opts.save.label || '保存') + '" aria-label="' + esc(opts.save.label || '保存') + '">' +
+          (window.QYIcon ? QYIcon.svg('checkcircle', 22) : esc(opts.save.label || '保存')) + '</button>'
+      : '<span class="fp-spacer"></span>';
+    root.innerHTML =
+      '<div class="fp">' +
+        '<div class="fp-head">' +
+          '<button type="button" class="fp-back" data-action="fp-back" aria-label="返回">‹</button>' +
+          '<h3>' + esc(title) + '</h3>' +
+          right +
+        '</div>' +
+        '<div class="fp-page fsheet">' + html + '</div>' +
+      '</div>';
+    root.classList.add('open');
+    // 从"干净"开始：只有真实的输入/程序写回才标脏——
+    // 没动过的内容返回就不该问"未保存的改动"
+    fpDirty = false;
+    const mark = function () { fpDirty = true; };
+    root.addEventListener('input', mark, true);
+    root.addEventListener('change', mark, true);
+  }
+
+  function closeFullpage(force) {
+    const root = $('#fp-root');
+    if (!root.classList.contains('open')) return;
+    if (!force && fpDirty) {
+      QYDialog.confirm('改动还没保存，确定放弃吗？', {
+        title: '未保存的改动', ok: '放弃修改', cancel: '继续编辑', danger: true
+      }).then(function (yes) { if (yes) closeFullpage(true); });
+      return;
+    }
+    root.classList.remove('open');
+    root.innerHTML = '';
+    fpDirty = false;
   }
 
   function itemFormHTML() {
@@ -727,22 +784,21 @@
   function readingFormHTML(meterId) {
     const meters = data.meters || [];
     const cur = meters.filter(function (m) { return m.id === meterId; })[0] || meters[0] || {};
+    // 全屏编辑页的内容片段（外壳和顶栏由 openFullpage 提供）
     return '' +
-      '<div class="sheet">' +
-        '<div class="grabber"></div>' +
-        '<h3>抄表 / 记一笔</h3>' +
-        '<p class="hint">记下读数，阶梯价和趋势自动算</p>' +
-        '<div class="field"><label>表具</label>' +
-          '<button type="button" class="picker-field" data-action="pick-meter">' +
-            '<span id="pf-meter">' + esc(cur.name ? cur.name + '（' + cur.unit + '）' : '选择表具') + '</span>' +
+      ''
+      '<div class="fsec">抄表</div>' +
+      '<div class="fcard">' +
+        '<div class="frow"><span class="fl">表具</span>' +
+          '<button type="button" class="fpick" data-action="pick-meter">' +
+            '<span class="fpick-v" id="pf-meter">' + esc(cur.name ? cur.name + '（' + cur.unit + '）' : '选择表具') + '</span>' +
             '<span class="chev">›</span></button>' +
           '<input type="hidden" id="f-meter" value="' + (cur.id || '') + '" /></div>' +
-        '<div class="field"><label>本月用量</label>' +
-          '<input id="f-usage" class="input" type="number" step="0.1" placeholder="例如：236" /></div>' +
-        '<div class="sheet-actions">' +
-          '<button class="btn plain" data-action="close-sheet">取消</button>' +
-          '<button class="btn primary" data-action="save-reading">保存</button>' +
-        '</div>' +
+        '<div class="frow"><span class="fl">本月用量</span>' +
+          '<input id="f-usage" class="input finput" type="number" step="0.1" inputmode="decimal" placeholder="例如：236" /></div>' +
+      '</div>' +
+      '<div class="sheet-actions">' +
+        '<button class="btn primary" data-action="save-reading">保存</button>' +
       '</div>';
   }
 
@@ -1027,7 +1083,33 @@
       if (window.QYV && QYV.openForm) QYV.openForm();
       else toast('收藏模块不可用');
     } else if (action === 'reading') {
-      openSheet(readingFormHTML(id || (data.meters[0] && data.meters[0].id)));
+      openFullpage('抄表 / 记一笔', readingFormHTML(id || (data.meters[0] && data.meters[0].id)));
+    } else if (action === 'e-bar') {
+      // 点柱状图的一根柱子：选中高亮 + 在图下方出当月明细
+      const col = el;
+      const barsBox = col.parentNode;
+      const info = barsBox.parentNode.querySelector('.bars-info');
+      Array.prototype.forEach.call(barsBox.querySelectorAll('.bar-col.sel'), function (c) {
+        c.classList.remove('sel');
+      });
+      const already = col.classList.contains('sel');
+      col.classList.toggle('sel', !already);
+      if (info) {
+        if (already) {
+          info.classList.remove('show');
+        } else {
+          const m = col.getAttribute('data-m') || '';
+          const p = String(m).split('-');
+          const mm = p[0] + ' 年 ' + Number(p[1] || 1) + ' 月';
+          const u = Number(col.getAttribute('data-u') || 0);
+          const c = Number(col.getAttribute('data-c') || 0);
+          info.innerHTML = mm + ' · 用量 ' + QY.fmtNum(u) + ' · 费用 ' + QY.fmtMoney(c) +
+            (col.getAttribute('data-now') ? ' <small>（本月预测）</small>' : '');
+          info.classList.add('show');
+        }
+      }
+    } else if (action === 'fp-back') {
+      closeFullpage(false);          // 带未保存检查的返回
     } else if (action === 'close-sheet') {
       closeSheet();
     } else if (action === 'save-item') {
@@ -1281,7 +1363,7 @@
       '<div class="group">' +
         row('b-export', '📤', '导出完整备份', '物品 + 随笔 + 能源', chev) +
         row('b-import', '📥', '导入数据', '先对比再合并，冲突保留本机版本', chev) +
-        row('i-trash', '🗑', '回收站', '删除的物品保留 ' + QY.TRASH_DAYS + ' 天，可恢复', chev) +
+        row('i-trash', '🗑', '回收站', '删除的物品和随笔保留 ' + QY.TRASH_DAYS + ' 天，可恢复', chev) +
       '</div>' +
       head('外观') +
       '<div class="group">' +
@@ -1296,6 +1378,10 @@
       '</div>' +
       '<div class="sheet-actions" style="margin-top:16px">' +
         '<button class="btn plain" data-action="close-sheet">完成</button>' +
+      '</div>' +
+      '<div class="set-foot">' +
+        '<div class="set-foot-ver">' + esc(nativeVersion() || '预览版') + '</div>' +
+        '<div class="set-foot-brand">【@琪遇·琪遇台账】</div>' +
       '</div>' +
     '</div>');
   }
@@ -1434,7 +1520,8 @@
     const memImg = window.QYV ? QYV.imageBytes() : 0;
 
     if (!path.length || path[path.length - 1] === 'root') {
-      return setNav('set-close', '我的', '设置', '') +
+      // 包一层撑满滚动容器：内容不满屏时版本署名也贴在底部（margin-top:auto）
+      return '<div class="set-page-wrap">' + setNav('set-close', '我的', '设置', '') +
         '<div class="group" style="margin-top:16px">' +
           setRow('set-go', 'AI助手', { k: 'ai', side: aiReady ? '已开启' : '未配置', chev: true }) +
           setRow('set-go', '数据管理', { k: 'data', chev: true }) +
@@ -1448,7 +1535,11 @@
         '</div>' +
         '<div class="group" style="margin-top:14px">' +
           setRow('upd-check', '检查更新', { side: nativeVersion() ? '当前 v' + nativeVersion() : '', chev: true }) +
-        '</div>';
+        '</div>' +
+        '<div class="set-foot">' +
+          '<div class="set-foot-ver">' + esc(nativeVersion() || '预览版') + '</div>' +
+          '<div class="set-foot-brand">【@琪遇·琪遇台账】</div>' +
+        '</div></div>';
     }
 
     const top = path[path.length - 1];
@@ -1470,7 +1561,7 @@
       return nav + '<div class="group" style="margin-top:16px">' +
         setRow('b-export', '导出完整备份', { chev: true }) +
         setRow('b-import', '导入数据', { chev: true }) +
-        setRow('i-trash', '回收站', { side: '保留 ' + QY.TRASH_DAYS + ' 天', chev: true }) +
+        setRow('i-trash', '回收站', { side: '物品和随笔 · 保留 ' + QY.TRASH_DAYS + ' 天', chev: true }) +
         setRow('set-go', '列表排序', { k: 'sort', side: itemsSort || '默认', chev: true }) +
         '</div>';
     }
@@ -1566,6 +1657,8 @@
     toast: toast,
     openSheet: openSheet,
     closeSheet: closeSheet,
+    openFullpage: openFullpage,
+    closeFullpage: closeFullpage,
     mount: mount,
     goItem: goItem,
     backFromDetail: backFromDetail,
@@ -1606,26 +1699,62 @@
     }).join('');
   }
 
+  const UPD_SKIP_KEY = 'xctally.upd.skip.v1';
+  let updFromAuto = false;      // 这次检查是 App 启动的静默检查（结果不 toast、受"今天不再提醒"约束）
+
+  /* 更新弹窗：居中浮空小卡（不再是底部大面板）。
+   * auto = 启动自动弹出 → "暂不"会记下今天不再提醒；手动检查的"以后再说"不记。 */
+  function openUpdatePop(r, auto) {
+    if (!window.QYDialog) return;
+    QYDialog.mount(
+      '<div class="picker-card upd-pop">' +
+        '<h3>发现新版本</h3>' +
+        '<div class="upd-ver">v' + esc(r.versionName || '') + '</div>' +
+        '<div class="upd-notes">' + updNotesHtml(r.notes) + '</div>' +
+        '<div class="sheet-actions" style="margin-top:14px">' +
+          '<button class="btn plain" data-action="upd-later"' + (auto ? ' data-skip="1"' : '') + '>' +
+            (auto ? '今天不再提醒' : '以后再说') + '</button>' +
+          '<button class="btn primary" data-action="upd-download" data-url="' + esc(r.apkUrl || '') + '">立即更新</button>' +
+        '</div>' +
+      '</div>', true);
+  }
+
   window.QYUpd = {
     onResult: function (json) {
       let r;
       try { r = typeof json === 'string' ? JSON.parse(json) : json; }
-      catch (err) { toast('更新信息解析失败'); return; }
+      catch (err) { if (!updFromAuto) toast('更新信息解析失败'); updFromAuto = false; return; }
+      const wasAuto = updFromAuto;
+      updFromAuto = false;
       if (r.code === 'update') {
-        openSheet('' +
-          '<div class="sheet"><div class="grabber"></div>' +
-            '<h3>发现新版本 v' + esc(r.versionName || '') + '</h3>' +
-            '<div class="upd-notes">' + updNotesHtml(r.notes) + '</div>' +
-            '<div class="sheet-actions">' +
-              '<button class="btn plain" data-action="upd-later">以后再说</button>' +
-              '<button class="btn primary" data-action="upd-download" data-url="' + esc(r.apkUrl || '') + '">下载并安装</button>' +
-            '</div>' +
-          '</div>');
-      } else if (r.code === 'latest') {
-        toast('已是最新版本' + (r.versionName ? '（v' + r.versionName + '）' : ''));
-      } else {
+        if (wasAuto) {
+          // 用户今天已经点过"今天不再提醒"：静默跳过，明天再弹
+          if (localStorage.getItem(UPD_SKIP_KEY) === QY.iso(QY.today())) return;
+          openUpdatePop(r, true);
+        } else {
+          openUpdatePop(r, false);
+        }
+      } else if (r.code === 'error' && !wasAuto) {
         toast('检查更新失败：' + (r.message || '网络错误'));
       }
+      // latest（已是最新）彻底静默：启动检查和手动检查都不再提示"当前版本 xxx"
+    },
+    /* 原生侧发现不在 WLAN：先问用户要不要消耗流量再下（确认后带 force 重入） */
+    confirmCellular: function (url) {
+      if (!window.QYDialog) return;
+      QYDialog.confirm('当前不在 WLAN 下，下载更新会消耗移动流量，继续吗？', {
+        title: '使用移动流量下载', ok: '继续下载', cancel: '等有 WiFi 再说', danger: true
+      }).then(function (yes) {
+        if (yes && window.QYAndroid && QYAndroid.downloadUpdate) {
+          QYAndroid.downloadUpdate(url, true);
+        }
+      });
+    },
+    /* App 启动的静默检查：结果由 onResult 按"今天不再提醒"的约定处理 */
+    autoCheck: function () {
+      if (!(window.QYAndroid && QYAndroid.checkUpdate)) return;
+      updFromAuto = true;
+      try { QYAndroid.checkUpdate(); } catch (err) { updFromAuto = false; }
     }
   };
 
@@ -1648,11 +1777,19 @@
       const url = el.getAttribute('data-url') || '';
       if (window.QYAndroid && QYAndroid.downloadUpdate) {
         QYAndroid.downloadUpdate(url);
+        toast('开始下载，进度看通知栏');
+        const lay = document.getElementById('picker-layer');
+        if (lay) lay.remove();
       } else {
         toast('请在手机 App 里操作');
       }
     } else if (act === 'upd-later') {
-      closeSheet();
+      if (el.getAttribute('data-skip')) {
+        localStorage.setItem(UPD_SKIP_KEY, QY.iso(QY.today()));
+      }
+      const lay = document.getElementById('picker-layer');
+      if (lay) lay.remove();
+      else closeSheet();
     }
     return true;
   });
@@ -1660,6 +1797,8 @@
   /* ---------------- 启动 ---------------- */
 
   applyTheme();
+  // 启动后静默检查一次新版本（用户点过"今天不再提醒"的话当天不会再弹）
+  setTimeout(function () { if (window.QYUpd && QYUpd.autoCheck) QYUpd.autoCheck(); }, 1500);
   if (window.matchMedia) {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     if (mq.addEventListener) {
@@ -1783,7 +1922,7 @@
     if (window.QYI) QYI.openForm(null);
     else openSheet(itemFormHTML());
   }
-  if (bootHash.indexOf('reading') >= 0) openSheet(readingFormHTML(data.meters[0] && data.meters[0].id));
+  if (bootHash.indexOf('reading') >= 0) openFullpage('抄表 / 记一笔', readingFormHTML(data.meters[0] && data.meters[0].id));
   if (bootHash.indexOf('cform') >= 0) {
     const addBtn = document.querySelector('[data-action="c-add"]');
     if (addBtn) addBtn.click();

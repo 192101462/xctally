@@ -36,6 +36,7 @@
 
   const pending = {};   // pickFile 的待回调：id → callback
   const pendingImg = {};   // pickImage 的待回调：id → callback
+  const pendingVid = {};   // pickVideo 的待回调：id → callback
 
   window.QYPlatform = {
     native: !!native,
@@ -118,6 +119,37 @@
       if (cb) cb(dataUrl == null ? null : String(dataUrl));
     },
 
+    /* 选一段短视频：原生走壳选择器，浏览器走文件选择；
+     * 不做转码（纯前端没这条件），大小上限由调用方把关 */
+    pickVideo: function (cb) {
+      if (native && native.pickVideo) {
+        const id = 'vid' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        pendingVid[id] = cb;
+        try { native.pickVideo(id); return; } catch (err) { /* 落到浏览器兜底 */ }
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'video/*';
+      input.style.display = 'none';
+      document.body.appendChild(input);
+      input.addEventListener('change', function () {
+        const f = input.files && input.files[0];
+        input.remove();
+        if (!f) { cb(null); return; }
+        const fr = new FileReader();
+        fr.onload = function () { cb(String(fr.result)); };
+        fr.readAsDataURL(f);
+      });
+      input.click();
+    },
+
+    /* 原生侧选完视频后回传 dataURL（由原生调用） */
+    _deliverVideo: function (id, dataUrl) {
+      const cb = pendingVid[id];
+      delete pendingVid[id];
+      if (cb) cb(dataUrl == null ? null : String(dataUrl));
+    },
+
     /* 把待提醒清单交给原生，让系统去发通知。
      * hour = 提醒钟点（安卓原生按它排每天的班；鸿蒙壳暂用默认 9 点，
      * 多传参数会撞 ArkWeb 的方法签名，所以那边只传清单）。 */
@@ -127,6 +159,14 @@
           if (kind === 'android') native.scheduleReminders(JSON.stringify(list || []), Number(hour) || 9);
           else native.scheduleReminders(JSON.stringify(list || []));
         } catch (err) { /* 忽略 */ }
+      }
+    },
+
+    /* 物品每日提醒（吃药/喝牛奶打卡）：list = [{id,name,hour,alarm}]。
+     * 目前只有安卓壳支持；不支持的壳静默跳过（网页侧功能照常）。 */
+    scheduleItemReminders: function (json) {
+      if (native && native.scheduleItemReminders) {
+        try { native.scheduleItemReminders(String(json || '[]')); } catch (err) { /* 忽略 */ }
       }
     },
 

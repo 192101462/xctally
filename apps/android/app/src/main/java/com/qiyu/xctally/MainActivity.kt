@@ -8,6 +8,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -121,6 +123,48 @@ class MainActivity : AppCompatActivity() {
 
     private var pendingImageId: String? = null
     private var cameraUri: Uri? = null
+    private var pendingVideoId: String? = null
+
+    /**
+     * 选一段短视频：不转码（WebView 里没这条件），读成 base64 回传。
+     * localStorage 撑不住大文件，超 2.5MB 直接劝退。
+     */
+    private val videoLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val id = pendingVideoId
+        pendingVideoId = null
+        if (id == null) return@registerForActivityResult
+        val uri = result.data?.data
+        if (result.resultCode != RESULT_OK || uri == null) {
+            deliverVideo(id, null)
+            return@registerForActivityResult
+        }
+        try {
+            val bytes = contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            if (bytes == null || bytes.isEmpty()) {
+                deliverVideo(id, null)
+                return@registerForActivityResult
+            }
+            if (bytes.size > 2_500_000) {
+                toast(String.format("视频太大（%.1fMB）：只能内嵌 2.5MB 内的短片", bytes.size / 1048576.0))
+                deliverVideo(id, null)
+                return@registerForActivityResult
+            }
+            val mime = contentResolver.getType(uri) ?: "video/mp4"
+            deliverVideo(id, "data:$mime;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP))
+        } catch (e: Exception) {
+            deliverVideo(id, null)
+            toast("读不出这段视频：${e.message}")
+        }
+    }
+
+    private fun deliverVideo(id: String, dataUrl: String?) {
+        val js = "window.QYPlatform && window.QYPlatform._deliverVideo(" +
+            JSONObject.quote(id) + "," +
+            (if (dataUrl == null) "null" else JSONObject.quote(dataUrl)) + ")"
+        runOnUiThread { webView.evaluateJavascript(js, null) }
+    }
 
     /**
      * 选图片：拍照或从相册选择，返回 dataURL 给网页。
@@ -437,9 +481,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 现在是否在 WLAN 上（更新下载前用来提示流量）。
+     *  判断不了（权限/兼容层异常）就当在 WLAN——宁可少提示也不误拦。 */
+    private fun isOnWlan(): Boolean {
+        return try {
+            val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val nw = cm.activeNetwork ?: return true
+            val caps = cm.getNetworkCapabilities(nw) ?: return true
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } catch (e: Exception) {
+            true
+        }
+    }
+
     /** 自己下载 APK：进度发自己的通知（gitee 直链会 302 到 CDN，HttpURLConnection 自动跟随），
-     *  下完落盘改名、直接唤起安装器。整个过程不依赖任何系统组件的可选实现。 */
-    private fun downloadUpdateInternal(url: String) {
+     *  下完落盘改名、直接唤起安装器。整个过程不依赖任何系统组件的可选实现。 */    private fun downloadUpdateInternal(url: String) {
         if (!downloading.compareAndSet(false, true)) {
             toast("已经在下载了，稍等一下")
             return
@@ -696,10 +753,36 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        /** 选一段短视频（不转码，2.5MB 内原样回传 dataURL） */
+        @JavascriptInterface
+        fun pickVideo(id: String) {
+            runOnUiThread {
+                pendingVideoId = id
+                try {
+                    videoLauncher.launch(
+                        Intent(Intent.ACTION_GET_CONTENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "video/*"
+                        }
+                    )
+                } catch (e: Exception) {
+                    pendingVideoId = null
+                    deliverVideo(id, null)
+                    toast("打不开视频选择：${e.message}")
+                }
+            }
+        }
+
         /** 网页把到期清单交过来（hour = 每天几点提醒），交给 WorkManager 排班 */
         @JavascriptInterface
         fun scheduleReminders(json: String, hour: Int) {
             ReminderWorker.save(this@MainActivity, json, hour)
+        }
+
+        /** 物品每日提醒清单：[{id, name, hour, alarm}]，开/关/改时间网页都会推全量 */
+        @JavascriptInterface
+        fun scheduleItemReminders(json: String) {
+            ItemReminderWorker.save(this@MainActivity, json)
         }
 
         /** 设置页「发条测试通知」：立即验证通知链路 */
@@ -714,11 +797,23 @@ class MainActivity : AppCompatActivity() {
             checkUpdateInternal()
         }
 
-        /** 下载并安装更新（apkUrl 来自检查结果的回传） */
+        /** 下载并安装更新（apkUrl 来自检查结果的回传）。
+         *  force=false 时先看网络：不在 WLAN 就回调网页确认"要消耗流量"再下。 */
         @JavascriptInterface
-        fun downloadUpdate(url: String) {
+        fun downloadUpdate(url: String) { downloadUpdate(url, false) }
+
+        @JavascriptInterface
+        fun downloadUpdate(url: String, force: Boolean) {
             if (url.isBlank()) {
                 toast("下载地址为空：请先把 APK 传到 gitee Release 并填进 version.json")
+                return
+            }
+            if (!force && !isOnWlan()) {
+                runOnUiThread {
+                    webView.evaluateJavascript(
+                        "window.QYUpd && window.QYUpd.confirmCellular(" +
+                            JSONObject.quote(url) + ")", null)
+                }
                 return
             }
             downloadUpdateInternal(url)
@@ -795,7 +890,23 @@ class MainActivity : AppCompatActivity() {
               if (cb) { cb.click(); } else { cf.remove(); }
               return 'handled';
             }
-            // 2) 底部面板
+            // 2) 详情右上角 ··· 的操作菜单
+            var dm = document.querySelector('.seg-dd-menu');
+            if (dm) { dm.remove(); return 'handled'; }
+            // 3) 全屏写作层：先收起，回到编辑页
+            var zen = document.getElementById('zen-root');
+            if (zen) {
+              var zd = zen.querySelector('[data-action="c-zen-done"]');
+              if (zd) { zd.click(); return 'handled'; }
+              zen.remove(); return 'handled';
+            }
+            // 3) 全屏编辑页（新增/编辑表单）：返回 = 顶栏 ‹（网页侧自带未保存确认）
+            var fp = document.getElementById('fp-root');
+            if (fp && fp.classList.contains('open')) {
+              var fb = fp.querySelector('[data-action="fp-back"]');
+              if (fb) { fb.click(); return 'handled'; }
+            }
+            // 3) 底部面板
             var sheet = document.getElementById('sheet-root');
             if (sheet && sheet.classList.contains('open')) {
               var scrim = sheet.querySelector('.scrim');
