@@ -490,10 +490,19 @@
   function openReminderSheet(item) {
     const r = item.reminder || { hour: 9, minute: 0, alarm: false };
     const QUICK = ['10:00', '12:00', '16:00', '18:00', '20:00'];
+    // 通知链路状态：关着的话到点也弹不出来，当面说清并给一键去设置
+    const notifRow = (window.QYPlatform && QYPlatform.native && QYPlatform.notifOn && !QYPlatform.notifOn())
+      ? '<div class="row static" data-action="i-notif-set" style="margin:4px 0 10px;background:rgba(255,59,48,0.08);border-radius:var(--r-md)">' +
+          '<div class="tl-dot">🔔</div>' +
+          '<div class="row-main"><div class="row-title" style="color:var(--red)">通知未开启，到点不会弹</div>' +
+            '<div class="row-sub">点这里去系统设置打开通知权限</div></div>' +
+          '<div class="row-side"><span class="chev">›</span></div></div>'
+      : '';
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
         '<h3>每日提醒</h3>' +
         '<p class="hint">每天 ' + (r.hour == null ? 9 : r.hour) + ':' + ((r.minute || 0) < 10 ? '0' : '') + (r.minute || 0) + ' 提醒「' + esc(item.name) + '」</p>' +
+        notifRow +
         '<div class="fsec">提醒时间</div>' +
         '<div class="wheel-box" id="r-wheel">' +
           '<div class="wheel-hl"></div>' +
@@ -1973,6 +1982,9 @@
     else if (action === 'i-menu') { const it = byId(id); if (it) openItemMenu(it); }
     else if (action === 'i-long') { const it = byId(id); if (it) makeItemLongImage(it); }
     else if (action === 'i-remind') { const it = byId(id); if (it) openReminderSheet(it); }
+    else if (action === 'i-notif-set') {
+      if (window.QYPlatform && QYPlatform.openNotifSettings) QYPlatform.openNotifSettings();
+    }
     else if (action === 'i-remind-quick') {
       // 快捷时间：滚轮直接跳到该时刻
       const q = String(el.getAttribute('data-v') || '').split(':');

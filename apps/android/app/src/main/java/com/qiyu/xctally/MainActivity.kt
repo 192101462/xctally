@@ -589,10 +589,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun askNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!ok) notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val ok = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            if (!ok) { notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS); return }
+        }
+        // Android 12 及以下没有运行时弹窗，或部分兼容层（卓易通等）弹不出来：
+        // 通知总开关被关时引导用户去系统设置打开
+        maybeAskNotifWithFallback()
+    }
+
+    private var notifFallbackShown = false
+    private fun maybeAskNotifWithFallback() {
+        if (notifFallbackShown) return
+        val nm = androidx.core.app.NotificationManagerCompat.from(this)
+        if (nm.areNotificationsEnabled()) return
+        notifFallbackShown = true
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("开启通知")
+            .setMessage("每日提醒要靠系统通知才能弹出。当前通知被关闭了，去系统设置里打开「琪遇台账」的通知权限即可。")
+            .setPositiveButton("去设置") { _, _ ->
+                try {
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    })
+                } catch (e: Exception) { }
+            }
+            .setNegativeButton("以后再说", null)
+            .show()
     }
 
     /** 把选到的文件内容回传给网页里的 await 回调 */
@@ -787,12 +811,48 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface
         fun scheduleItemReminders(json: String) {
             ItemReminders.save(this@MainActivity, json)
+            // 用户真的开了提醒，但系统通知被关着——提醒到点也弹不出来，
+            // 这里直接把话挑明并带去设置（每次启动最多提醒一次，不烦人）
+            val has = try { ItemReminders.load(this@MainActivity).length() > 0 } catch (e: Exception) { false }
+            if (has && !notifOn()) runOnUiThread { maybeAskNotifWithFallback() }
         }
 
-        /** 设置页「发条测试通知」：立即验证通知链路 */
+        /** 通知链路通不通（权限 + 总开关都算） */
+        @JavascriptInterface
+        fun notifOn(): Boolean {
+            val permOk = android.os.Build.VERSION.SDK_INT < 33 ||
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    this@MainActivity, android.Manifest.permission.POST_NOTIFICATIONS
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            return permOk &&
+                androidx.core.app.NotificationManagerCompat.from(this@MainActivity)
+                    .areNotificationsEnabled()
+        }
+
+        /** 打开本 App 的系统通知设置页（权限/通道/总开关都在那里） */
+        @JavascriptInterface
+        fun openNotifSettings() {
+            runOnUiThread {
+                try {
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                        putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                    })
+                } catch (e: Exception) {
+                    // 兜底：老系统没有这个页面就进应用详情
+                    try {
+                        startActivity(android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.parse("package:" + packageName)))
+                    } catch (e2: Exception) { }
+                }
+            }
+        }
+
+        /** 设置页「发条测试通知」：立即验证通知链路（到期 + 闹钟两条通道都发一条） */
         @JavascriptInterface
         fun testReminder() {
             ReminderWorker.postTest(this@MainActivity)
+            ItemReminders.notify(this@MainActivity, "test", "测试提醒（闹钟通道）", true)
         }
 
         /** 检查更新：结果通过 window.QYUpd.onResult(json) 回调给网页 */

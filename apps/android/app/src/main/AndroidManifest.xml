@@ -17,6 +17,8 @@
     <!-- 每日提醒：重启 / 覆盖安装后要把闹钟排回来 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 精确闹钟（Android 12+；拿不到会自动退回普通闹钟，仍能响） -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <application
         android:allowBackup="true"
@@ -38,10 +40,12 @@
         </activity>
 
         <!-- 每日提醒的闹钟接收器：到点发通知 + 排下一个；开机/更新后重排 -->
+        <!-- exported 必须 true：BOOT_COMPLETED / MY_PACKAGE_REPLACED 是系统广播，
+             非 exported 的接收器收不到（都是受保护广播，只有系统能发，没有安全问题） -->
         <receiver
             android:name=".ItemAlarmReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

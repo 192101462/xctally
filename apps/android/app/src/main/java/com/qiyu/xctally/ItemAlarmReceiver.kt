@@ -98,8 +98,21 @@ object ItemReminders {
             am.cancel(pi)
             return
         }
-        am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP,
-            System.currentTimeMillis() + millisToNearest(targets), pi)
+        val at = System.currentTimeMillis() + millisToNearest(targets)
+        // 精确闹钟优先（误差秒级）；没权限或系统不给就用普通 AllowWhileIdle（Doze 里
+        // 也照常触发，误差通常一两分钟）。两条路都不会抛异常出去。
+        try {
+            val exact = if (android.os.Build.VERSION.SDK_INT >= 31) am.canScheduleExactAlarms() else true
+            if (exact) {
+                am.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi)
+            } else {
+                am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi)
+            }
+        } catch (e: SecurityException) {
+            am.setAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, at, pi)
+        } catch (e: Exception) {
+            // 连普通闹钟都设不上（极少见的兼容层）：静默，开 App 时还会重排
+        }
     }
 
     private fun pending(ctx: Context): PendingIntent {

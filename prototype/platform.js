@@ -170,6 +170,20 @@
       }
     },
 
+    /* 通知链路状态与跳转（提醒能不能弹出来，取决于系统通知开关/权限） */
+    notifOn: function () {
+      if (native && native.notifOn) {
+        try { return !!native.notifOn(); } catch (err) { }
+      }
+      return true;   // 不支持的壳按"没问题"处理，不打扰
+    },
+    openNotifSettings: function () {
+      if (native && native.openNotifSettings) {
+        try { native.openNotifSettings(); return true; } catch (err) { }
+      }
+      return false;
+    },
+
     /* 安卓 Toast / 鸿蒙 promptAction 提示 */
     toast: function (msg) {
       if (native && native.toast) {
