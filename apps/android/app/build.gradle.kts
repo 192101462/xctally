@@ -41,8 +41,8 @@ android {
         applicationId = "com.qiyu.xctally"
         minSdk = 26
         targetSdk = 37
-        versionCode = 15
-        versionName = "1.13"
+        versionCode = 16
+        versionName = "1.13.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
