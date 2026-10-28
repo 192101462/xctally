@@ -395,7 +395,7 @@
   /* 排序选项词表（提示词注入 + 动作校验共用）。加新排序时同步这里和设置页。 */
   const SORT_OPTIONS = {
     items: ['date', 'dateAsc', 'price', 'daily', 'expiry', 'name'],
-    collect: ['recent', 'oldest', 'title'],
+    note: ['recent', 'oldest', 'title'],
     energy: ['amount', 'name']
   };
 
@@ -411,7 +411,7 @@
         (a.acquiredAt ? '，获得日期 ' + a.acquiredAt : '');
     }
     if (a.type === 'add_note') {
-      return '新增收藏随笔「' + (a.title || '未命名') + '」' +
+      return '新增随笔「' + (a.title || '未命名') + '」' +
         (a.cat ? '，分类 ' + a.cat : '') +
         (a.rating ? '，★' + a.rating : '') +
         (a.price != null ? '，价格 ' + a.price : '') +
@@ -465,11 +465,11 @@
         a.ids.forEach(function (id) { want[id] = true; });
         list = list.filter(function (t) { return want[t.id]; });
       } else {
-        if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+        if (f.kind) list = list.filter(function (t) { return (t.kind === 'collect' ? 'note' : (t.kind || 'item')) === f.kind; });
         if (f.query) {
           const q = String(f.query).toLowerCase();
           list = list.filter(function (t) {
-            const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+            const it = (t.kind === 'note' || t.kind === 'collect') ? (t.entry || {}) : (t.item || {});
             return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
               .toLowerCase().indexOf(q) >= 0;
           });
@@ -480,8 +480,8 @@
       if (!list.length) return verb + '（没有匹配的条目）';
       return verb + ' ' + list.length + ' 项：' +
         list.slice(0, 5).map(function (t) {
-          const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
-          return t.kind === 'collect' ? (it.title || '随笔') : (it.name || '物品');
+          const it = (t.kind === 'note' || t.kind === 'collect') ? (t.entry || {}) : (t.item || {});
+          return (t.kind === 'note' || t.kind === 'collect') ? (it.title || '随笔') : (it.name || '物品');
         }).join('、') + (list.length > 5 ? ' 等' : '');
     }
     if (a.type === 'restore_item') {
@@ -520,11 +520,12 @@
       const e2 = findNote(a.title);
       return '删除随笔「' + ((e2 && e2.title) || a.title) + '」';
     }
-    if (a.type === 'set_sort') return '把' + (a.group === 'items' ? '物品' : a.group === 'collect' ? '收藏' : '能源') +
+    if (a.type === 'set_sort') return '把' + (a.group === 'items' ? '物品' : a.group === 'energy' ? '能源' : '随笔') +
       '列表按「' + a.value + '」排序';
     if (a.type === 'set_tabs') {
       const parts = [];
-      if (a.collect != null) parts.push('收藏' + (a.collect ? '显示' : '隐藏'));
+      const tabNote = a.note != null ? a.note : a.collect;
+      if (tabNote != null) parts.push('随笔' + (tabNote ? '显示' : '隐藏'));
       if (a.energy != null) parts.push('能源' + (a.energy ? '显示' : '隐藏'));
       return '界面标签：' + parts.join('，');
     }
@@ -532,7 +533,7 @@
       const names = { default: '默认', p1: '奶油', p2: '淡粉', p3: '雾蓝', p4: '薄荷', p5: '浅紫' };
       return '切换浅色背景为「' + (names[a.preset] || a.preset) + '」（深色模式不受影响）';
     }
-    if (a.type === 'goto') return '打开' + ({ home: '首页', items: '物品', collect: '收藏', energy: '能源', me: '我的' }[a.tab] || a.tab) + '页';
+    if (a.type === 'goto') return '打开' + ({ home: '首页', items: '物品', note: '随笔', collect: '随笔', energy: '能源', me: '我的' }[a.tab] || a.tab) + '页';
     if (a.type === 'export_backup') return '导出完整备份（会弹系统保存面板）';
     if (a.type === 'clear_data') return '清空全部数据（会连问 3 次确认）';
     return a.type;
@@ -568,7 +569,7 @@
         return;
       }
       if (a.type === 'add_note') {
-        // 新增收藏随笔：标题必填，插件值按 App 约定收口
+        // 新增随笔：标题必填，插件值按 App 约定收口
         if (!window.QYV || !QYV.addEntry) { dropped++; return; }
         const title = String(a.title || '').trim();
         if (!title) { dropped++; return; }
@@ -607,7 +608,7 @@
         return;
       }
       if (a.type === 'set_sort') {
-        const g = SORT_OPTIONS[a.group];
+        const g = SORT_OPTIONS[a.group === 'collect' ? 'note' : a.group];
         if (!g || g.indexOf(a.value) < 0) { dropped++; return; }
         const patch = {};
         patch[a.group] = a.value;
@@ -616,9 +617,10 @@
         return;
       }
       if (a.type === 'set_tabs') {
-        if (a.collect == null && a.energy == null) { dropped++; return; }
+        const tabNote2 = a.note != null ? a.note : a.collect;
+        if (tabNote2 == null && a.energy == null) { dropped++; return; }
         const t = {};
-        if (a.collect != null) t.collect = !!a.collect;
+        if (tabNote2 != null) t.note = !!tabNote2;
         if (a.energy != null) t.energy = !!a.energy;
         UI().uiSet({ tabs: t });
         applied++;
@@ -696,11 +698,11 @@
           a.ids.forEach(function (id) { want[id] = true; });
           list = list.filter(function (t) { return want[t.id]; });
         } else {
-          if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+          if (f.kind) list = list.filter(function (t) { return (t.kind === 'collect' ? 'note' : (t.kind || 'item')) === f.kind; });
           if (f.query) {
             const q = String(f.query).toLowerCase();
             list = list.filter(function (t) {
-              const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+              const it = (t.kind === 'note' || t.kind === 'collect') ? (t.entry || {}) : (t.item || {});
               return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
                 .toLowerCase().indexOf(q) >= 0;
             });
@@ -712,7 +714,7 @@
         const gone = {};
         list.forEach(function (t) {
           gone[t.id] = true;
-          if (t.kind === 'collect') {
+          if (t.kind === 'note' || t.kind === 'collect') {
             if (window.QYV && QYV.restoreEntry && QYV.restoreEntry(t.entry)) n++;
           } else {
             d.items.push(t.item);
@@ -735,11 +737,11 @@
           list = list.filter(function (t) { return want[t.id]; });
         } else {
           list.sort(function (x, y) { return x.deletedAt < y.deletedAt ? 1 : -1; });
-          if (f.kind) list = list.filter(function (t) { return (t.kind || 'item') === f.kind; });
+          if (f.kind) list = list.filter(function (t) { return (t.kind === 'collect' ? 'note' : (t.kind || 'item')) === f.kind; });
           if (f.query) {
             const q = String(f.query).toLowerCase();
             list = list.filter(function (t) {
-              const it = t.kind === 'collect' ? (t.entry || {}) : (t.item || {});
+              const it = (t.kind === 'note' || t.kind === 'collect') ? (t.entry || {}) : (t.item || {});
               return ((it.name || '') + (it.title || '') + (it.category || '') + (it.cat || ''))
                 .toLowerCase().indexOf(q) >= 0;
             });

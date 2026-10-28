@@ -232,6 +232,9 @@
   function toggleArchive(item) {
     const was = QY.isArchived(item);
     item.archived = !was;
+    // 记下归档日子：浪费口径要判断"过期后才归档（=扔了）还是先归档（=收起来放过期）"
+    if (item.archived) item.archivedAt = QY.iso(QY.today());
+    else delete item.archivedAt;
     data().events.push({
       id: QY.uid('ev'), itemId: item.id,
       type: was ? 'unarchived' : 'archived',
@@ -392,12 +395,6 @@
       // 状态 = 分类里的阶段词（未开封 → 使用中 → …），点状态标签本身就能改
       kv('状态', '<span class="pill blue tappable" data-action="i-status" data-id="' + item.id + '">' +
         esc(item.status) + '</span>'),
-      // 归档 = 总开关（是/否），点一下就切换，和列表右滑、按钮是同一个逻辑
-      kv('归档', (QY.isArchived(item)
-        ? '<span class="pill gray">已归档</span>' +
-          '<button class="btn mini" data-action="i-archive" data-id="' + item.id + '">恢复</button>'
-        : '<span class="pill green">在用</span>' +
-          '<button class="btn mini" data-action="i-archive" data-id="' + item.id + '">归档</button>')),
       kv('日均成本', tracked ? '计入' : '不计入（消耗品）'),
       kv('存放位置', esc(item.location || '—')),
       item.expiresAt ? kv('到期日', QY.fmtDate(item.expiresAt) +
@@ -498,16 +495,10 @@
         '<h3>每日提醒</h3>' +
         '<p class="hint">每天 ' + (r.hour == null ? 9 : r.hour) + ':' + ((r.minute || 0) < 10 ? '0' : '') + (r.minute || 0) + ' 提醒「' + esc(item.name) + '」</p>' +
         '<div class="fsec">提醒时间</div>' +
-        '<div class="fcard">' +
-          '<div class="frow">' +
-            '<span class="fl">时间</span>' +
-            '<input id="r-hour" class="input finput" type="number" min="0" max="23" step="1" inputmode="numeric" ' +
-              'style="flex:none;width:64px;text-align:center" value="' + (r.hour == null ? 9 : r.hour) + '" />' +
-            '<span style="flex:none;color:var(--label-3);font-weight:600">:</span>' +
-            '<input id="r-minute" class="input finput" type="number" min="0" max="59" step="1" inputmode="numeric" ' +
-              'style="flex:none;width:64px;text-align:center" value="' + pad2(r.minute || 0) + '" />' +
-            '<span style="flex:1"></span>' +
-          '</div>' +
+        '<div class="wheel-box" id="r-wheel">' +
+          '<div class="wheel-hl"></div>' +
+          '<div class="wheel-col" id="r-wheel-h"></div>' +
+          '<div class="wheel-col" id="r-wheel-m"></div>' +
         '</div>' +
         '<div class="chip-row" style="margin-top:8px" id="r-quick"></div>' +
         '<label class="frow wide" style="margin-top:14px;background:var(--card);border-radius:var(--r-lg)">' +
@@ -525,6 +516,70 @@
     if (box) box.innerHTML = QUICK.map(function (q) {
       return '<button type="button" class="chip small" data-action="i-remind-quick" data-v="' + q + '">' + q + '</button>';
     }).join('');
+    buildWheel(document.getElementById('r-wheel-h'),
+      Array.apply(null, { length: 24 }).map(function (_, i) { return { v: i, label: String(i) }; }),
+      r.hour == null ? 9 : r.hour);
+    buildWheel(document.getElementById('r-wheel-m'),
+      Array.apply(null, { length: 60 }).map(function (_, i) { return { v: i, label: pad2(i) }; }),
+      r.minute || 0);
+  }
+
+  /* ── 滚轮选择器（系统闹钟那种）：跟手滑动 + 松手吸附 + 点按跳转 ──
+   * 每项 40px，列容器 translateY 定位；中间高亮条固定在容器中央。 */
+  const WHEEL_H = 40;
+  function buildWheel(col, values, initIdx) {
+    if (!col) return;
+    col._whValues = values;
+    col._whIdx = Math.max(0, Math.min(values.length - 1, initIdx || 0));
+    col.style.padding = Math.round((col.parentNode.clientHeight - WHEEL_H) / 2) + 'px 0';
+    col.innerHTML = values.map(function (v, i) {
+      return '<div class="wheel-it" data-i="' + i + '">' + v.label + '</div>';
+    }).join('');
+    const apply = function (anim) {
+      col.style.transition = anim === false ? 'none' : '';
+      col.style.transform = 'translateY(' + (-col._whIdx * WHEEL_H) + 'px)';
+      Array.prototype.forEach.call(col.children, function (it, i) {
+        it.classList.toggle('cur', i === col._whIdx);
+      });
+    };
+    col._whApply = apply;
+    apply(true);
+
+    let startY = 0, baseIdx = 0, moved = false;
+    col.addEventListener('touchstart', function (e) {
+      startY = e.touches[0].clientY;
+      baseIdx = col._whIdx;
+      moved = false;
+      col.style.transition = 'none';
+    }, { passive: true });
+    col.addEventListener('touchmove', function (e) {
+      const dy = e.touches[0].clientY - startY;
+      if (Math.abs(dy) > 3) moved = true;
+      let idx = baseIdx - Math.round(dy / WHEEL_H);
+      idx = Math.max(0, Math.min(values.length - 1, idx));
+      if (idx !== col._whIdx) { col._whIdx = idx; apply(false); }
+    }, { passive: true });
+    col.addEventListener('touchend', function () {
+      col.style.transition = '';
+      apply(true);
+    }, { passive: true });
+    // 点某项直接跳过去
+    col.addEventListener('click', function (e) {
+      const it = e.target.closest && e.target.closest('.wheel-it');
+      if (!it) return;
+      col._whIdx = Number(it.getAttribute('data-i')) || 0;
+      apply(true);
+    });
+    // 桌面：鼠标滚轮步进
+    col.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      let idx = col._whIdx + (e.deltaY > 0 ? 1 : -1);
+      idx = Math.max(0, Math.min(values.length - 1, idx));
+      if (idx !== col._whIdx) { col._whIdx = idx; apply(true); }
+    }, { passive: false });
+  }
+  function wheelVal(col) {
+    return col && col._whValues ? col._whValues[col._whIdx].v : 0;
   }
 
   /* ── ··· 菜单：生成长图 / 提醒我（带开启态）/ 删除 ── */
@@ -539,6 +594,8 @@
       '<button data-action="i-long" data-id="' + item.id + '">' + ic('image') + '生成长图</button>' +
       '<button data-action="i-remind" data-id="' + item.id + '"' + (r ? ' class="on"' : '') + '>' +
         ic('bell') + (r ? '每天 ' + (r.hour || 9) + ':' + pad2(r.minute || 0) + ' 提醒中 ✓' : '提醒我（每天）') + '</button>' +
+      '<button data-action="i-archive" data-id="' + item.id + '">' + ic('box') +
+        (item.archived ? '取消归档' : '归档') + '</button>' +
       '<button data-action="i-del" data-id="' + item.id + '" class="danger">' + ic('trash') + '删除</button>';
     const nav = document.querySelector('.navbar');
     if (nav) nav.appendChild(menu);
@@ -547,108 +604,175 @@
     });
   }
 
-  /* ── 物品长图：把详情渲染成一张竖图（标题 / 指标 / 详情 / 时间线） ── */
+  /* ── 物品长图：与随笔同款的白卡风格。
+   * 头部 = 照片（或分类图标）+ 名称；下面指标三格 + 详情数据（没填的不画）── */
   const ILW = 1080, ILPAD = 56, ILFONT = '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
   function makeItemLongImage(item) {
     const d = data();
-    const events = QY.eventsOf(d, item.id);
+    const days = Math.max(1, Math.round((Date.now() - new Date(item.acquiredAt || Date.now())) / 86400000) + 1);
+    const perDay = item.cost != null ? item.cost / days : null;
+
+    // 详情行：值非空才进列表
     const rows = [];
-    const kv = function (k, v) { rows.push([k, v]); };
+    const kv = function (k, v) { if (v !== '' && v != null) rows.push([k, String(v)]); };
     kv('分类', item.category + (item.sub ? ' · ' + item.sub : ''));
-    if (item.acquiredAt) kv('获得', QY.fmtCN(item.acquiredAt));
-    if (item.location) kv('位置', item.location);
-    if (item.status) kv('状态', item.status);
+    kv('购入', QY.fmtCN(item.acquiredAt) + (item.source ? ' · ' + item.source : ''));
+    if ((item.qty || 1) > 1) kv('数量', (item.qty || 1) + ' ' + (item.unit || '个'));
+    kv('状态', item.status);
     if (item.openedAt) kv('开封', QY.fmtCN(item.openedAt));
     if (item.expiresAt) kv('到期', QY.fmtCN(item.expiresAt));
-    if (item.note) kv('备注', item.note);
+    if (item.warrantyUntil) kv('保修至', QY.fmtCN(item.warrantyUntil));
+    kv('位置', item.location);
+    kv('备注', item.note);
 
-    const cv = document.createElement('canvas');
-    const ctx = cv.getContext('2d');
-    cv.width = ILW;
-    const LH = 44, PAD2 = 18;
-    let h = ILPAD * 2 + 96 + 70 + rows.length * (LH + PAD2 - 8) + 60 + events.length * 96 + 40;
-    h = Math.max(h, 800);
-    cv.height = h;
-    ctx.fillStyle = '#f2f2f7';
-    ctx.fillRect(0, 0, cv.width, cv.height);
+    // 有照片就先加载，画进头部
+    const loadImg = item.photo ? new Promise(function (resolve) {
+      const im = new Image();
+      im.onload = function () { resolve(im); };
+      im.onerror = function () { resolve(null); };
+      im.src = item.photo;
+    }) : Promise.resolve(null);
+    loadImg.then(function (photo) { draw(photo); });
 
-    const card = function (y, hh) {
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      const r2 = 28;
-      ctx.moveTo(ILPAD + r2, y);
-      ctx.arcTo(ILPAD + ILW - ILPAD * 2, y, ILPAD + ILW - ILPAD * 2, y + hh, r2);
-      ctx.arcTo(ILPAD + ILW - ILPAD * 2, y + hh, ILPAD, y + hh, r2);
-      ctx.arcTo(ILPAD, y + hh, ILPAD, y, r2);
-      ctx.arcTo(ILPAD, y, ILPAD + ILW - ILPAD * 2, y, r2);
-      ctx.fill();
-    };
+    function draw(photo) {
+      const probe = document.createElement('canvas').getContext('2d');
+      probe.font = '600 34px ' + ILFONT;
+      const maxNameW = ILW - ILPAD * 2 - 210;
+      // 名称过长截断（不折行，保持头部干净）
+      let name = String(item.name || '');
+      while (name.length > 2 && probe.measureText(name).width > maxNameW) name = name.slice(0, -2);
+      if (name !== item.name) name += '…';
 
-    let y = ILPAD;
-    ctx.fillStyle = '#1c1c1e';
-    ctx.font = '700 52px ' + ILFONT;
-    ctx.fillText(item.name, ILPAD + 8, y + 56);
-    y += 96;
-    ctx.fillStyle = 'rgba(60,60,67,.62)';
-    ctx.font = '400 30px ' + ILFONT;
-    ctx.fillText('琪遇台账 · ' + QY.fmtDate(QY.iso(QY.today())), ILPAD + 8, y);
-    y += 70;
+      const lineH = 58, RGAP = 16, headH = 210;
+      const infoH = 60 + rows.length * (lineH + RGAP) - RGAP + 24;
+      let H = ILPAD * 2 + headH + 24 + 150 + 30 + infoH + 90;
+      H = Math.max(H, 780);
 
-    const infoH = rows.length * (LH + PAD2 - 8) + 40;
-    card(y, infoH);
-    let yy = y + 20;
-    rows.forEach(function (rw) {
-      ctx.fillStyle = 'rgba(60,60,67,.62)';
-      ctx.font = '500 28px ' + ILFONT;
-      ctx.fillText(rw[0], ILPAD + 32, yy + 34);
-      ctx.fillStyle = '#1c1c1e';
-      ctx.font = '600 32px ' + ILFONT;
-      ctx.fillText(String(rw[1]).slice(0, 18), ILPAD + 200, yy + 34);
-      yy += LH + PAD2 - 8;
-    });
-    y += infoH + 30;
+      const cv = document.createElement('canvas');
+      cv.width = ILW;
+      cv.height = H;
+      const g = cv.getContext('2d');
+      g.fillStyle = '#F2F2F7';
+      g.fillRect(0, 0, ILW, H);
+      // 整张白卡
+      const rr = function (x, y, w, h, r) {
+        g.beginPath();
+        g.moveTo(x + r, y);
+        g.arcTo(x + w, y, x + w, y + h, r);
+        g.arcTo(x + w, y + h, x, y + h, r);
+        g.arcTo(x, y + h, x, y, r);
+        g.arcTo(x, y, x + w, y, r);
+        g.closePath();
+      };
+      rr(ILPAD / 2, ILPAD / 2, ILW - ILPAD, H - ILPAD, 44);
+      g.fillStyle = '#FFFFFF';
+      g.fill();
 
-    const tlH = Math.max(120, events.length * 96 + 50);
-    card(y, tlH);
-    ctx.fillStyle = '#1c1c1e';
-    ctx.font = '700 34px ' + ILFONT;
-    ctx.fillText('时间线（' + events.length + ' 条）', ILPAD + 32, y + 52);
-    let ty = y + 96;
-    events.slice(0, 12).forEach(function (e) {
-      const t = QY.EVENT_TYPES[e.type] || { label: e.type };
-      ctx.fillStyle = '#007aff';
-      ctx.beginPath();
-      ctx.arc(ILPAD + 44, ty + 16, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#1c1c1e';
-      ctx.font = '600 30px ' + ILFONT;
-      ctx.fillText(t.label + (e.amount ? ' · ¥' + e.amount : ''), ILPAD + 76, ty + 26);
-      ctx.fillStyle = 'rgba(60,60,67,.62)';
-      ctx.font = '400 26px ' + ILFONT;
-      ctx.fillText(QY.fmtCN(e.at) + (e.note ? ' · ' + e.note : ''), ILPAD + 76, ty + 62);
-      ty += 96;
-    });
-    if (!events.length) {
-      ctx.fillStyle = 'rgba(60,60,67,.4)';
-      ctx.font = '400 28px ' + ILFONT;
-      ctx.fillText('还没有记录', ILPAD + 32, y + 110);
+      // ── 头部：照片 150×150 圆角 + 名称/分类 ──
+      let y = ILPAD + 34;
+      const PX = ILPAD + 36, PS = 150;
+      if (photo) {
+        g.save();
+        rr(PX, y, PS, PS, 30);
+        g.clip();
+        // cover 裁剪
+        const sc = Math.max(PS / photo.width, PS / photo.height);
+        const dw = photo.width * sc, dh = photo.height * sc;
+        g.drawImage(photo, PX + (PS - dw) / 2, y + (PS - dh) / 2, dw, dh);
+        g.restore();
+      } else {
+        rr(PX, y, PS, PS, 30);
+        const grad = g.createLinearGradient(PX, y, PX + PS, y + PS);
+        grad.addColorStop(0, '#E7ECF5');
+        grad.addColorStop(1, '#C9D6E8');
+        g.fillStyle = grad;
+        g.fill();
+        g.fillStyle = 'rgba(28,28,30,0.4)';
+        g.font = '600 64px ' + ILFONT;
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(String(item.category || '物').charAt(0), PX + PS / 2, y + PS / 2);
+        g.textAlign = 'left';
+        g.textBaseline = 'alphabetic';
+      }
+      const TX = PX + PS + 40;
+      g.fillStyle = '#1C1C1E';
+      g.font = '700 48px ' + ILFONT;
+      g.fillText(name, TX, y + 62);
+      g.fillStyle = '#8E8E93';
+      g.font = '400 30px ' + ILFONT;
+      g.fillText(String(item.category || '') + (item.location ? ' · ' + item.location : ''), TX, y + 116);
+      g.fillText('已持有 ' + days + ' 天' + (perDay != null ? ' · 日均 ¥' + (Math.round(perDay * 100) / 100) : ''), TX, y + 160);
+      y += Math.max(PS, 170) + 36;
+
+      // ── 指标三格 ──
+      const cols = [
+        ['购入价', item.cost != null ? '¥' + item.cost : '—'],
+        ['日均成本', perDay != null ? '¥' + (Math.round(perDay * 100) / 100) + '/天' : '—'],
+        ['状态', item.status || '—']
+      ];
+      const cardW = (ILW - ILPAD * 2 - 72 - 40) / 3;
+      cols.forEach(function (c, i) {
+        const cx = ILPAD + 36 + (cardW + 20) * i;
+        rr(cx, y, cardW, 118, 24);
+        g.fillStyle = '#F6F6F8';
+        g.fill();
+        g.fillStyle = '#8E8E93';
+        g.font = '500 26px ' + ILFONT;
+        g.fillText(c[0], cx + 28, y + 42);
+        g.fillStyle = '#1C1C1E';
+        g.font = '650 38px ' + ILFONT;
+        g.fillText(String(c[1]).slice(0, 11), cx + 28, y + 90);
+      });
+      y += 118 + 34;
+
+      // ── 详情数据卡：行 + hairline 分隔 ──
+      rr(ILPAD + 36, y, ILW - ILPAD * 2 - 72, infoH, 28);
+      g.fillStyle = '#FFFFFF';
+      g.fill();
+      g.strokeStyle = 'rgba(60,60,67,0.10)';
+      g.lineWidth = 2;
+      rr(ILPAD + 36, y, ILW - ILPAD * 2 - 72, infoH, 28);
+      g.stroke();
+      let yy = y + 40;
+      rows.forEach(function (rw, idx) {
+        g.fillStyle = '#8E8E93';
+        g.font = '500 28px ' + ILFONT;
+        g.fillText(rw[0], ILPAD + 72, yy + 36);
+        g.fillStyle = '#1C1C1E';
+        g.font = '600 31px ' + ILFONT;
+        g.fillText(rw[1].slice(0, 20), ILPAD + 260, yy + 36);
+        if (idx < rows.length - 1) {
+          g.strokeStyle = 'rgba(60,60,67,0.08)';
+          g.beginPath();
+          g.moveTo(ILPAD + 72, yy + lineH + RGAP / 2 - 6);
+          g.lineTo(ILW - ILPAD - 72, yy + lineH + RGAP / 2 - 6);
+          g.stroke();
+        }
+        yy += lineH + RGAP;
+      });
+
+      // 页脚
+      g.fillStyle = '#C7C7CC';
+      g.font = '26px ' + ILFONT;
+      g.fillText('琪遇台账 · ' + QY.fmtDate(QY.iso(QY.today())), ILPAD + 36, H - ILPAD - 36);
+
+      // 与随笔的长图同一套交互：先预览，再点"保存图片"下载
+      const url = cv.toDataURL('image/png');
+      const fname = 'xctally-' + String(item.name).replace(/[^\w一-龥]+/g, '') + '.png';
+      UI().openSheet('' +
+        '<div class="sheet">' +
+          '<div class="grabber"></div>' +
+          '<h3>长图已生成</h3>' +
+          '<p class="hint">1080 × ' + H + ' · ' + esc(item.name) + ' 的详情</p>' +
+          '<div style="border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-card);max-height:46vh;overflow-y:auto">' +
+            '<img src="' + url + '" style="width:100%;display:block" /></div>' +
+          '<div class="sheet-actions">' +
+            '<button class="btn plain" data-action="i-close">关闭</button>' +
+            '<a class="btn primary" href="' + url + '" download="' + fname + '" style="text-align:center;text-decoration:none;line-height:1.4">保存图片</a>' +
+          '</div>' +
+        '</div>');
     }
-
-    // 和收藏的长图同一套交互：先预览，再点"保存图片"下载
-    const url = cv.toDataURL('image/png');
-    const name = 'xctally-' + String(item.name).replace(/[^\w\u4e00-\u9fa5]+/g, '') + '.png';
-    UI().openSheet('' +
-      '<div class="sheet">' +
-        '<div class="grabber"></div>' +
-        '<h3>长图已生成</h3>' +
-        '<p class="hint">1080 × ' + cv.height + ' · ' + esc(item.name) + ' 的详情与时间线</p>' +
-        '<div style="border-radius:var(--r-md);overflow:hidden;box-shadow:var(--shadow-card);max-height:46vh;overflow-y:auto">' +
-          '<img src="' + url + '" style="width:100%;display:block" /></div>' +
-        '<div class="sheet-actions">' +
-          '<button class="btn plain" data-action="i-close">关闭</button>' +
-          '<a class="btn primary" href="' + url + '" download="' + name + '" style="text-align:center;text-decoration:none;line-height:1.4">保存图片</a>' +
-        '</div>' +
-      '</div>');
   }
 
   /* ---------------- 通用选择器（替代原生 select） ----------------
@@ -928,7 +1052,11 @@
 
   let catEdit = null;   // 正在编辑的分类名，'' 表示新增
 
-  function openCatManager() {
+  /* 分类管理：'items' 只看物品分类 / 'notes' 只看随笔分类 / 'all' 两块平铺。
+     "我的"页两行分别进单块；不传 mode 保持上次的（保存/改名后回同一块） */
+  let catMgrMode = 'all';
+  function openCatManager(mode) {
+    if (mode) catMgrMode = mode;
     catEdit = null;
     renderCatSheet();
   }
@@ -984,17 +1112,55 @@
         '<div class="row-side"><span class="chev">›</span></div></div>';
     }).join('');
 
+    // 一页平铺：上面物品分类，下面随笔分类（不用再点一次选哪个）
+    const noteRows = (function () {
+      if (!window.QYV || !QYV.snapshot) return '';
+      const snap = QYV.snapshot();
+      const used = {};
+      snap.entries.forEach(function (e) { used[e.cat] = (used[e.cat] || 0) + 1; });
+      const rs = snap.cats.map(function (c) {
+        return '<div class="row static">' +
+          '<div class="tl-dot">' + (window.QYIcon ? QYIcon.forEmoji(c.emoji || '📁', 17) : (c.emoji || '📁')) + '</div>' +
+          '<div class="row-main"><div class="row-title">' + esc(c.name) + '</div>' +
+            '<div class="row-sub">' + (used[c.name] || 0) + ' 篇随笔</div></div>' +
+          '<div class="row-side" style="display:flex;gap:6px">' +
+            '<button class="btn plain" data-action="i-ncat-rename" data-name="' + esc(c.name) +
+              '" style="padding:7px 12px;font-size:13px">改名</button>' +
+            ((used[c.name] || 0)
+              ? '<button class="btn plain" disabled style="padding:7px 12px;font-size:13px;opacity:.45">删除</button>'
+              : '<button class="btn plain" data-action="i-ncat-del" data-name="' + esc(c.name) +
+                '" style="padding:7px 12px;font-size:13px;color:var(--red)">删除</button>') +
+          '</div></div>';
+      }).join('');
+      return '<div class="group">' + (rs || '<div class="empty" style="padding:16px"><p>还没有分类</p></div>') +
+          '<div class="row" data-action="i-ncat-add">' +
+            '<div class="tl-dot">＋</div>' +
+            '<div class="row-main"><div class="row-title">新增随笔分类</div></div></div>' +
+        '</div>';
+    })();
+
+    // 进哪个入口就只看哪块（"我的"页两行分开进；旧入口默认两块平铺）
+    const showItems = catMgrMode !== 'notes';
+    const showNotes = catMgrMode !== 'items';
+    const headTitle = showItems && showNotes ? '分类管理' : (showItems ? '物品分类' : '随笔分类');
+
     UI().openSheet('' +
       '<div class="sheet"><div class="grabber"></div>' +
-        '<div class="sheet-head"><h3>物品分类</h3>' +
-          '<button class="head-btn" data-action="i-cat-sort">排序</button></div>' +
-        '<div class="group">' + rows +
-          '<div class="row" data-action="i-cat-new">' +
-            '<div class="tl-dot">＋</div>' +
-            '<div class="row-main"><div class="row-title">新增分类</div></div></div>' +
-        '</div>' +
+        '<div class="sheet-head"><h3>' + headTitle + '</h3>' +
+          (showItems && !showNotes ? '<span><button class="head-btn" data-action="i-cat-sort">排序</button></span>' : '') + '</div>' +
+        (showItems ?
+          (showNotes ? '<div class="section-head" style="margin:6px 0 8px"><h2>物品分类</h2>' +
+            '<span><button class="head-btn" data-action="i-cat-sort">排序</button></span></div>' : '') +
+          '<div class="group">' + rows +
+            '<div class="row" data-action="i-cat-new">' +
+              '<div class="tl-dot">＋</div>' +
+              '<div class="row-main"><div class="row-title">新增分类</div></div></div>' +
+          '</div>' : '') +
+        (showNotes ?
+          (showItems ? '<div class="section-head" style="margin:18px 0 8px"><h2>随笔分类</h2></div>' : '') +
+          noteRows : '') +
         '<div class="sheet-actions" style="margin-top:14px">' +
-          '<button class="btn plain" data-action="i-cat-cancel">完成</button>' +
+          '<button class="btn plain" data-action="i-close">关闭</button>' +
         '</div>' +
       '</div>');
   }
@@ -1517,8 +1683,11 @@
 
   function trashEntries() {
     const d = data();
+    // 旧数据的回收站条目 kind 叫 'collect'，读出来统一当 'note'
     return (d.trash || []).slice().sort(function (a, b) {
       return a.deletedAt < b.deletedAt ? 1 : -1;
+    }).map(function (t) {
+      return t.kind === 'collect' ? Object.assign({}, t, { kind: 'note' }) : t;
     });
   }
 
@@ -1526,7 +1695,7 @@
     if (trashView.tab !== 'all' && (t.kind || 'item') !== trashView.tab) return false;
     const q = trashView.query.trim().toLowerCase();
     if (!q) return true;
-    const it = t.kind === 'collect' ? t.entry : t.item;
+    const it = t.kind === 'note' ? t.entry : t.item;
     const hay = [(it && it.name) || '', (it && it.title) || '', (it && it.category) || '', (it && it.cat) || '']
       .join(' ').toLowerCase();
     return hay.indexOf(q) >= 0;
@@ -1552,17 +1721,17 @@
   }
 
   function trashRowHTML(t) {
-    const isCollect = t.kind === 'collect';
-    const it = isCollect ? (t.entry || {}) : (t.item || {});
-    const title = isCollect ? (it.title || '（无标题）') : (it.name || '（无名称）');
-    const sub = (isCollect ? '收藏 · ' + (it.cat || '') + ' · ' + QY.fmtDate(it.date) :
+    const isNote = t.kind === 'note';
+    const it = isNote ? (t.entry || {}) : (t.item || {});
+    const title = isNote ? (it.title || '（无标题）') : (it.name || '（无名称）');
+    const sub = (isNote ? '随笔 · ' + (it.cat || '') + ' · ' + QY.fmtDate(it.date) :
         (it.category || '') + ' · ' + QY.fmtDate(it.acquiredAt) + ' 获得') +
       ' · ' + QY.fmtDate(t.deletedAt) + ' 删除 · 还有 ' + QY.trashDaysLeft(t) + ' 天';
     const sel = !!trashView.sel[t.id];
     return '<div class="row static trow' + (sel ? ' sel' : '') + '" data-tid="' + t.id + '">' +
       '<span class="tsel' + (sel ? ' on' : '') + '" data-action="i-tsel" data-id="' + t.id + '" role="checkbox" aria-checked="' + sel + '">' +
         (sel ? (window.QYIcon ? QYIcon.svg('check', 14) : '✓') : '') + '</span>' +
-      (isCollect
+      (isNote
         ? '<span class="tthumb">' + (window.QYIcon ? QYIcon.svg('book', 20) : '📝') + '</span>'
         : thumb(it, true)) +
       '<div class="row-main">' +
@@ -1596,12 +1765,12 @@
     const seg = document.getElementById('trash-seg');
     if (seg) {
       const nItem = all.filter(function (t) { return (t.kind || 'item') === 'item'; }).length;
-      const nCol = all.filter(function (t) { return t.kind === 'collect'; }).length;
+      const nCol = all.filter(function (t) { return t.kind === 'note'; }).length;
       const segBtn = function (k, label, n) {
         return '<button class="' + (trashView.tab === k ? 'active' : '') + '" data-action="i-ttab" data-tab="' + k + '">' +
           label + (n ? ' ' + n : '') + '</button>';
       };
-      seg.innerHTML = segBtn('all', '全部', all.length) + segBtn('item', '物品', nItem) + segBtn('collect', '随笔', nCol);
+      seg.innerHTML = segBtn('all', '全部', all.length) + segBtn('item', '物品', nItem) + segBtn('note', '随笔', nCol);
     }
     const box = document.getElementById('trash-list');
     if (box) {
@@ -1618,7 +1787,7 @@
     const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
     if (!t) return false;
     let label = '';
-    if (t.kind === 'collect') {
+    if (t.kind === 'note' || t.kind === 'collect') {   // collect 是旧版随笔回收条目
       if (!window.QYV || !QYV.restoreEntry || !QYV.restoreEntry(t.entry)) return false;
       label = (t.entry && t.entry.title) || '随笔';
     } else {
@@ -1638,7 +1807,7 @@
     const d = data();
     const t = (d.trash || []).filter(function (x) { return x.id === trashId; })[0];
     if (!t) return;
-    const label = t.kind === 'collect' ? ((t.entry && t.entry.title) || '随笔') : ((t.item && t.item.name) || '物品');
+    const label = t.kind === 'note' ? ((t.entry && t.entry.title) || '随笔') : ((t.item && t.item.name) || '物品');
     const doPurge = function () {
       d.trash = d.trash.filter(function (x) { return x.id !== trashId; });
       delete trashView.sel[trashId];
@@ -1805,20 +1974,23 @@
     else if (action === 'i-long') { const it = byId(id); if (it) makeItemLongImage(it); }
     else if (action === 'i-remind') { const it = byId(id); if (it) openReminderSheet(it); }
     else if (action === 'i-remind-quick') {
-      // 快捷时间 chips：填进时/分输入框
+      // 快捷时间：滚轮直接跳到该时刻
       const q = String(el.getAttribute('data-v') || '').split(':');
-      const hEl = document.getElementById('r-hour');
-      const mEl = document.getElementById('r-minute');
-      if (hEl && mEl && q.length === 2) { hEl.value = q[0]; mEl.value = pad2(Number(q[1]) || 0); }
+      const hEl = document.getElementById('r-wheel-h');
+      const mEl = document.getElementById('r-wheel-m');
+      if (hEl && mEl && q.length === 2) {
+        hEl._whIdx = Math.max(0, Math.min(23, Number(q[0]) || 0));
+        mEl._whIdx = Math.max(0, Math.min(59, Number(q[1]) || 0));
+        if (hEl._whApply) hEl._whApply(true);
+        if (mEl._whApply) mEl._whApply(true);
+      }
     }
     else if (action === 'i-remind-save') {
       const it = byId(id);
       if (!it) return true;
-      const hEl = document.getElementById('r-hour');
-      const mEl = document.getElementById('r-minute');
+      const h = Math.max(0, Math.min(23, wheelVal(document.getElementById('r-wheel-h'))));
+      const m = Math.max(0, Math.min(59, wheelVal(document.getElementById('r-wheel-m'))));
       const alarmEl = document.getElementById('r-alarm');
-      const h = Math.max(0, Math.min(23, parseInt(hEl && hEl.value, 10) || 0));
-      const m = Math.max(0, Math.min(59, parseInt(mEl && mEl.value, 10) || 0));
       it.reminder = { on: true, hour: h, minute: m, alarm: !!(alarmEl && alarmEl.checked) };
       UI().save();
       pushItemReminders();
@@ -1969,7 +2141,39 @@
     } else if (action === 'i-del') {
       deleteItem(id);
     } else if (action === 'i-cat-manage') {
-      openCatManager();
+      openCatManager('items');        // "我的"页"物品分类"行：只看物品分类
+    } else if (action === 'i-cat-notes') {
+      openCatManager('notes');        // "我的"页"随笔分类"行：只看随笔分类
+    } else if (action === 'i-ncat-add') {
+      QYDialog.text({ title: '新分类名称', placeholder: '例如：灵感', onOk: function (name) {
+        if (!name) return;
+        if (window.QYV && QYV.addCat) {
+          const r = QYV.addCat(name);
+          if (r) { openCatManager(); UI().toast('已新建「' + name + '」'); }
+          else UI().toast('这个名字已经有了');
+        }
+      } });
+    } else if (action === 'i-ncat-rename') {
+      const oldName = el.getAttribute('data-name');
+      QYDialog.text({ title: '改名', value: oldName, onOk: function (name) {
+        if (!name || name === oldName) return;
+        if (window.QYV && QYV.renameCat) {
+          const r = QYV.renameCat(oldName, name);
+          if (r) { openCatManager(); UI().toast('已改名「' + name + '」'); }
+          else UI().toast('这个名字已经被用了');
+        }
+      } });
+    } else if (action === 'i-ncat-del') {
+      const name = el.getAttribute('data-name');
+      QYDialog.confirm('删除随笔分类「' + name + '」？', { title: '删除分类', ok: '删除', danger: true })
+        .then(function (ok) {
+          if (!ok) return;
+          if (window.QYV && QYV.removeCat) {
+            QYV.removeCat(name);
+            openCatManager();   // 不传 mode：停留在当前这块（随笔分类）里重绘
+            UI().toast('已删除');
+          }
+        });
     } else if (action === 'i-cat-sort') {
       openCatSort();
     } else if (action === 'i-cat-sort-done') {
@@ -2111,7 +2315,7 @@
     });
   }
 
-  /* 供其它模块复用（收藏、助手等）
+  /* 供其它模块复用（随笔、助手等）
    * choose(选择器) / confirm(确认) / text(文本输入) / date(日期) */
   window.QYDialog = {
     confirm: confirmSheet,

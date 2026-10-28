@@ -1,7 +1,7 @@
 /* xctally · 备份与恢复（纯本地，不联网）
  * ---------------------------------------------------------------
  * 用途只有一个：**换手机时把记录搬过去**。
- *   - 导出：把物品 / 收藏 / 能源打包成一个文件
+ *   - 导出：把物品 / 随笔 / 能源打包成一个文件
  *   - 恢复：先对比再合并，冲突默认保留"你现在的版本"
  *
  * 这里刻意不做上传、不做账号、不做分享 —— xctally 是单机本地工具。
@@ -65,7 +65,7 @@
         cats: on('items') ? (d.cats || []).slice() : [],
         meters: on('energy') ? d.meters.slice() : []
       },
-      collect: on('collect') ? {
+      notes: on('notes') ? {
         entries: snap.entries.slice(),
         cats: snap.cats.slice()
       } : { entries: [], cats: [] },
@@ -81,7 +81,7 @@
     const c = window.QYA ? QYA.cfg() : null;
     const groups = [
       { key: 'items', label: '物品与记录', side: d.items.length + ' 件 · ' + d.events.length + ' 条记录（含每日提醒）' },
-      { key: 'collect', label: '收藏随笔', side: snap.entries.length + ' 篇 · ' + snap.cats.length + ' 个分类' },
+      { key: 'notes', label: '随笔', side: snap.entries.length + ' 篇 · ' + snap.cats.length + ' 个分类' },
       { key: 'energy', label: '能源表具', side: d.meters.length + ' 只表具' },
       { key: 'settings', label: 'App 设置', side: '主题 / 背景 / 排序 / 标签页 / 到期提醒' },
       { key: 'ai', label: 'AI 配置', side: (c && c.key ? '已配 Key' : '未配置') + ' · 含明文 Key，注意保管' }
@@ -107,7 +107,7 @@
 
   function doExport(sel) {
     const pkg = buildBackup(sel);
-    const total = pkg.app.items.length + pkg.collect.entries.length + pkg.app.meters.length;
+    const total = pkg.app.items.length + pkg.notes.entries.length + pkg.app.meters.length;
     const name = 'xctally-backup-' + pkg.exportedAt + '.json';
 
     if (window.QYPlatform && QYPlatform.native) {
@@ -131,7 +131,7 @@
     UI().mount();
     const bits = [];
     if (sel && sel.items !== false && pkg.app.items.length) bits.push('物品 ' + pkg.app.items.length);
-    if (sel && sel.collect && pkg.collect.entries.length) bits.push('随笔 ' + pkg.collect.entries.length);
+    if (sel && sel.notes && pkg.notes.entries.length) bits.push('随笔 ' + pkg.notes.entries.length);
     if (sel && sel.energy && pkg.app.meters.length) bits.push('表具 ' + pkg.app.meters.length);
     if (sel && sel.settings && pkg.settings) bits.push('App 设置');
     if (sel && sel.ai && pkg.ai && pkg.ai.key) bits.push('AI 配置（文件里有明文 Key，注意保管）');
@@ -191,12 +191,12 @@
     const d = appData();
     const snap = window.QYV ? QYV.snapshot() : { entries: [] };
     const app = pkg.app || pkg;          // 兼容早期只导出物品的备份
-    const collect = pkg.collect || { entries: pkg.collects || [] };
+    const notes = pkg.notes || pkg.collect || { entries: pkg.collects || [] };   // 旧备份字段叫 collect
     return {
       items: diffList(d.items, app.items),
       events: diffList(d.events, app.events),
       meters: diffList(d.meters, app.meters),
-      collect: diffList(snap.entries, collect.entries),
+      notes: diffList(snap.entries, notes.entries),
       hasAi: !!(pkg.ai && (pkg.ai.key || pkg.ai.model || pkg.ai.baseUrl))
     };
   }
@@ -213,11 +213,11 @@
       return '<div class="kv"><span class="k">' + label + '</span><span class="v">' +
         '新增 ' + x.added + ' · 相同 ' + x.same + ' · 冲突 ' + x.conflict + '</span></div>';
     };
-    const conflicts = diff.items.conflict + diff.events.conflict + diff.meters.conflict + diff.collect.conflict;
-    const added = diff.items.added + diff.events.added + diff.meters.added + diff.collect.added;
+    const conflicts = diff.items.conflict + diff.events.conflict + diff.meters.conflict + diff.notes.conflict;
+    const added = diff.items.added + diff.events.added + diff.meters.added + diff.notes.added;
     const pkg = pending.pkg;
     const app = pkg.app || pkg;
-    const collect = pkg.collect || { entries: pkg.collects || [] };
+    const notes = pkg.notes || pkg.collect || { entries: pkg.collects || [] };
 
     UI().openSheet('' +
       '<div class="sheet">' +
@@ -228,7 +228,7 @@
         '<div class="group" style="margin-bottom:14px">' +
           row('物品', diff.items, app.items && app.items.length) +
           row('流水', diff.events, app.events && app.events.length) +
-          row('随笔', diff.collect, collect.entries && collect.entries.length) +
+          row('随笔', diff.notes, notes.entries && notes.entries.length) +
           row('能源', diff.meters, app.meters && app.meters.length) +
           (diff.hasAi ? '<div class="kv"><span class="k">AI 配置</span><span class="v">' +
             (pkg.ai.key ? '含 API Key' : '未含 Key') + ' · 模型/联网/用量一并恢复</span></div>' : '') +
@@ -293,7 +293,7 @@
     const preferRemote = el ? el.checked : false;
     const pkg = pending.pkg;
     const app = pkg.app || pkg;
-    const collect = pkg.collect || { entries: pkg.collects || [], cats: pkg.collectCats || [] };
+    const notes = pkg.notes || pkg.collect || { entries: pkg.collects || [], cats: pkg.collectCats || [] };
     const d = appData();
     let added = 0, conflict = 0;
 
@@ -304,8 +304,8 @@
     r = mergeMeters(d.meters, app.meters, preferRemote);
     added += r.added; conflict += r.conflict;
 
-    if (window.QYV && collect.entries) {
-      r = QYV.merge(collect, preferRemote);
+    if (window.QYV && notes.entries) {
+      r = QYV.merge(notes, preferRemote);
       added += r.added; conflict += r.conflict;
     }
 
@@ -371,7 +371,7 @@
         status: '在用', location: '书房', expiresAt: null, openedAt: null, warrantyUntil: null, note: ''
       }
     ]);
-    pkg.collect.entries = pkg.collect.entries.concat([
+    pkg.notes.entries = pkg.notes.entries.concat([
       {
         id: 'c_backup1', title: '新手机的第一次记录', cat: '灵感', date: QY.iso(QY.today()),
         tags: ['迁移'], plugins: [{ k: 'mood', v: '兴奋' }],
@@ -387,7 +387,7 @@
     if (snap.entries.length) {
       const c2 = JSON.parse(JSON.stringify(snap.entries[0]));
       c2.title = snap.entries[0].title + '（旧版本）';
-      pkg.collect.entries[0] = c2;
+      pkg.notes.entries[0] = c2;
     }
     openImportSheet(pkg);
   }
@@ -402,7 +402,7 @@
       document.querySelectorAll('.exp-ck').forEach(function (ck) {
         sel[ck.getAttribute('data-k')] = ck.checked;
       });
-      if (!sel.items && !sel.collect && !sel.energy && !sel.settings && !sel.ai) {
+      if (!sel.items && !sel.notes && !sel.energy && !sel.settings && !sel.ai) {
         UI().toast('至少选一项再导出');
         return true;
       }

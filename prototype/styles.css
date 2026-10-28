@@ -1633,8 +1633,10 @@ input.fmeta-pill { -webkit-appearance: none; appearance: none; width: auto; }
   display: flex;
   gap: 12px;
   overflow-x: auto;
-  padding: 2px 18px 16px;
-  margin: 0 -18px;
+  /* 严格收在页面内容宽度内（不再左右出血），整卡对齐吸附 */
+  padding: 2px 0 14px;
+  margin: 0;
+  scroll-snap-type: x mandatory;
   scrollbar-width: none;
 }
 .cover-strip::-webkit-scrollbar { display: none; }
@@ -1647,6 +1649,7 @@ input.fmeta-pill { -webkit-appearance: none; appearance: none; width: auto; }
   overflow: hidden;
   cursor: pointer;
   box-shadow: var(--shadow-card);
+  scroll-snap-align: start;
   transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .cover-card:active { transform: scale(0.96); }
@@ -2070,6 +2073,23 @@ a.btn {
   outline-offset: 2px;
 }
 
+/* 编辑器文字/背景色按钮 + 色板 */
+.fp-tool-bar .editor-toolbar button.tb-color,
+.zen-foot .editor-toolbar button.tb-color { color: #FF3B30; font-weight: 800; }
+.fp-tool-bar .editor-toolbar button.tb-bg,
+.zen-foot .editor-toolbar button.tb-bg { color: #E0A800; font-weight: 800; }
+.color-card { width: min(320px, 84vw); }
+.palette-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 14px; }
+.pal {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(60, 60, 67, 0.18);
+  cursor: pointer;
+}
+.pal:active { transform: scale(0.88); }
+
 /* 正文里穿插的内嵌卡片（评分/地点/价格/链接/心情）：
    胶囊造型，跟文字一起流动；编辑器里点按改值，退格整颗删除 */
 .inline-plug {
@@ -2091,6 +2111,14 @@ a.btn {
   cursor: pointer;
 }
 .rich-editor .inline-plug:active { background: rgba(0, 122, 255, 0.14); }
+
+/* 正文编辑区：放开系统文本选择（长按出 复制/粘贴 菜单——部分安卓壳默认被关） */
+.rich-editor,
+.rich-body {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
 
 /* 正文里的视频：整宽圆角，黑底不突兀 */
 .rich-editor video,
@@ -3059,3 +3087,112 @@ body.bare .stage { gap: 0; }
   display: grid;
   place-items: center;
 }
+
+/* ── 滚轮时间选择（系统闹钟样式）── */
+.wheel-box {
+  position: relative;
+  display: flex;
+  height: 200px;
+  margin: 4px 0 10px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  overflow: hidden;
+}
+.wheel-col {
+  flex: 1;
+  position: relative;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.wheel-it {
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  font-size: 19px;
+  font-weight: 550;
+  color: var(--label-3);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.wheel-it.cur { color: var(--label); font-weight: 700; font-size: 22px; }
+/* 中央高亮条 */
+.wheel-hl {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 50%;
+  height: 40px;
+  margin-top: -20px;
+  border-radius: 12px;
+  background: var(--fill-2);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  pointer-events: none;
+  z-index: 1;
+}
+/* 上下渐隐遮罩 */
+.wheel-box::before,
+.wheel-box::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 60px;
+  z-index: 2;
+  pointer-events: none;
+}
+.wheel-box::before { top: 0; background: linear-gradient(var(--card), transparent); }
+.wheel-box::after { bottom: 0; background: linear-gradient(transparent, var(--card)); }
+
+/* ── 持有成本 / 已浪费 列表页 ── */
+.cl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 4px 8px;
+  padding: 0 6px;
+}
+.cl-head > span:first-child { flex: 1; min-width: 0; }
+.cl-th {
+  flex: none;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--label-2);
+  padding: 6px 8px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.cl-th.on { background: rgba(0, 122, 255, 0.12); color: var(--blue); }
+.cl-row { gap: 10px; }
+.cl-row.off .row-title, .cl-row.off .row-sub { opacity: 0.45; }
+.cl-thumb {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-sm);
+  background: var(--fill-2);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+.cl-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.cl-nums {
+  flex: none;
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--label);
+}
+.cl-nums span { min-width: 52px; text-align: right; }
+/* 可点击的卡片/行（首页指标卡、"我的"的 kv 行） */
+.card.tappable:active,
+.kv.tappable:active { background: var(--fill-2); }

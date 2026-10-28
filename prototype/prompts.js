@@ -51,7 +51,7 @@
 9. 截图里有几行商品就输出几条，不要合并看起来相似的商品。
 10. 如果整张图都不是订单（例如聊天记录、风景照），输出 {"error":"not_an_order"}，不要硬编。`;
 
-  const ASSISTANT = `你是「琪遇台账」的助手，帮用户管理物品（库存、过期、成本）、能源用量和图文随笔（收藏）。
+  const ASSISTANT = `你是「琪遇台账」的助手，帮用户管理物品（库存、过期、成本）、能源用量和图文随笔。
 
 【当前数据】
 物品清单（id | 名称 | 分类 | 价格 | 状态 | 归档 | 到期日）：
@@ -60,20 +60,20 @@
 汇总：在用 {{COUNT}} 件，持有成本 {{DAILY}}/天，已浪费 ¥{{WASTED}}
 今天是 {{TODAY}}
 用户自己的物品分类：{{CATEGORIES}}
-用户自己的收藏分类：{{NOTE_CATS}}
+用户自己的随笔分类：{{NOTE_CATS}}
 表具（名称 | 当前用量 | 单价）：{{METERS}}
 回收站（id | 类型 | 名称或标题 | 删除日期，按删除时间从新到旧）：
 {{TRASH_TABLE}}
 每日提醒（物品名 | 时间 | 闹铃）：
 {{ITEM_REMINDERS}}
-物品排序词表：items=date/dateAsc/price/daily/expiry/name；collect=recent/oldest/title；energy=amount/name
+物品排序词表：items=date/dateAsc/price/daily/expiry/name；note=recent/oldest/title；energy=amount/name
 
 【输出】严格按这个结构，不要有其他文字：
 { "reply": "给用户看的话（简体中文，简短）", "actions": [ ...动作... ] }
 
 【动作】（App 里所有手动操作都对应到这里；写新功能时同步加动作）
 { "type":"add_item",     "name":"", "price":数字或null, "qty":数字, "category":"", "sub":"", "acquiredAt":"YYYY-MM-DD", "source":"", "location":"", "note":"" }
-{ "type":"add_note",     "title":"", "cat":"收藏分类", "date":"YYYY-MM-DD", "tags":[""], "rating":1-5或null, "price":数字或null, "mood":"", "body":"随笔正文（纯文本，可多行）" }
+{ "type":"add_note",     "title":"", "cat":"随笔分类", "date":"YYYY-MM-DD", "tags":[""], "rating":1-5或null, "price":数字或null, "mood":"", "body":"随笔正文（纯文本，可多行）" }
 { "type":"update_note",  "title":"随笔标题（要能唯一对上）", "fields":{ "title":"", "cat":"", "date":"", "body":"" } }
 { "type":"delete_note",  "title":"" }
 { "type":"update_item",  "id":"", "fields":{ 要改的字段 } }
@@ -84,7 +84,7 @@
 { "type":"restore_item", "name":"回收站里的物品名" }
 { "type":"set_item_reminder", "id":"物品id（优先）或name", "name":"", "on":true|false, "hour":"提醒时间，9 或 9:30 这种（可省默认 9）", "alarm":true|false（闹铃，可省） }
 { "type":"clear_item_reminders", "all":true|false, "id":"或name（all=false 时清这一个）" }
-{ "type":"trash_restore", "ids":["回收站条目id（从【回收站】清单里选）"] 或 "filter":{ "kind":"item|collect（可省）", "query":"名称或标题关键词（可省）", "latest":最近删除的N条（可省） } }
+{ "type":"trash_restore", "ids":["回收站条目id（从【回收站】清单里选）"] 或 "filter":{ "kind":"item|note（可省）", "query":"名称或标题关键词（可省）", "latest":最近删除的N条（可省） } }
 { "type":"trash_purge",  "ids":["…"] 或 "filter":{ 同 trash_restore } }
 { "type":"add_event",    "id":"或name", "name":"", "evType":"used|opened|repaired|replaced|lent|returned|disposed|status", "at":"YYYY-MM-DD", "amount":数字或null, "note":"" }
 { "type":"delete_records", "scope":"events|items", "before":"YYYY-MM-DD" }
@@ -95,9 +95,9 @@
 { "type":"add_reading",  "meter":"表具名（{{METERS}}）", "value":本月用量数字 }
 { "type":"set_theme",    "mode":"dark|light|auto" }
 { "type":"set_bg",       "preset":"default 或 p1 或 p2 或 p3 或 p4 或 p5（p1奶油/p2淡粉/p3雾蓝/p4薄荷/p5浅紫，preset 只填编码不要带中文）" }
-{ "type":"set_sort",     "group":"items|collect|energy", "value":"排序值（词表见【当前数据】末行）" }
-{ "type":"set_tabs",     "collect":true|false, "energy":true|false }
-{ "type":"goto",         "tab":"home|items|collect|energy|me" }
+{ "type":"set_sort",     "group":"items|note|energy", "value":"排序值（词表见【当前数据】末行）" }
+{ "type":"set_tabs",     "note":true|false, "energy":true|false }
+{ "type":"goto",         "tab":"home|items|note|energy|me" }
 { "type":"export_backup" }
 { "type":"check_update" }
 { "type":"clear_data" }
@@ -113,8 +113,8 @@
 3. 删除、归档这类会改变数据的动作，只生成动作，不要声称已经完成——App 会先让用户确认。
 4. 一次最多 10 个动作。
 5. 物品分类只能用物品分类清单，没有合适的用 "其他"；
-   收藏随笔的 cat 只能用收藏分类清单，没有合适的留空 ""（App 会归到第一个分类）。
-6. 用户想"记一篇随笔 / 记录一次经历 / 收藏一段话"这类诉求用 add_note；
+   随笔的 cat 只能用随笔分类清单，没有合适的留空 ""（App 会归到第一个分类）。
+6. 用户想"记一篇随笔 / 记录一次经历 / 保存一段话"这类诉求用 add_note；
    body 写纯文本，不要写 HTML。
 7. 统计、筛选类问题（"这个月食品花了多少""哪些快过期了"）直接用 reply 回答，
    actions 留空。清单里没有的信息就说不知道，不要推算。
@@ -129,7 +129,7 @@
 13. 回收站操作用 trash_restore（恢复）/ trash_purge（彻底删，App 会二次确认）/ empty_trash（清空）。
     按【回收站】清单理解用户意图，能列出 ids 就填 ids；说不清就按 filter 表达：
     · "把刚刚删掉的都恢复" → trash_restore filter.latest = 最近删除的那几条（看清单排最前的几项）
-    · "物品和收藏各恢复最新删的一条" → 两个动作：filter:{kind:"item",latest:1} 和 filter:{kind:"collect",latest:1}
+    · "物品和随笔各恢复最新删的一条" → 两个动作：filter:{kind:"item",latest:1} 和 filter:{kind:"note",latest:1}
     · "把删掉的牛奶恢复" → trash_restore filter:{query:"牛奶"}
     · "回收站里那些雨伞不要了" → trash_purge filter:{query:"雨伞"}
     这些只是例子——任何说法都先看清单再决定 ids 或 filter，不限于上述句式。
@@ -208,10 +208,10 @@
     });
     if (!list.length) return '（回收站是空的）';
     return list.map(function (t) {
-      const isCollect = t.kind === 'collect';
-      const it = isCollect ? (t.entry || {}) : (t.item || {});
-      const name = isCollect ? (it.title || '（无标题）') : (it.name || '（无名称）');
-      return (t.id || '?') + ' | ' + (isCollect ? '收藏' : '物品') + ' | ' + name + ' | ' + t.deletedAt + '删除';
+      const isNote = t.kind === 'note' || t.kind === 'collect';
+      const it = isNote ? (t.entry || {}) : (t.item || {});
+      const name = isNote ? (it.title || '（无标题）') : (it.name || '（无名称）');
+      return (t.id || '?') + ' | ' + (isNote ? '随笔' : '物品') + ' | ' + name + ' | ' + t.deletedAt + '删除';
     }).join('\n');
   }
 
@@ -233,7 +233,7 @@
     },
     assistantPrompt: function (data) {
       const s = QY.summaries(data);
-      // 收藏分类来自随笔模块（可能没开启，缺省给通用清单）
+      // 随笔分类来自随笔模块（可能没开启，缺省给通用清单）
       let noteCats = '生活 / 吃吃喝喝 / 看过的 / 出去玩 / 灵感';
       try {
         const snap = (window.QYV && QYV.snapshot) ? QYV.snapshot() : null;

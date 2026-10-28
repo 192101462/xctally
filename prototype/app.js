@@ -42,7 +42,7 @@
   const I = {
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.6 12 4.2l8 6.4V19a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 19z"/><path d="M9.6 20.6v-5.8h4.8v5.8"/></svg>',
     items: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20 7.9v8.2L12 20.6 4 16.1V7.9z"/><path d="M4 7.9l8 4.5 8-4.5"/><path d="M12 12.4v8.2"/></svg>',
-    collect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.6h10.8a1.6 1.6 0 0 1 1.6 1.6v15.2L12 16.2l-7 4.2V5.2a1.6 1.6 0 0 1 1.6-1.6z"/></svg>',
+    note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.6 3.6h10.8a1.6 1.6 0 0 1 1.6 1.6v15.2L12 16.2l-7 4.2V5.2a1.6 1.6 0 0 1 1.6-1.6z"/></svg>',
     energy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 2.8 5.6 13.4h5.2l-1 7.8 8-11.2h-5.4z"/></svg>',
     me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.4" r="3.6"/><path d="M4.9 20.2c1.4-3.6 4-5.4 7.1-5.4s5.7 1.8 7.1 5.4"/></svg>',
     search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>',
@@ -66,8 +66,8 @@
    */
   const UI_KEY = 'xctally.ui.v1';
   const UI_DEFAULTS = {
-    tabs: { home: true, items: true, collect: false, energy: false },
-    sort: { items: 'date', collect: 'recent', energy: 'amount' },
+    tabs: { home: true, items: true, note: false, energy: false },
+    sort: { items: 'date', note: 'recent', energy: 'amount' },
     theme: 'auto'          // auto 跟随系统 / light / dark
   };
   // 这三个是主要入口（"我的"还是设置的入口），不允许隐藏
@@ -76,6 +76,9 @@
   function ui() {
     let c = {};
     try { c = JSON.parse(localStorage.getItem(UI_KEY) || '{}') || {}; } catch (err) { c = {}; }
+    // 旧版设置里随笔标签/排序的键叫 collect，统一搬进 note
+    if (c.tabs && c.tabs.collect != null && c.tabs.note == null) c.tabs.note = c.tabs.collect;
+    if (c.sort && c.sort.collect != null && c.sort.note == null) c.sort.note = c.sort.collect;
     return Object.assign({}, c, {
       tabs: Object.assign({}, UI_DEFAULTS.tabs, c.tabs || {}),
       sort: Object.assign({}, UI_DEFAULTS.sort, c.sort || {}),
@@ -177,7 +180,7 @@
     { v: 'expiry', t: '到期日（近 → 远）' },
     { v: 'name', t: '按名称' }
   ];
-  const COLLECT_SORTS = [
+  const NOTE_SORTS = [
     { v: 'recent', t: '最近在前' },
     { v: 'oldest', t: '最早在前' },
     { v: 'title', t: '按标题' }
@@ -190,7 +193,7 @@
   const TABS = [
     { id: 'home', label: '首页', icon: I.home },
     { id: 'items', label: '物品', icon: I.items },
-    { id: 'collect', label: '收藏', icon: I.collect },
+    { id: 'note', label: '随笔', icon: I.note },
     { id: 'energy', label: '能源', icon: I.energy },
     { id: 'me', label: '我的', icon: I.me }
   ];
@@ -242,7 +245,7 @@
     let n = 0;
     try {
       n = (localStorage.getItem('xctally.prototype.v1') || '').length +
-          (localStorage.getItem('xctally.collect.v1') || '').length;
+          (localStorage.getItem('xctally.note.v1') || localStorage.getItem('xctally.collect.v1') || '').length;
     } catch (err) { n = 0; }
     return n;
   }
@@ -319,7 +322,7 @@
         ? '<div class="tile" style="background-image:url(' + nt.img + ');background-size:cover;background-position:center"></div>'
         : '<div class="tile" style="background:var(--fill-2)">' +
           (window.QYIcon ? QYIcon.forEmoji(nt.emoji, 21) : nt.emoji) + '</div>';
-      return '<div class="row" data-action="goto-collect" data-id="' + nt.id + '">' + tile +
+      return '<div class="row" data-action="goto-note" data-id="' + nt.id + '">' + tile +
         '<div class="row-main">' +
           '<div class="row-title">' + esc(nt.title) + '</div>' +
           '<div class="row-sub">' + esc(nt.sub) + '</div>' +
@@ -334,14 +337,14 @@
         pageHead('今天', dateLabel + ' · 正在记录 ' + s.count + ' 样东西', iconBtn('add', '新增记录')) +
       '</div>' +
 
-      '<div class="card">' +
+      '<div class="card tappable" data-action="cost-open">' +
         '<div class="mini-label">持有成本</div>' +
         '<div class="mini-value">' + QY.fmtRate(s.daily) + '<span class="unit">/天</span></div>' +
-        '<div class="mini-foot">全部在用物品合计</div>' +
+        '<div class="mini-foot">全部在用物品合计 · 点开看明细</div>' +
       '</div>' +
 
       (function () {
-        const wasteCard = '<div class="card">' +
+        const wasteCard = '<div class="card tappable" data-action="waste-open">' +
           '<div class="mini-label">已经浪费掉的钱</div>' +
           '<div class="mini-value">' + QY.fmtMoney(s.wasted) + '</div>' +
           '<div class="mini-foot">' + s.wastedCount + ' 样过期未处置</div>' +
@@ -611,6 +614,97 @@
 
   /* ---------------- 我的 ---------------- */
 
+  /* ── 持有成本列表 / 已浪费列表（首页与"我的"的卡片都能点进来）── */
+  function costDays(item) {
+    if (!item.acquiredAt) return 1;
+    return Math.max(1, Math.round((Date.now() - new Date(item.acquiredAt)) / 86400000) + 1);
+  }
+  function costPerDay(item) {
+    return item.cost != null ? item.cost / costDays(item) : null;
+  }
+
+  function viewCostList() {
+    const v = state.costSort || { sort: 'daily', desc: true };
+    const d = data;
+    const rows0 = d.items.filter(function (it) {
+      return !QY.isArchived(it) && QY.tracksCost(it, d) && it.cost != null;
+    });
+    const cols = [
+      { k: 'price', t: '购入价' },
+      { k: 'daily', t: '每日成本' },
+      { k: 'days', t: '购入天数' }
+    ];
+    rows0.sort(function (a, b) {
+      const val = function (it, k) {
+        if (k === 'price') return it.cost || 0;
+        if (k === 'days') return costDays(it);
+        return costPerDay(it) || 0;
+      };
+      return v.desc ? val(b, v.sort) - val(a, v.sort) : val(a, v.sort) - val(b, v.sort);
+    });
+    const head = cols.map(function (c) {
+      const on = v.sort === c.k;
+      return '<button type="button" class="cl-th' + (on ? ' on' : '') + '" data-action="cost-sort" data-k="' + c.k + '">' +
+        c.t + (on ? (v.desc ? ' ↓' : ' ↑') : '') + '</button>';
+    }).join('');
+    const rows = rows0.map(function (it) {
+      const pd = costPerDay(it);
+      return '<div class="row static cl-row">' +
+        '<div class="cl-thumb" data-action="cost-item" data-id="' + it.id + '">' +
+          (it.photo ? '<img src="' + it.photo + '" />' : (window.QYIcon && it.icon ? QYIcon.forEmoji(it.icon, 22) : '📦')) +
+        '</div>' +
+        '<div class="row-main"><div class="row-title">' + esc(it.name) + '</div></div>' +
+        '<div class="cl-nums">' +
+          '<span>¥' + (it.cost || 0) + '</span>' +
+          '<span>' + (pd != null ? '¥' + (Math.round(pd * 100) / 100) : '—') + '</span>' +
+          '<span>' + costDays(it) + ' 天</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    return '<div class="navbar"><button class="back" data-action="cost-back">‹ 返回</button></div>' +
+      '<div style="padding:6px 4px 0">' +
+        '<h1 style="margin:0;font-size:23px;font-weight:700">持有成本</h1>' +
+        '<p style="margin:4px 0 0;font-size:13px;color:var(--label-2)">' + rows0.length + ' 件计入 · 合计 ¥' +
+          QY.fmtRate(d.items.reduce(function (sm, it) {
+            return sm + (!QY.isArchived(it) && QY.tracksCost(it, d) ? (costPerDay(it) || 0) : 0);
+          }, 0)) + '/天 · 点图片进物品</p>' +
+      '</div>' +
+      '<div class="cl-head"><span></span>' + head + '</div>' +
+      '<div class="group">' + (rows || '<div class="empty" style="padding:24px"><p>没有计入持有成本的物品</p></div>') + '</div>' +
+      '<div style="height:26px"></div>';
+  }
+
+  function viewWasteList() {
+    const d = data;
+    const s2 = QY.summaries(d);
+    const q = (state.wasteQuery || '').trim().toLowerCase();
+    const rows = (s2.wastedItems || []).filter(function (it) {
+      return !q || (it.name || '').toLowerCase().indexOf(q) >= 0;
+    }).map(function (it) {
+      const off = it.wasteExcluded;
+      return '<div class="row static cl-row' + (off ? ' off' : '') + '">' +
+        '<div class="cl-thumb">' + (it.photo ? '<img src="' + it.photo + '" />' : '📦') + '</div>' +
+        '<div class="row-main">' +
+          '<div class="row-title">' + esc(it.name) + '</div>' +
+          '<div class="row-sub">' + QY.fmtDate(it.acquiredAt) + ' 购入 · 到期 ' + QY.fmtDate(it.expiresAt) + '</div>' +
+        '</div>' +
+        '<div class="cl-nums"><span>¥' + (it.cost || 0) + '</span></div>' +
+        '<button class="btn plain" data-action="waste-toggle" data-id="' + it.id + '" style="padding:7px 10px;font-size:12.5px;' +
+          (off ? '' : 'color:var(--red)') + '">' + (off ? '计入' : '不计入') + '</button>' +
+      '</div>';
+    }).join('');
+    return '<div class="navbar"><button class="back" data-action="cost-back">‹ 返回</button></div>' +
+      '<div style="padding:6px 4px 0">' +
+        '<h1 style="margin:0;font-size:23px;font-weight:700">已浪费 ¥' + s2.wasted.toFixed(2) + '</h1>' +
+      '</div>' +
+      '<div class="search">' + I.search +
+        '<input id="w-search" placeholder="搜索" value="' + esc(state.wasteQuery || '') + '" />' +
+      '</div>' +
+      '<div class="group">' + (rows || '<div class="empty" style="padding:24px"><p>' +
+        (q ? '没有匹配的结果' : '还没有浪费记录') + '</p></div>') + '</div>' +
+      '<div style="height:26px"></div>';
+  }
+
   function viewMe() {
     const s = QY.summaries(data);
     const backupHint = data.lastBackup ? '上次备份 ' + QY.fmtDate(data.lastBackup) : '数据只在这台设备上';
@@ -648,8 +742,10 @@
       '<div class="group">' +
         kv('在用物品', s.count + ' 件' + (s.archived ? '（另有 ' + s.archived + ' 件归档）' : '')) +
         kv('累计投入', QY.fmtMoney(s.totalSpend)) +
-        kv('当前持有成本', QY.fmtRate(s.daily) + ' / 天') +
-        kv('已浪费', QY.fmtMoney(s.wasted)) +
+        '<div class="kv tappable" data-action="cost-open"><span class="k">当前持有成本</span>' +
+          '<span class="v">' + QY.fmtRate(s.daily) + ' / 天 ›</span></div>' +
+        '<div class="kv tappable" data-action="waste-open"><span class="k">已浪费</span>' +
+          '<span class="v">' + QY.fmtMoney(s.wasted) + ' ›</span></div>' +
       '</div>' +
 
       '<div class="section">' +
@@ -658,9 +754,10 @@
       '</div>' +
 
       '<div class="section">' +
-        '<div class="section-head"><h2>物品分类</h2><span>可自定义</span></div>' +
+        '<div class="section-head"><h2>分类管理</h2><span>可自定义</span></div>' +
         '<div class="group">' +
-          setRow('i-cat-manage', '管理分类', { chev: true }) +
+          setRow('i-cat-manage', '物品分类', { chev: true }) +
+          setRow('i-cat-notes', '随笔分类', { chev: true }) +
         '</div>' +
       '</div>';
   }
@@ -908,26 +1005,43 @@
       if (window.QYI) QYI.openDetail(h.slice(7));
       else state.detailId = h.slice(7);
     } else if (h.indexOf('cdetail=') === 0) {
-      state.tab = 'collect';
+      state.tab = 'note';
       state.detailId = null;
       if (window.QYV) QYV.openDetail(h.slice(8));
-    } else if (['home', 'items', 'collect', 'energy', 'me'].indexOf(h) >= 0) {
+    } else if (h === 'collect') {          // 旧版叫收藏，老链接直接当随笔页
+      state.tab = 'note';
+      state.detailId = null;
+    } else if (['home', 'items', 'note', 'energy', 'me'].indexOf(h) >= 0) {
       state.tab = h;
       state.detailId = null;
     }
   }
 
+  let lastRenderKey = '';
   function mount() {
     const view = $('#view');
     const QYV = window.QYV;
     const QYI = window.QYI;    // 悬浮球跟着配置走：配了 Key 且没被关掉才出现
     if (window.QYO && QYO.syncBall) QYO.syncBall();
+    // 同一个视图因数据更新而重渲染（如详情里改了状态）时保持滚动位置；
+    // 切页面 / 进出详情 / 设置才回到顶部
+    const rkey = [state.tab, state.detailId || '', state.costView || '', (state.setting || []).join('/'),
+      QYI && QYI.hasDetail && QYI.hasDetail() ? 'id' : '', QYV && QYV.hasDetail && QYV.hasDetail() ? 'cd' : ''].join('|');
+    const keepScroll = (rkey === lastRenderKey) ? view.scrollTop : null;
+    lastRenderKey = rkey;
     // 当前页被隐藏了就回首页（"我的"永远可见，不受影响）
     if (!state.setting && state.tab !== 'me' && !tabVisible(state.tab)) state.tab = 'home';
     let html;
     if (state.setting) {
       html = settingsView();
-    } else if (state.tab === 'collect' && QYV) {
+    } else if (state.costView === 'cost' && state.tab === 'items') {
+      // 从成本列表点进物品详情：详情在前，没有详情就回成本列表
+      html = (QYI && QYI.renderDetailIfAny()) || viewCostList();
+    } else if (state.costView === 'cost') {
+      html = viewCostList();
+    } else if (state.costView === 'waste') {
+      html = viewWasteList();
+    } else if (state.tab === 'note' && QYV) {
       html = QYV.renderDetailIfAny() || QYV.renderList();
     } else if (state.tab === 'items' && QYI) {
       html = QYI.renderDetailIfAny() || QYI.renderList();
@@ -949,11 +1063,28 @@
       requestAnimationFrame(function () { requestAnimationFrame(QYI.layoutCats); });
       setTimeout(QYI.layoutCats, 300);
     }
+    if (window.QYV && QYV.layoutCats) {
+      requestAnimationFrame(function () { requestAnimationFrame(QYV.layoutCats); });
+      setTimeout(QYV.layoutCats, 300);
+    }
+    if (window.QYV && QYV.layoutStrip) {
+      requestAnimationFrame(function () { requestAnimationFrame(QYV.layoutStrip); });
+      setTimeout(QYV.layoutStrip, 300);
+    }
+    // 浪费列表搜索框：输入即过滤（不重渲整个视图，只重排列表会闪，直接 mount 保位）
+    const ws = document.getElementById('w-search');
+    if (ws) ws.addEventListener('input', function () {
+      state.wasteQuery = ws.value;
+      mount();
+      const w2 = document.getElementById('w-search');
+      if (w2) { w2.focus(); w2.setSelectionRange(w2.value.length, w2.value.length); }
+    });
+
     // 首页：DS 账号卡片自动拉一次
     if (!state.setting && state.tab === 'home') refreshHomeBalance();
     updateTopPill();
 
-    const collectDetail = !!(window.QYV && QYV.hasDetail());
+    const noteDetail = !!(window.QYV && QYV.hasDetail());
     const itemDetail = !!(window.QYI && QYI.hasDetail());
     const inSettings = !!state.setting;
     const detail = inDetail();
@@ -963,7 +1094,7 @@
     $('#tabbar').innerHTML = (inSettings || detail) ? '' : TABS.filter(function (t) {
       return tabVisible(t.id);
     }).map(function (t) {
-      return '<button class="tab ' + (state.tab === t.id && !state.detailId && !collectDetail &&
+      return '<button class="tab ' + (state.tab === t.id && !state.detailId && !noteDetail &&
         !(itemDetail && t.id === 'items') ? 'active' : '') +
         '" data-action="tab" data-tab="' + t.id + '">' + t.icon + '<span>' + t.label + '</span></button>';
     }).join('');
@@ -971,7 +1102,8 @@
     const oldFab = document.querySelector('.fab');
     if (oldFab) oldFab.remove();
 
-    view.scrollTop = 0;
+    // 同视图重渲染（编辑保存等）保持原位；其它情况回顶
+    view.scrollTop = keepScroll != null ? keepScroll : 0;
 
     try {
       history.replaceState(null, '', state.detailId ? '#detail=' + state.detailId : '#' + state.tab);
@@ -979,6 +1111,29 @@
 
     pushReminders();
   }
+
+  /* 滑动中点按：只让滚动停下来，不当作点击（防止快滑想刹车却进了详情）。
+   * 判定 = 本次触摸期间发生过滚动 → 之后的 click 吞掉一次。 */
+  (function bindTapGuard() {
+    let touchingNow = false;
+    let movedInTouch = false;
+    document.addEventListener('touchstart', function () { touchingNow = true; movedInTouch = false; },
+      { passive: true, capture: true });
+    document.addEventListener('touchmove', function () {
+      if (touchingNow) movedInTouch = true;
+    }, { passive: true, capture: true });
+    document.addEventListener('touchend', function () { touchingNow = false; },
+      { passive: true, capture: true });
+    document.addEventListener('click', function (e) {
+      if (!movedInTouch) return;
+      const hit = e.target.closest && e.target.closest('[data-action="i-open"],[data-action="c-detail"]');
+      if (hit) {
+        movedInTouch = false;
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+  })();
 
   // 把到期清单交给原生壳去发系统通知（浏览器里是空操作）
   function pushReminders() {
@@ -1019,7 +1174,7 @@
     const action = el.getAttribute('data-action');
     const id = el.getAttribute('data-id');
 
-    // 收藏模块自己处理 c- 开头的动作
+    // 随笔模块自己处理 c- 开头的动作
     if (window.QYV && QYV.handleAction(action, el)) return;
     // 备份模块处理 b- 开头的动作
     if (window.QYB && QYB.handleAction(action, el)) return;
@@ -1037,6 +1192,7 @@
       rememberScroll();
       state.tab = next;
       state.detailId = null;
+      state.detailFrom = null;          // 手动切页作废"从哪进详情"的记录
       if (window.QYV) QYV.clearDetail();
       if (window.QYI) QYI.clearDetail();
       resetScrollUi();                 // 切页面不播淡入淡出
@@ -1058,13 +1214,13 @@
       state.category = el.getAttribute('data-cat');
       mount();
     } else if (action === 'add') {
-      // 首页的加号跟着界面走：收藏标签可见时选择记哪种，只有物品就直接开物品表单
-      if (tabVisible('collect') && window.QYV && QYV.renderList) {
+      // 首页的加号跟着界面走：随笔标签可见时选择记哪种，只有物品就直接开物品表单
+      if (tabVisible('note') && window.QYV && QYV.renderList) {
         openSheet('<div class="sheet"><div class="grabber"></div>' +
           '<h3>记点什么？</h3>' +
           '<div class="group">' +
             '<div class="picker-opt" data-action="add-item"><span>新增物品</span><span class="chev">›</span></div>' +
-            '<div class="picker-opt" data-action="add-note"><span>新增收藏随笔</span><span class="chev">›</span></div>' +
+            '<div class="picker-opt" data-action="add-note"><span>新增随笔</span><span class="chev">›</span></div>' +
           '</div></div>');
       } else if (window.QYI) {
         QYI.openForm(null);
@@ -1077,11 +1233,11 @@
       else openSheet(itemFormHTML());
     } else if (action === 'add-note') {
       closeSheet();
-      state.tab = 'collect';
+      state.tab = 'note';
       state.detailId = null;
       mount();
       if (window.QYV && QYV.openForm) QYV.openForm();
-      else toast('收藏模块不可用');
+      else toast('随笔模块不可用');
     } else if (action === 'reading') {
       openFullpage('抄表 / 记一笔', readingFormHTML(id || (data.meters[0] && data.meters[0].id)));
     } else if (action === 'e-bar') {
@@ -1138,11 +1294,62 @@
         m.classList.toggle('open');
         el.innerHTML = (m.classList.contains('open') ? '收起选项' : '更多选项') + ' ' + I.plus;
       }
-    } else if (action === 'goto-collect') {
-      state.tab = 'collect';
+    } else if (action === 'goto-note') {
+      // 记住是从哪页点进随笔的（首页），返回时回那页而不是随笔列表
+      if (!state.detailFrom) state.detailFrom = state.tab;
+      state.tab = 'note';
       state.detailId = null;
       if (window.QYV) QYV.openDetail(id);
       mount();
+    } else if (action === 'cost-open') {
+      // 从首页 / "我的"点进持有成本列表（记住来处，返回时回去）
+      state.costView = 'cost';
+      state.costFrom = state.tab;
+      state.detailId = null;
+      state.detailFrom = null;
+      if (window.QYI && QYI.clearDetail) QYI.clearDetail();
+      mount();
+    } else if (action === 'waste-open') {
+      state.costView = 'waste';
+      state.costFrom = state.tab;
+      state.detailId = null;
+      state.detailFrom = null;
+      if (window.QYI && QYI.clearDetail) QYI.clearDetail();
+      mount();
+    } else if (action === 'cost-back') {
+      state.costView = null;
+      state.detailId = null;
+      state.detailFrom = null;
+      if (window.QYI && QYI.clearDetail) QYI.clearDetail();
+      if (window.QYV) QYV.clearDetail();
+      state.tab = state.costFrom || 'home';
+      mount();
+    } else if (action === 'cost-sort') {
+      const k = el.getAttribute('data-k');
+      const v = state.costView === 'cost' ? (state.costSort || { sort: 'daily', desc: true }) : null;
+      if (v) {
+        if (v.sort === k) v.desc = !v.desc;
+        else { v.sort = k; v.desc = true; }
+        state.costSort = v;
+      }
+      mount();
+    } else if (action === 'cost-item') {
+      // 点图片进物品详情；返回会回到这份列表（detailFrom = cost）
+      rememberScroll();
+      state.detailFrom = 'cost';
+      state.tab = 'items';
+      state.detailId = null;
+      if (window.QYV) QYV.clearDetail();
+      if (window.QYI) QYI.openDetail(el.getAttribute('data-id'));
+      mount();
+    } else if (action === 'waste-toggle') {
+      const it = itemById(el.getAttribute('data-id'));
+      if (it) {
+        if (it.wasteExcluded) delete it.wasteExcluded;
+        else it.wasteExcluded = true;
+        save();
+        mount();
+      }
     } else if (action === 'open-settings') {
       // 'root' 是菜单层本身，这样二级页返回会回到菜单，而不是直接退出设置
       state.setting = ['root'];
@@ -1215,8 +1422,8 @@
       const nowDark = document.documentElement.getAttribute('data-theme') === 'dark';
       setThemeAttr(!nowDark);
       mount();
-    } else if (action === 'set-tab-collect' || action === 'set-tab-energy') {
-      const key = action === 'set-tab-collect' ? 'collect' : 'energy';
+    } else if (action === 'set-tab-note' || action === 'set-tab-energy') {
+      const key = action === 'set-tab-note' ? 'note' : 'energy';
       const tabsPatch = {};
       tabsPatch[key] = !!el.checked;
       uiSet({ tabs: tabsPatch });
@@ -1270,7 +1477,7 @@
     if (e.key === 'Escape') closeSheet();
   });
 
-  /* ---------------- 给收藏模块的桥接接口 ---------------- */
+  /* ---------------- 给随笔模块的桥接接口 ---------------- */
 
   // 跳到某个物品的详情（首页的临期/最近列表也用它）
   function goItem(id) {
@@ -1285,7 +1492,8 @@
 
   /* AI/首页用：切到某个标签页（等效于点底部标签，会先退出设置/详情） */
   function gotoTab(tab) {
-    const t = ['home', 'items', 'collect', 'energy', 'me'].indexOf(tab) >= 0 ? tab : 'home';
+    const t0 = tab === 'collect' ? 'note' : tab;
+    const t = ['home', 'items', 'note', 'energy', 'me'].indexOf(t0) >= 0 ? t0 : 'home';
     rememberScroll();
     state.setting = null;
     state.detailFrom = null;
@@ -1298,11 +1506,13 @@
     restoreScroll();
   }
 
-  /* 详情页返回按钮上写什么：哪来的就写哪 */
-  function detailBackLabel() {    const from = state.detailFrom;
-    if (!from || from === 'items') return '物品';
+  /* 详情页返回按钮上写什么：哪来的就写哪（fallback = 没有来路时的默认，物品/随笔各传各的） */
+  function detailBackLabel(fallback) {
+    const from = state.detailFrom;
+    if (from === 'cost') return state.costView === 'waste' ? '已浪费' : '持有成本';
+    if (!from || from === 'items') return fallback || '物品';
     if (from === 'home') return '首页';
-    return PAGE_TITLES[from] || '物品';
+    return PAGE_TITLES[from] || fallback || '物品';
   }
 
   /* 从物品详情返回：哪来的回哪去（首页 -> 首页，物品 -> 物品列表）。
@@ -1315,6 +1525,8 @@
     state.detailId = null;
     if (window.QYI) QYI.clearDetail();
     if (window.QYV) QYV.clearDetail();
+    // 从持有成本/浪费列表进来的：回去还是那份列表（costView 不清）
+    if (from === 'cost') { resetScrollUi(); mount(); restoreScroll(); return true; }
     if (from && from !== 'items') state.tab = from;
     resetScrollUi();
     mount();
@@ -1406,7 +1618,12 @@
           if (!c) return;
           try {
             localStorage.removeItem('xctally.prototype.v1');
-            localStorage.removeItem('xctally.collect.v1');
+            localStorage.removeItem('xctally.note.v1');
+          localStorage.removeItem('xctally.note.v1');
+          localStorage.removeItem('xctally.note.v1');
+          localStorage.removeItem('xctally.note.v1');
+          localStorage.removeItem('xctally.note.v1');
+          localStorage.removeItem('xctally.collect.v1');   // 旧版键顺手清掉   // 旧版键顺手清掉   // 旧版键顺手清掉   // 旧版键顺手清掉   // 旧版键顺手清掉
           } catch (err) { /* 忽略 */ }
           location.reload();
         });
@@ -1567,7 +1784,7 @@
     }
     if (top === 'look') {
       const t0 = ui().tabs;
-      const hidden = ['collect', 'energy'].filter(function (k) { return t0[k] === false; }).length;
+      const hidden = ['note', 'energy'].filter(function (k) { return t0[k] === false; }).length;
       const bg = ui().bg || {};
       const bgLabel = bg.img ? '自定义图片' : (BG_PRESETS.filter(function (p) { return p.v === bg.preset; })[0] || BG_PRESETS[0]).t;
       return nav + '<div class="group" style="margin-top:16px">' +
@@ -1625,7 +1842,7 @@
       return nav + '<div class="group" style="margin-top:16px">' +
         setRow('noop', '首页', { side: '必需' }) +
         setRow('noop', '物品', { side: '必需' }) +
-        switchRow('set-tab-collect', '收藏', t.collect !== false) +
+        switchRow('set-tab-note', '随笔', t.note !== false) +
         switchRow('set-tab-energy', '能源', t.energy !== false) +
         setRow('noop', '我的', { side: '必需' }) +
         '</div>' +
@@ -1635,7 +1852,7 @@
       const s = ui().sort;
       return nav +
         sortGroup('物品列表', 'items', ITEMS_SORTS, s.items) +
-        sortGroup('收藏列表', 'collect', COLLECT_SORTS, s.collect) +
+        sortGroup('随笔列表', 'note', NOTE_SORTS, s.note) +
         sortGroup('能源列表', 'energy', ENERGY_SORTS, s.energy);
     }
     if (top === 'mem') {
@@ -1650,6 +1867,7 @@
 
   window.QYUI = {
     I: I,
+    state: state,          // 页面状态（tab / detailFrom…），子模块读写同一份
     pageHead: pageHead,
     iconBtn: iconBtn,
     tile: tile,
@@ -1736,8 +1954,11 @@
         }
       } else if (r.code === 'error' && !wasAuto) {
         toast('检查更新失败：' + (r.message || '网络错误'));
+      } else if (r.code === 'latest' && !wasAuto) {
+        // 手动检查要给个结果；启动时的自动检查保持彻底静默（不打扰用户）
+        const v = nativeVersion();
+        toast(v ? '当前已是最新版本（' + v + '）' : '当前已是最新版本');
       }
-      // latest（已是最新）彻底静默：启动检查和手动检查都不再提示"当前版本 xxx"
     },
     /* 原生侧发现不在 WLAN：先问用户要不要消耗流量再下（确认后带 force 重入） */
     confirmCellular: function (url) {
@@ -1816,7 +2037,7 @@
    * 3) 往下滑之后，页面标题在顶部变成小长圆条，点它直接回到最上方。
    * 4) 每个标签页各自记住滚动位置，切回来还在原地；点同一个标签则回到顶部。
    */
-  const PAGE_TITLES = { home: '今天', items: '物品', collect: '收藏', energy: '能源', me: '我的' };
+  const PAGE_TITLES = { home: '今天', items: '物品', note: '随笔', energy: '能源', me: '我的' };
   const scrollMemo = {};
   let scrollUiAllowed = false;     // 只有在用户触摸/滚轮之后才允许触发动画
   let gestureStartTop = null;
@@ -1851,6 +2072,7 @@
       if (touching) return;                    // 手指还按着，先不动
       document.documentElement.style.setProperty('--fade-ms', Math.round(170 + hideP * 150) + 'ms');
       setHideP(0);
+      gestureStartTop = null;                  // 手势结束：距离清零，下次从新起点算
     }, delay == null ? 130 : delay);
   }
 
@@ -1858,7 +2080,7 @@
 
   /* 是否处在"某条记录的详情页"（物品详情 / 随笔详情） */
   function inDetail() {
-    return !!(state.detailId ||
+    return !!(state.costView || state.detailId ||
       (window.QYI && QYI.hasDetail && QYI.hasDetail()) ||
       (window.QYV && QYV.hasDetail && QYV.hasDetail()));
   }
@@ -1916,7 +2138,7 @@
   mount();
 
   // 允许用 URL 直接打开表单 / 详情，方便截图与演示：
-  // #items?bare&add | #energy?bare&reading | #collect?bare&cform
+  // #items?bare&add | #energy?bare&reading | #note?bare&cform
   // #cdetail=c_diary1?bare&light | ...&clong（生成长图）
   if (bootHash.indexOf('add') >= 0) {
     if (window.QYI) QYI.openForm(null);

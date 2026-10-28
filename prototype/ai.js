@@ -4,7 +4,7 @@
  * 切服务商只需要改设置里的 Base URL + 模型名。
  *
  * 配置单独存一个 localStorage 键（xctally.ai.v1），【故意不放进业务数据里】：
- *   - 备份只导出 xctally.prototype.v1 / xctally.collect.v1，
+ *   - 备份只导出 xctally.prototype.v1 / xctally.note.v1（旧 xctally.collect.v1），
  *     所以 API Key 天然不会被写进备份文件（不然你把备份发出去就等于泄露 key）
  *   - 清空业务数据也不会顺手把配置清掉
  */

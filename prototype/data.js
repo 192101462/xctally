@@ -256,9 +256,19 @@
     const items = data.items;
     const active = items.filter(isActive);
 
-    // 已经浪费掉的钱：过期且未归档的物品成本合计
-    const expired = items.filter(isExpired);
-    const wasted = expired.reduce(function (s, it) { return s + (it.cost || 0); }, 0);
+    // 已经浪费掉的钱：过期物品里，"还没归档"或"过期之后才归档"的计入；
+    // 先归档再过期（东西收起来放过了期）不算浪费；用户也可以在浪费列表里手动剔除
+    // 候选 = 过期且（未归档 或 过期后才归档）的物品；wasteExcluded 只是"不进合计"
+    const wasteCandidates = items.filter(function (it) {
+      const d = daysLeft(it);
+      if (d == null || d >= 0) return false;              // 没过期
+      if (!isArchived(it)) return true;                   // 未归档：算
+      if (!it.archivedAt) return false;                   // 老数据没有归档时间：按先归档，不算
+      return it.archivedAt > it.expiresAt;                // 过期后才归档：算
+    });
+    const wasted = wasteCandidates.reduce(function (s, it) {
+      return s + (it.wasteExcluded ? 0 : (it.cost || 0));
+    }, 0);
 
     // 持有成本合计：只统计"计入日均成本"的物品（食品、药品这类不算）
     let daily = 0;
@@ -278,13 +288,18 @@
     });
     energyTrend = data.meters && data.meters.length ? energyTrend / data.meters.length : 0;
 
-    // 临期（30 天内，含已过期）
+    // 临期提醒：只关心"已过期 3 天内 ~ 还剩 5 天"这个窗口，
+    // 更早过期的归进"已浪费"，更远的还不用管
     const expiring = items
-      .filter(function (it) { return isActive(it) && expiryLevel(it) != null; })
+      .filter(function (it) {
+        if (!isActive(it)) return false;
+        const d = daysLeft(it);
+        return d != null && d >= -3 && d <= 5;
+      })
       .sort(function (a, b) { return daysLeft(a) - daysLeft(b); });
 
-    // 最近添加
-    const recent = items.slice().sort(function (a, b) {
+    // 最近添加（归档的不再出现在首页"最近记录"里）
+    const recent = active.slice().sort(function (a, b) {
       return a.acquiredAt < b.acquiredAt ? 1 : -1;
     }).slice(0, 4);
 
@@ -292,7 +307,8 @@
       count: active.length,
       archived: items.length - active.length,
       wasted: wasted,
-      wastedCount: expired.length,
+      wastedCount: wasteCandidates.filter(function (it) { return !it.wasteExcluded; }).length,
+      wastedItems: wasteCandidates.slice(),
       daily: daily,
       dailyCount: dailyCount,
       energy: energy,
@@ -519,7 +535,8 @@
       });
     }
 
-    // 归一化：补齐新字段，避免各处判空
+    // 归一化：补齐新字段，避免各处判空（顺带滤掉异常 null 元素，防脏数据炸启动）
+    d.items = d.items.filter(function (it) { return it != null; });
     d.items.forEach(function (it) {
       if (it.photo === undefined) it.photo = null;
       if (it.sub === undefined) it.sub = '';

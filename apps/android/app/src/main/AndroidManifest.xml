@@ -14,6 +14,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- 应用内更新：下载新 APK 后唤起系统安装器需要它（Android 8+ 的"安装未知应用"） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 每日提醒：重启 / 覆盖安装后要把闹钟排回来 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -33,6 +36,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 每日提醒的闹钟接收器：到点发通知 + 排下一个；开机/更新后重排 -->
+        <receiver
+            android:name=".ItemAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- 导出备份后唤起系统分享用 -->
         <provider

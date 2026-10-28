@@ -357,7 +357,9 @@ class MainActivity : AppCompatActivity() {
                     return true
                 }
             }
-            addJavascriptInterface(Bridge(), "QYAndroid")
+            // 长按选择文本：部分兼容层默认关掉，编辑正文要长按出 复制/粘贴
+        webView.isLongClickable = true
+        addJavascriptInterface(Bridge(), "QYAndroid")
             loadUrl("https://appassets.androidplatform.net/assets/index.html")
         }
         // WebView 装进 FrameLayout：键盘弹出时用【底部边距】缩小 WebView。
@@ -779,10 +781,11 @@ class MainActivity : AppCompatActivity() {
             ReminderWorker.save(this@MainActivity, json, hour)
         }
 
-        /** 物品每日提醒清单：[{id, name, hour, alarm}]，开/关/改时间网页都会推全量 */
+        /** 物品每日提醒清单：[{id, name, hour, minute, alarm}]，开/关/改时间网页都会推全量。
+         *  排班走 AlarmManager（ItemAlarmReceiver），进程被杀也能到点响。 */
         @JavascriptInterface
         fun scheduleItemReminders(json: String) {
-            ItemReminderWorker.save(this@MainActivity, json)
+            ItemReminders.save(this@MainActivity, json)
         }
 
         /** 设置页「发条测试通知」：立即验证通知链路 */
