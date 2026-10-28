@@ -358,8 +358,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             // 长按选择文本：部分兼容层默认关掉，编辑正文要长按出 复制/粘贴
-        webView.isLongClickable = true
-        addJavascriptInterface(Bridge(), "QYAndroid")
+            //（必须在 apply 块内：块外的话 webView 还没赋值完，启动即崩）
+            isLongClickable = true
+            addJavascriptInterface(Bridge(), "QYAndroid")
             loadUrl("https://appassets.androidplatform.net/assets/index.html")
         }
         // WebView 装进 FrameLayout：键盘弹出时用【底部边距】缩小 WebView。
