@@ -53,3 +53,8 @@ tools/.gitee_token
 apps/android/app/release/
 # Python 缓存
 __pycache__/
+
+# 鸿蒙签名材料（私钥，绝不进仓库）
+apps/harmony/.sign/
+apps/harmony/build-profile.json5.sig
+

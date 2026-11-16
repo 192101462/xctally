@@ -1389,8 +1389,9 @@
       if (window.QYAndroid && QYAndroid.testReminder) {
         QYAndroid.testReminder();
         toast('已发测试通知，去通知栏看看；没看到就是被系统拦了（见电池/自启动设置）');
-      } else if (window.QYPlatform && QYPlatform.kind === 'harmony') {
-        toast('鸿蒙版请在应用市场的版本里测试通知');
+      } else if (window.QYHarmony && QYHarmony.testReminder) {
+        QYHarmony.testReminder();
+        toast('已发两条测试通知（普通+闹铃），去通知栏看看');
       } else {
         toast('测试通知要在手机 App 里发（浏览器无法弹系统通知）');
       }
@@ -1973,9 +1974,13 @@
     },
     /* App 启动的静默检查：结果由 onResult 按"今天不再提醒"的约定处理 */
     autoCheck: function () {
-      if (!(window.QYAndroid && QYAndroid.checkUpdate)) return;
-      updFromAuto = true;
-      try { QYAndroid.checkUpdate(); } catch (err) { updFromAuto = false; }
+      if (window.QYAndroid && QYAndroid.checkUpdate) {
+        updFromAuto = true;
+        try { QYAndroid.checkUpdate(); } catch (err) { updFromAuto = false; }
+      } else if (window.QYHarmony && QYHarmony.checkUpdate) {
+        updFromAuto = true;
+        try { QYHarmony.checkUpdate(); } catch (err) { updFromAuto = false; }
+      }
     }
   };
 
@@ -1989,8 +1994,9 @@
       if (window.QYAndroid && QYAndroid.checkUpdate) {
         toast('正在检查更新…');
         QYAndroid.checkUpdate();
-      } else if (window.QYPlatform && QYPlatform.kind === 'harmony') {
-        toast('鸿蒙版请在应用市场或华为开发者官网更新');
+      } else if (window.QYHarmony && QYHarmony.checkUpdate) {
+        toast('正在检查更新…');
+        QYHarmony.checkUpdate();
       } else {
         toast('请在手机 App 的设置里检查更新');
       }
@@ -2001,6 +2007,11 @@
         toast('开始下载，进度看通知栏');
         const lay = document.getElementById('picker-layer');
         if (lay) lay.remove();
+      } else if (window.QYHarmony && QYHarmony.downloadUpdate) {
+        QYHarmony.downloadUpdate(url);
+        toast('已打开下载页，下载完成后请手动安装');
+        const lay2 = document.getElementById('picker-layer');
+        if (lay2) lay2.remove();
       } else {
         toast('请在手机 App 里操作');
       }
