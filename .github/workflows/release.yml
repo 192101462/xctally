@@ -60,6 +60,28 @@ jobs:
         if: steps.hver.outputs.build == 'yes'
         run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev
 
+      # 镜像 SDK 是 26.0.0.821，工程与本地 DevEco 是 26.0.1——hvigor 对版本做
+      # 严格字符串匹配（HosVersion.equals），差一个 patch 号都报
+      # SDK_COMPONENT_NOT_FOUND。同为 API 26 工具链，把 SDK 元数据补成 26.0.1
+      # 即可对齐（镜像跟进了 26.0.1 后可整步删掉）。
+      - name: Patch SDK version metadata (26.0.0.821 -> 26.0.1)
+        if: steps.hver.outputs.build == 'yes'
+        run: |
+          set -e
+          SDK="$HOS_SDK_HOME"
+          echo "== before =="
+          find "$SDK" -name 'sdk-pkg.json' -exec grep -H '"version"\|"platformVersion"\|displayName\|"path"' {} \; || true
+          find "$SDK" -name 'sdk-pkg.json' -exec sed -i \
+            -e 's/26\.0\.0\.821/26.0.1.120/g' \
+            -e 's/"26\.0\.0"/"26.0.1"/g' \
+            -e 's/HarmonyOS-26\.0\.0/HarmonyOS-26.0.1/g' \
+            -e 's/HarmonyOS 26\.0\.0/HarmonyOS 26.0.1/g' {} +
+          # 版本号写进目录名的也一起改（先长串后短串）
+          find "$SDK" -depth -name '*26.0.0.821*' -exec bash -c 'mv "$1" "${1//26.0.0.821/26.0.1.120}"' _ {} \; 2>/dev/null || true
+          find "$SDK" -depth -name '*26.0.0*' -exec bash -c 'mv "$1" "${1//26.0.0/26.0.1}"' _ {} \; 2>/dev/null || true
+          echo "== after =="
+          find "$SDK" -name 'sdk-pkg.json' -exec grep -H '"version"\|"platformVersion"\|displayName\|"path"' {} \; || true
+
       # 签名材料（AGC 发布证书三件套）从 Secrets 解出来，不进仓库
       - name: Decode signing material
         if: steps.hver.outputs.build == 'yes'
