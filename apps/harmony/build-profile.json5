@@ -1,9 +1,26 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\1\\.ohos\\config\\default_harmony_UpR2cf_WKrAGrh2PNAfPf-Op-ON0NRxLhIYhFxIF5Go=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B50D1A3311BFDF152D5DDEFDFB3BC66892B26E5DAF2E7AD684A22B128CB07C036692D01F501973A",
+          "profile": "C:\\Users\\1\\.ohos\\config\\default_harmony_UpR2cf_WKrAGrh2PNAfPf-Op-ON0NRxLhIYhFxIF5Go=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\1\\.ohos\\config\\default_harmony_UpR2cf_WKrAGrh2PNAfPf-Op-ON0NRxLhIYhFxIF5Go=.p12",
+          "storePassword": "0000001BA6F38FD04B374A0F1577312EC972DE9989EFD6BAC4E979EBEEA088769E789B2033F520285C43B4"
+        }
+      }
+      /* 正式签名材料在 .sign/release/（gitignored），明文密码不能进仓库，
+         出正式包走 tools/sign-harmony-release.bat（hap-sign-tool 直接签） */
+    ],
     "products": [
       {
         "name": "default",
+        "signingConfig": "default",
         "compatibleSdkVersion": "5.0.0(12)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {

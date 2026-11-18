@@ -108,6 +108,13 @@ def cmd_bump(version):
     src = re.sub(r"versionCode = \d+", "versionCode = %d" % new_code, src)
     src = re.sub(r'versionName = "[^"]*"', 'versionName = "%s"' % version, src)
     open(BUILD_GRADLE, "w", encoding="utf-8", newline="\n").write(src)
+    # 鸿蒙壳版本号与安卓同号（app.json5），两边一起发
+    hap_json = os.path.join(ROOT, "apps/harmony/AppScope/app.json5")
+    if os.path.exists(hap_json):
+        h = open(hap_json, encoding="utf-8").read()
+        h = re.sub(r'"versionCode": \d+', '"versionCode": %d' % new_code, h)
+        h = re.sub(r'"versionName": "[^"]*"', '"versionName": "%s"' % version, h)
+        open(hap_json, "w", encoding="utf-8", newline="\n").write(h)
     print("bumped: versionCode=%d versionName=%s" % (new_code, version))
 
 
@@ -177,7 +184,7 @@ def purge_duplicate_attachments(token, rel, fn):
         print("      (purge skipped: %s)" % e)
 
 
-def cmd_publish(version, apk_path, notes):
+def cmd_publish(version, apk_path, notes, hap_path=None):
     token = os.environ.get("GITEE_TOKEN", "").strip()
     if not token:
         die("GITEE_TOKEN env missing")
@@ -197,13 +204,25 @@ def cmd_publish(version, apk_path, notes):
     print("      attach: " + json.dumps(att, ensure_ascii=False)[:200])
     apk_url = "https://gitee.com/%s/%s/releases/download/%s/%s" % (OWNER, REPO, tag, fn)
 
+    # 鸿蒙 HAP（CI 里由 build-harmony job 产出；没有就跳过，不阻塞安卓发版）
+    hap_url = ""
+    if hap_path and os.path.exists(hap_path):
+        hfn = "xctally-harmony-%s.hap" % version
+        purge_duplicate_attachments(token, rel, hfn)
+        print("[2.5/3] uploading " + hfn)
+        upload_attachment(token, rel["id"], hfn, hap_path)
+        hap_url = "https://gitee.com/%s/%s/releases/download/%s/%s" % (OWNER, REPO, tag, hfn)
+
     print("[3/3] version.json -> gitee main")
     vj = {"versionCode": code, "versionName": version, "apkUrl": apk_url, "notes": notes}
+    if hap_url:
+        vj["hapUrl"] = hap_url
     open(VERSION_JSON, "w", encoding="utf-8", newline="\n").write(
         json.dumps(vj, ensure_ascii=False, indent=2) + "\n")
     git("config", "user.name", os.environ.get("CI_GIT_USER", "xctally-ci"))
     git("config", "user.email", os.environ.get("CI_GIT_EMAIL", "ci@xctally.local"))
-    git("add", "apps/android/version.json", "apps/android/app/build.gradle.kts")
+    git("add", "apps/android/version.json", "apps/android/app/build.gradle.kts",
+        "apps/harmony/AppScope/app.json5")
     git("commit", "-m", "release %s (versionCode %d) [ci skip]" % (tag, code))
     authed = GITEE_ORIGIN.replace("https://", "https://oauth2:%s@" % token)
     git("remote", "add", "gitee", authed, check=False)
@@ -232,19 +251,22 @@ def main():
     elif args[0] == "publish":
         version = notes = ""
         apk = None
+        hap = None
         i = 1
         while i < len(args):
             if args[i] == "--version":
                 version = args[i + 1]; i += 2
             elif args[i] == "--apk":
                 apk = args[i + 1]; i += 2
+            elif args[i] == "--hap":
+                hap = args[i + 1]; i += 2
             elif args[i] == "--notes":
                 notes = args[i + 1]; i += 2
             else:
                 i += 1
         if not version or not apk:
             die("publish needs --version and --apk")
-        cmd_publish(version, apk, notes or "")
+        cmd_publish(version, apk, notes or "", hap)
     else:
         print(__doc__)
         sys.exit(1)

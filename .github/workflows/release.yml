@@ -32,11 +32,103 @@ on:
         type: string
 
 jobs:
+  # ── 鸿蒙 HAP：与安卓共用同一条发版流水线 ─────────────────────────────
+  # 失败不阻塞安卓发版（continue-on-error）；产物经 artifact 交给发布步骤，
+  # 挂到同一个 gitee Release（xctally-harmony-<版本>.hap）。
+  build-harmony:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 版本没变（普通代码提交）就秒退，与安卓侧同一套决策
+      - name: Decide release
+        id: hver
+        env:
+          EV_NAME: ${{ github.event_name }}
+        run: python tools/ci_decide.py >> "$GITHUB_OUTPUT"
+
+      - name: Setup HarmonyOS SDK
+        if: steps.hver.outputs.build == 'yes'
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 26.0.0.821     # 与本机 DevEco 26.x 同代；升 SDK 记得清这套缓存
+          cache: true
+
+      - name: Install libGL
+        if: steps.hver.outputs.build == 'yes'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev
+
+      # 签名材料（AGC 发布证书三件套）从 Secrets 解出来，不进仓库
+      - name: Decode signing material
+        if: steps.hver.outputs.build == 'yes'
+        run: |
+          mkdir -p apps/harmony/.sign/release
+          echo "${{ secrets.HOS_P12_B64 }}" | base64 -d > apps/harmony/.sign/release/qiyu-release.p12
+          echo "${{ secrets.HOS_CER_B64 }}" | base64 -d > apps/harmony/.sign/release/qiyu-release.cer
+          echo "${{ secrets.HOS_P7B_B64 }}" | base64 -d > apps/harmony/.sign/release/qiyu-release-profile.p7b
+          ls -la apps/harmony/.sign/release/
+
+      - name: Build HAP (unsigned)
+        if: steps.hver.outputs.build == 'yes'
+        run: |
+          # CI 上剥离本机调试签名配置（证书路径是 Windows 本机的，不存在于
+          # runner；正式签名在下一步用 hap-sign-tool 完成，hvigor 只需出未签名包）
+          python - <<'PY'
+          import re
+          p = 'apps/harmony/build-profile.json5'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'"signingConfigs": \[[\s\S]*?\n    \],', '"signingConfigs": [],', s, count=1)
+          s = re.sub(r'\s*"signingConfig": "default",', '', s, count=1)
+          open(p, 'w', encoding='utf-8', newline='\n').write(s)
+          print(open(p, encoding='utf-8').read()[:200])
+          PY
+          export DEVECO_SDK_HOME="${HOS_SDK_HOME:-/home/runner/ohos-sdk/command-line-tools/sdk}"
+          cd apps/harmony
+          chmod +x hvigorw
+          ./hvigorw --mode module -p product=default -p module=entry@default assembleHap --analyze=normal --no-daemon
+          ls -la entry/build/default/outputs/default/
+
+      # hvigor 只认 DevEco 加密密码，正式签名走 SDK 自带 hap-sign-tool（明文）
+      - name: Sign HAP (AGC release cert)
+        if: steps.hver.outputs.build == 'yes'
+        run: |
+          VER="${{ steps.hver.outputs.version }}"
+          SIGN_JAR="${HOS_SDK_HOME}/default/openharmony/toolchains/lib/hap-sign-tool.jar"
+          java -jar "$SIGN_JAR" sign-app \
+            -mode localSign \
+            -keyAlias qiyuRelease -signAlg SHA256withECDSA \
+            -appCertFile apps/harmony/.sign/release/qiyu-release.cer \
+            -profileFile apps/harmony/.sign/release/qiyu-release-profile.p7b \
+            -inFile apps/harmony/entry/build/default/outputs/default/entry-default-unsigned.hap \
+            -keystoreFile apps/harmony/.sign/release/qiyu-release.p12 \
+            -keyPwd "${{ secrets.HOS_SIGN_PWD }}" -keystorePwd "${{ secrets.HOS_SIGN_PWD }}" \
+            -outFile "apps/harmony/entry/build/default/outputs/default/xctally-harmony-${VER:-dev}-signed.hap" \
+            -profileSigned 1
+
+      - name: Upload HAP artifact
+        if: steps.hver.outputs.build == 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmony-hap
+          path: apps/harmony/entry/build/default/outputs/default/xctally-harmony-*-signed.hap
+          if-no-files-found: error
+
   build-and-release:
+    needs: build-harmony
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # 鸿蒙 job 的产物（job 失败/秒退时没有文件，忽略即可，不阻塞安卓）
+      - name: Get HarmonyOS HAP artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: harmony-hap
+          path: harmony-out
+        continue-on-error: true
 
       # chmod +x gradlew 会改文件可执行位；仓库在 Windows 上建的、gradlew 以
       # 非执行位入库，Linux 上 chmod 后就成了"未暂存修改"，发布回推时的
@@ -104,9 +196,13 @@ jobs:
       - name: Publish to Gitee
         if: steps.ver.outputs.publish == 'yes'
         run: |
+          HAP_ARG=""
+          HAP_FILE=$(ls harmony-out/xctally-harmony-*-signed.hap 2>/dev/null | head -1)
+          if [ -n "$HAP_FILE" ]; then HAP_ARG="--hap $HAP_FILE"; fi
           python tools/ci_publish.py publish \
             --version "${{ steps.ver.outputs.version }}" \
             --apk apps/android/app/build/outputs/apk/release/app-release.apk \
+            $HAP_ARG \
             --notes "$REL_NOTES"
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
